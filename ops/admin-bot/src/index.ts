@@ -30,6 +30,15 @@ import {
   handleCanaryAdd,
   handleCanaryRemove,
 } from "./commands/update.js";
+import {
+  handlePoolStatus,
+  handlePoolImport,
+  handlePoolImportBatch,
+  handlePoolAssign,
+  handlePoolRelease,
+  handlePoolRetire,
+  handlePoolRefill,
+} from "./commands/pool.js";
 import { generateDailyBriefing } from "./briefing.js";
 import { getFleet, getSystemHealth } from "./api-client.js";
 
@@ -167,6 +176,38 @@ bot.on("message", async (msg) => {
       break;
     }
 
+    case "/pool": {
+      const [subCmd, ...rest] = args.split(/\s+/);
+      if (!subCmd) {
+        await reply(await safe(() => handlePoolStatus()));
+      } else if (subCmd === "import") {
+        // /pool import [token]  OR  /pool import\n[token1]\n[token2]...
+        const remaining = rest.join("\n");
+        if (remaining.includes("\n")) {
+          await reply(await safe(() => handlePoolImportBatch(remaining)));
+        } else {
+          await reply(await safe(() => handlePoolImport(remaining)));
+        }
+      } else if (subCmd === "import-batch") {
+        await reply(await safe(() => handlePoolImportBatch(rest.join("\n"))));
+      } else if (subCmd === "assign") {
+        await reply(await safe(() => handlePoolAssign(rest[0] ?? "", rest[1] ?? "")));
+      } else if (subCmd === "release") {
+        await reply(await safe(() => handlePoolRelease(rest[0] ?? "")));
+      } else if (subCmd === "retire") {
+        await reply(await safe(() => handlePoolRetire(rest[0] ?? "")));
+      } else if (subCmd === "refill") {
+        await reply(handlePoolRefill());
+      } else {
+        await reply(
+          `Usage:\n/pool \\- show counts\n/pool import \\[token\\]\n/pool import\\-batch\n` +
+          `/pool assign \\[slug\\] \\[username\\]\n/pool release \\[username\\]\n` +
+          `/pool retire \\[username\\]\n/pool refill`
+        );
+      }
+      break;
+    }
+
     case "/help":
     case "/start":
       await reply(buildHelp());
@@ -226,6 +267,15 @@ function buildHelp(): string {
     "/canary list — show designated canary tenants",
     "/canary add \\[slug\\] — add to canary group",
     "/canary remove \\[slug\\] — remove from canary group",
+    "",
+    "*Bot Token Pool*",
+    "/pool — show available/assigned/retired counts",
+    "/pool import \\[token\\] — import a single bot token",
+    "/pool import\\-batch — import multiple tokens",
+    "/pool assign \\[slug\\] \\[username\\] — manual assignment",
+    "/pool release \\[username\\] — return bot to pool",
+    "/pool retire \\[username\\] — retire a revoked bot",
+    "/pool refill — instructions to add more bots",
     "",
     "_Daily briefing auto\\-sent at 7:30 AM Phoenix\\._",
   ].join("\n");

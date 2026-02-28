@@ -804,7 +804,85 @@ Bot summarizes ICP back to tenant for confirmation, then adjusts.
 3. "I'm on it. Check back tomorrow morning for your first daily briefing."
 4. Cron jobs activated: daily scout (5 AM tenant timezone), daily report (7 AM tenant timezone).
 
-## 5.3 Working Infrastructure (from v4)
+## 5.3 Bot Token Pool
+
+**Named Feature: Tiger Claw Bot Pool**
+
+Telegram bots are pre-created by the Tiger Claw operator and stored in a platform-level pool. Customers are assigned a bot at payment time — they never interact with BotFather.
+
+### Architecture
+
+```
+Platform PostgreSQL: bot_pool table
+  id              UUID PRIMARY KEY
+  bot_token       TEXT (AES-256-GCM encrypted at rest)
+  bot_username    TEXT
+  telegram_bot_id TEXT (unique)
+  status          ENUM: available | assigned | retired
+  phone_account   TEXT (which Telegram account created it)
+  created_at      TIMESTAMP
+  assigned_at     TIMESTAMP
+  tenant_id       UUID (FK → tenants)
+```
+
+### Lifecycle
+
+```
+1. Admin creates bots via @BotFather
+2. Admin imports tokens: /pool import [token] or /pool import-batch
+   → Tiger Claw API validates each via Telegram getMe
+   → Clears webhook
+   → Encrypts and stores as 'available'
+3. Customer pays → provisionTenant() calls getNextAvailable()
+   → If pool has bot: assign → proceed to container creation
+   → If pool empty: tenant status = 'pending' (waitlist mode), admin alert sent
+4. tiger_onboard Phase 4 (Naming Ceremony):
+   → Bot updates own display name: setMyName, setMyDescription, setMyShortDescription
+5. Tenant cancels/terminates (after 30-day retention):
+   → deprovisionTenant() releases bot
+   → releaseBot() resets display name to "Tiger Claw Agent" via Telegram API
+   → Status back to 'available'
+```
+
+### Pool Alert Thresholds
+
+| Available bots | Alert behavior |
+|---|---|
+| ≥ 25 | No action |
+| 10–24 | Admin alert once per day: "Pool low: N bots available" |
+| 1–9 | Admin alert every hour: "Pool critical: N bots available" |
+| 0 | Immediate alert, every cycle: "POOL EMPTY — waitlist mode active" |
+
+### Admin Commands
+
+```
+/pool                          — show available/assigned/retired counts
+/pool import [token]           — import single token
+/pool import-batch             — import multiple tokens (one per line)
+/pool assign [slug] [username] — manual assignment
+/pool release [username]       — manual release back to pool
+/pool retire [username]        — retire a revoked/problematic bot
+/pool refill                   — reminder to run creation script
+```
+
+### Block 5.3 Decision Checksum
+
+| # | Decision | Status |
+|---|----------|--------|
+| 1 | Pre-created bot token pool — customer never touches BotFather | LOCKED |
+| 2 | Pool stored in platform PostgreSQL, tokens AES-256-GCM encrypted at rest | LOCKED |
+| 3 | Bot assigned at payment time, not at onboarding | LOCKED |
+| 4 | Display name + description updated programmatically during onboarding Phase 4 | LOCKED |
+| 5 | Username cannot change after creation but is invisible in normal use | LOCKED |
+| 6 | Custom username swap option available for tenants who want their own handle | LOCKED |
+| 7 | Pool empty = waitlist mode, not failed payment | LOCKED |
+| 8 | Bot recycled to pool on tenant termination after 30-day retention | LOCKED |
+| 9 | Pool alert thresholds: ≥25 = ok, 10–24 = low (daily), <10 = critical (hourly), 0 = empty (immediate) | LOCKED |
+| 10 | Existing tokens importable via admin bot /pool import or /pool import-batch | LOCKED |
+
+---
+
+## 5.4 Working Infrastructure (from v4)
 
 The following v4 infrastructure is KEPT and adapted:
 

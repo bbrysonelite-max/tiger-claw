@@ -22,6 +22,7 @@ import {
   logAdminEvent,
   setCanaryGroup,
   listCanaryTenants,
+  listBotPool,
   type Tenant,
 } from "../services/db.js";
 import {
@@ -34,8 +35,18 @@ import {
   suspendTenant,
   resumeTenant,
   terminateTenant,
+  deprovisionTenant,
   type ProvisionInput,
 } from "../services/provisioner.js";
+import {
+  importToken,
+  importBatch,
+  assignToTenant,
+  releaseBot,
+  retireBot,
+  getPoolStatus,
+  getBotPoolEntryByUsername,
+} from "../services/pool.js";
 
 const router = Router();
 
@@ -331,5 +342,102 @@ async function triggerContainerWebhook(
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Bot pool management — Block 5.3
+// ---------------------------------------------------------------------------
+
+// GET /admin/pool — pool status counts
+router.get("/pool", async (_req: Request, res: Response) => {
+  const counts = await getPoolStatus();
+  const all = await listBotPool();
+  return res.json({
+    counts,
+    bots: all.map((b) => ({
+      id: b.id,
+      username: b.botUsername,
+      telegramBotId: b.telegramBotId,
+      status: b.status,
+      phoneAccount: b.phoneAccount,
+      assignedAt: b.assignedAt?.toISOString(),
+      tenantId: b.tenantId,
+      createdAt: b.createdAt.toISOString(),
+    })),
+  });
+});
+
+// POST /admin/pool/import — import a single token
+router.post("/pool/import", async (req: Request, res: Response) => {
+  const { token, phoneAccount } = req.body as { token?: string; phoneAccount?: string };
+  if (!token) return res.status(400).json({ error: "token is required" });
+
+  const result = await importToken(token, phoneAccount);
+  if (!result.ok) return res.status(422).json(result);
+  return res.json(result);
+});
+
+// POST /admin/pool/import-batch — import multiple tokens (newline or array)
+router.post("/pool/import-batch", async (req: Request, res: Response) => {
+  const { tokens, phoneAccount } = req.body as { tokens?: string | string[]; phoneAccount?: string };
+  if (!tokens) return res.status(400).json({ error: "tokens is required" });
+
+  const list = Array.isArray(tokens)
+    ? tokens
+    : String(tokens).split(/\r?\n/).filter(Boolean);
+
+  const result = await importBatch(list, phoneAccount);
+  return res.json(result);
+});
+
+// POST /admin/pool/:botId/assign — manually assign to a tenant
+router.post("/pool/:botId/assign", async (req: Request, res: Response) => {
+  const { tenantId } = req.body as { tenantId?: string };
+  if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+
+  const tenant = await getTenant(req.params["botId"]!);  // reuse resolve — but this is a botId
+  // Directly use tenantId; admin is responsible for valid value
+  await assignToTenant(req.params["botId"]!, tenantId);
+  return res.json({ ok: true });
+});
+
+// POST /admin/pool/:botIdOrUsername/release — release back to available pool
+router.post("/pool/:ref/release", async (req: Request, res: Response) => {
+  const ref = req.params["ref"]!;
+  let botId = ref;
+
+  // Accept username (@handle or handle)
+  if (ref.startsWith("@") || !/^[0-9a-f]{8}-/.test(ref)) {
+    const entry = await getBotPoolEntryByUsername(ref);
+    if (!entry) return res.status(404).json({ error: `Bot @${ref} not found in pool` });
+    botId = entry.id;
+  }
+
+  await releaseBot(botId);
+  return res.json({ ok: true });
+});
+
+// DELETE /admin/pool/:ref — retire a bot (token revoked/problematic)
+router.delete("/pool/:ref", async (req: Request, res: Response) => {
+  const ref = req.params["ref"]!;
+  let botId = ref;
+
+  if (ref.startsWith("@") || !/^[0-9a-f]{8}-/.test(ref)) {
+    const entry = await getBotPoolEntryByUsername(ref);
+    if (!entry) return res.status(404).json({ error: `Bot @${ref} not found in pool` });
+    botId = entry.id;
+  }
+
+  await retireBot(botId);
+  return res.json({ ok: true });
+});
+
+// POST /admin/fleet/:tenantId/deprovision — full cleanup with bot recycling
+router.post("/fleet/:tenantId/deprovision", async (req: Request, res: Response) => {
+  const tenant = await resolveTenant(req.params["tenantId"]!);
+  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+  const result = await deprovisionTenant(tenant);
+  return res.json({ ok: true, steps: result.steps });
+});
 
 export default router;
