@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment files (NEVER commit secrets)
+.env
+.env.local
+.env.deploy
+*.pem
+
+# Docker volumes
+postgres-data/
+tiger-claw-data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+!.cursor/
+
+# Build artifacts
+dist/
+build/
+
+# Logs
+*.log

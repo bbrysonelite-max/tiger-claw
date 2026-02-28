@@ -1,0 +1,20 @@
+{
+  "name": "Tiger Claw Dev",
+  "dockerComposeFile": "../docker/dev/docker-compose.dev.yml",
+  "service": "tiger-claw-dev",
+  "workspaceFolder": "/workspace",
+  "forwardPorts": [18789, 4000, 5432, 6379],
+  "postCreateCommand": "echo '✅ Tiger Claw dev container ready. Read specs/tiger-claw/TIGERCLAW-MASTER-SPEC-v2.md before coding.'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "editor.formatOnSave": true
+      }
+    }
+  }
+}
