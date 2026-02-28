@@ -1,0 +1,23 @@
+{
+  "name": "tiger-claw-admin-bot",
+  "version": "2.0.0",
+  "description": "Tiger Claw super-tenant Telegram admin bot",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "@types/node-telegram-bot-api": "^0.64.7",
+    "@types/node-cron": "^3.0.11",
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
+  }
+}

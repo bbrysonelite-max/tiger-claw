@@ -1,0 +1,127 @@
+// Tiger Claw API — POST /webhooks/stripe
+// Stripe checkout.session.completed → automated tenant provisioning
+// TIGERCLAW-MASTER-SPEC-v2.md Block 5.1 "Trigger: Stripe/Stan Store Webhook"
+//
+// Required Stripe metadata on the checkout session:
+//   metadata.slug              — URL-safe tenant identifier (e.g. "john-doe")
+//   metadata.flavor            — bot flavor (e.g. "network-marketer")
+//   metadata.region            — region code (e.g. "us-en")
+//   metadata.bot_token         — Telegram bot token
+//   metadata.timezone          — e.g. "America/Phoenix"
+// Customer fields:
+//   customer_details.name
+//   customer_details.email
+//   customer_details.preferred_locales[0] → language
+
+import { Router, type Request, type Response } from "express";
+import Stripe from "stripe";
+import { provisionTenant } from "../services/provisioner.js";
+import { sendAdminAlert } from "./admin.js";
+
+const router = Router();
+
+const stripe = process.env["STRIPE_SECRET_KEY"]
+  ? new Stripe(process.env["STRIPE_SECRET_KEY"])
+  : null;
+
+const WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
+
+// ---------------------------------------------------------------------------
+// POST /webhooks/stripe
+// ---------------------------------------------------------------------------
+
+router.post("/stripe", async (req: Request, res: Response) => {
+  // Validate Stripe signature
+  if (!stripe || !WEBHOOK_SECRET) {
+    console.warn("[webhooks] Stripe not configured — skipping signature check");
+    return res.status(503).json({ error: "Stripe not configured" });
+  }
+
+  const sig = req.headers["stripe-signature"] as string;
+  let event: Stripe.Event;
+
+  try {
+    // req.body must be the raw Buffer — see index.ts for rawBody middleware
+    event = stripe.webhooks.constructEvent(req.body as Buffer, sig, WEBHOOK_SECRET);
+  } catch (err) {
+    console.error("[webhooks] Stripe signature verification failed:", err);
+    return res.status(400).json({ error: "Invalid signature" });
+  }
+
+  // We only care about completed checkout sessions
+  if (event.type !== "checkout.session.completed") {
+    return res.status(200).json({ received: true, ignored: true });
+  }
+
+  const session = event.data.object as Stripe.Checkout.Session;
+  const meta = session.metadata ?? {};
+  const customer = session.customer_details;
+
+  // Extract provisioning params from session
+  const slug = meta["slug"] ?? slugify(customer?.name ?? "tenant");
+  const name = customer?.name ?? meta["name"] ?? slug;
+  const email = customer?.email ?? undefined;
+  const language = (customer?.preferred_locales?.[0] ?? meta["language"] ?? "en").split("-")[0] ?? "en";
+  const flavor = meta["flavor"] ?? "network-marketer";
+  const region = meta["region"] ?? (language === "th" ? "th-th" : "us-en");
+  const botToken = meta["bot_token"];
+  const timezone = meta["timezone"] ?? "UTC";
+  const preferredChannel = meta["channel"] ?? "telegram";
+
+  console.log(`[webhooks] Stripe checkout for ${name} (${slug}) — triggering provisioning`);
+
+  // Respond immediately to Stripe (must be within 5s)
+  res.status(200).json({ received: true });
+
+  // Provision async (non-blocking)
+  setImmediate(async () => {
+    try {
+      const result = await provisionTenant({
+        slug,
+        name,
+        email,
+        flavor,
+        region,
+        language,
+        preferredChannel,
+        botToken,
+        timezone,
+      });
+
+      if (result.success) {
+        console.log(`[webhooks] Provisioned ${slug} on port ${result.port}. Steps:`, result.steps);
+        await sendAdminAlert(
+          `✅ New tenant provisioned!\n` +
+          `Name: ${name}\nSlug: ${slug}\nFlavor: ${flavor}\nPort: ${result.port}\n` +
+          `Steps: ${result.steps.join(", ")}`
+        );
+      } else {
+        console.error(`[webhooks] Provisioning failed for ${slug}: ${result.error}`);
+        await sendAdminAlert(
+          `❌ Provisioning FAILED for ${name} (${slug})\n` +
+          `Error: ${result.error}\nSteps so far: ${result.steps.join(", ")}`
+        );
+      }
+    } catch (err) {
+      console.error("[webhooks] Unexpected provisioning error:", err);
+      await sendAdminAlert(
+        `💥 Unexpected error provisioning ${slug}: ` +
+        (err instanceof Error ? err.message : String(err))
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 30) + "-" + Date.now().toString(36);
+}
+
+export default router;
