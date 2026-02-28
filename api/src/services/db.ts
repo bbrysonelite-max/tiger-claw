@@ -107,10 +107,23 @@ export async function initSchema(): Promise<void> {
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS bot_pool (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bot_token       TEXT NOT NULL,
+        bot_username    TEXT NOT NULL,
+        telegram_bot_id TEXT NOT NULL UNIQUE,
+        status          TEXT NOT NULL DEFAULT 'available',
+        phone_account   TEXT,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        assigned_at     TIMESTAMPTZ,
+        tenant_id       UUID REFERENCES tenants(id) ON DELETE SET NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
       CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
       CREATE INDEX IF NOT EXISTS idx_hive_flavor_region ON hive_patterns(flavor, region);
       CREATE INDEX IF NOT EXISTS idx_hive_category ON hive_patterns(category);
+      CREATE INDEX IF NOT EXISTS idx_bot_pool_status ON bot_pool(status);
     `);
   });
   console.log("[db] Schema ready.");
@@ -341,4 +354,117 @@ export async function insertHivePattern(data: {
      data.dataPoints, data.confidence, data.tenantHash ?? null]
   );
   return rowToPattern(result.rows[0]);
+}
+
+// ---------------------------------------------------------------------------
+// Bot pool queries
+// Tokens are stored encrypted (see api/src/services/pool.ts for encrypt/decrypt).
+// The raw encrypted string is stored here; pool.ts handles all crypto.
+// ---------------------------------------------------------------------------
+
+export type BotPoolStatus = "available" | "assigned" | "retired";
+
+export interface BotPoolEntry {
+  id: string;
+  botToken: string;        // encrypted at rest — decrypt via pool.decryptToken()
+  botUsername: string;
+  telegramBotId: string;
+  status: BotPoolStatus;
+  phoneAccount?: string;
+  createdAt: Date;
+  assignedAt?: Date;
+  tenantId?: string;
+}
+
+function rowToBotPoolEntry(row: Record<string, unknown>): BotPoolEntry {
+  return {
+    id: row["id"] as string,
+    botToken: row["bot_token"] as string,
+    botUsername: row["bot_username"] as string,
+    telegramBotId: row["telegram_bot_id"] as string,
+    status: row["status"] as BotPoolStatus,
+    phoneAccount: row["phone_account"] as string | undefined,
+    createdAt: new Date(row["created_at"] as string),
+    assignedAt: row["assigned_at"] ? new Date(row["assigned_at"] as string) : undefined,
+    tenantId: row["tenant_id"] as string | undefined,
+  };
+}
+
+export async function insertBotPoolEntry(data: {
+  botToken: string;        // already encrypted by caller
+  botUsername: string;
+  telegramBotId: string;
+  phoneAccount?: string;
+}): Promise<BotPoolEntry> {
+  const result = await getPool().query(
+    `INSERT INTO bot_pool (bot_token, bot_username, telegram_bot_id, phone_account)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [data.botToken, data.botUsername, data.telegramBotId, data.phoneAccount ?? null]
+  );
+  return rowToBotPoolEntry(result.rows[0]);
+}
+
+export async function getNextAvailableBotEntry(): Promise<BotPoolEntry | null> {
+  const result = await getPool().query(
+    `SELECT * FROM bot_pool WHERE status = 'available' ORDER BY created_at ASC LIMIT 1`
+  );
+  return result.rows[0] ? rowToBotPoolEntry(result.rows[0]) : null;
+}
+
+export async function getBotPoolEntry(id: string): Promise<BotPoolEntry | null> {
+  const result = await getPool().query("SELECT * FROM bot_pool WHERE id = $1", [id]);
+  return result.rows[0] ? rowToBotPoolEntry(result.rows[0]) : null;
+}
+
+export async function getBotPoolEntryByUsername(username: string): Promise<BotPoolEntry | null> {
+  const result = await getPool().query(
+    "SELECT * FROM bot_pool WHERE bot_username = $1",
+    [username.replace(/^@/, "")]
+  );
+  return result.rows[0] ? rowToBotPoolEntry(result.rows[0]) : null;
+}
+
+export async function assignBotToTenant(botId: string, tenantId: string): Promise<void> {
+  await getPool().query(
+    `UPDATE bot_pool SET status='assigned', tenant_id=$1, assigned_at=NOW() WHERE id=$2`,
+    [tenantId, botId]
+  );
+}
+
+export async function releaseBotToPool(botId: string): Promise<void> {
+  await getPool().query(
+    `UPDATE bot_pool SET status='available', tenant_id=NULL, assigned_at=NULL WHERE id=$1`,
+    [botId]
+  );
+}
+
+export async function retireBotFromPool(botId: string): Promise<void> {
+  await getPool().query(
+    "UPDATE bot_pool SET status='retired' WHERE id=$1",
+    [botId]
+  );
+}
+
+export async function getPoolCounts(): Promise<{ available: number; assigned: number; retired: number }> {
+  const result = await getPool().query(`
+    SELECT status, COUNT(*)::int AS cnt
+    FROM bot_pool
+    GROUP BY status
+  `);
+  const counts = { available: 0, assigned: 0, retired: 0 };
+  for (const row of result.rows) {
+    const s = row["status"] as string;
+    if (s === "available" || s === "assigned" || s === "retired") {
+      counts[s] = row["cnt"] as number;
+    }
+  }
+  return counts;
+}
+
+export async function listBotPool(status?: BotPoolStatus): Promise<BotPoolEntry[]> {
+  const result = status
+    ? await getPool().query("SELECT * FROM bot_pool WHERE status=$1 ORDER BY created_at ASC", [status])
+    : await getPool().query("SELECT * FROM bot_pool ORDER BY created_at ASC");
+  return result.rows.map(rowToBotPoolEntry);
 }

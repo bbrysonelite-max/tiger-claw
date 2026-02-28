@@ -864,6 +864,21 @@ function handleNaming(
     };
   }
 
+  // Update the Telegram bot identity via Bot API — Block 5.3 Decision 4
+  // The container has its assigned bot token in BOT_TOKEN env var.
+  // This sets the display name and description the tenant's leads will see.
+  const tgToken = process.env["BOT_TOKEN"] ?? process.env["TELEGRAM_BOT_TOKEN"];
+  if (tgToken) {
+    const tenantName = state.identity.name ?? "your operator";
+    const description =
+      `I'm ${botName}, an AI-powered sales and recruiting agent working with ${tenantName}. ` +
+      `Powered by Tiger Claw technology.`;
+    const shortDesc = `AI agent for ${tenantName}. Powered by Tiger Claw.`;
+
+    // Fire-and-forget — don't fail onboarding if Telegram API is slow
+    void updateTelegramBotIdentity(tgToken, botName, description, shortDesc);
+  }
+
   // Transition to complete phase — flywheel start is triggered in handleComplete
   state.phase = "complete";
   state.completedAt = new Date().toISOString();
@@ -882,6 +897,52 @@ function handleNaming(
     ].join("\n"),
     data: { phase: "complete", progressPercent: 90, botName },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Telegram bot identity update — called after naming ceremony (Block 5.3 Decision 4)
+// Sets bot display name, description, and short description via Telegram Bot API.
+// The bot updates ITSELF (uses its own token), so no special admin permission needed.
+// ---------------------------------------------------------------------------
+
+function updateTelegramBotIdentity(
+  token: string,
+  name: string,
+  description: string,
+  shortDescription: string
+): Promise<void> {
+  const calls: Array<[string, Record<string, string>]> = [
+    ["setMyName", { name }],
+    ["setMyDescription", { description }],
+    ["setMyShortDescription", { short_description: shortDescription }],
+  ];
+
+  // Run all three calls in sequence; non-fatal if any fail
+  return calls.reduce(
+    (chain, [method, body]) =>
+      chain.then(() =>
+        new Promise<void>((resolve) => {
+          const bodyStr = JSON.stringify(body);
+          const req = https.request(
+            {
+              hostname: "api.telegram.org",
+              path: `/bot${token}/${method}`,
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(bodyStr),
+              },
+            },
+            () => resolve()
+          );
+          req.on("error", () => resolve()); // Non-fatal
+          req.setTimeout(10000, () => { req.destroy(); resolve(); });
+          req.write(bodyStr);
+          req.end();
+        })
+      ),
+    Promise.resolve()
+  );
 }
 
 // ---------------------------------------------------------------------------

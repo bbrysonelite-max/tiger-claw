@@ -29,6 +29,7 @@ import {
   inspectContainer,
   startExistingContainer,
 } from "./services/docker.js";
+import { getPoolStatus } from "./services/pool.js";
 import { sendAdminAlert } from "./routes/admin.js";
 import healthRouter from "./routes/health.js";
 import webhooksRouter from "./routes/webhooks.js";
@@ -85,6 +86,17 @@ const ALERT_THRESHOLD = {
 // Without this, a tenant stuck on Layer 3 would generate 2,880 alerts/day.
 const KEY_LAYER_ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 const lastKeyLayerAlert: Record<string, { layer: number; alertedAt: number }> = {};
+
+// Pool level alert state — Block 5.3 Decision 9
+// Alert thresholds: ≥25=no action, 10-24=once/day, <10=every hour, 0=immediate
+const POOL_ALERT = {
+  LOW_THRESHOLD: 25,      // below this → daily alert
+  CRITICAL_THRESHOLD: 10, // below this → hourly alert
+  LOW_COOLDOWN_MS:  24 * 60 * 60 * 1000, // 24 hours
+  CRIT_COOLDOWN_MS: 60 * 60 * 1000,      // 1 hour
+  EMPTY_COOLDOWN_MS: 0,                   // immediate, no cooldown
+};
+let lastPoolAlert = { level: "ok" as "ok" | "low" | "critical" | "empty", alertedAt: 0 };
 
 async function runHealthMonitor(): Promise<void> {
   try {
@@ -154,6 +166,38 @@ async function runHealthMonitor(): Promise<void> {
     }
   } catch (err) {
     console.error("[monitor] Health monitor error:", err);
+  }
+
+  // Pool level check — Block 5.3 Decision 9
+  try {
+    const { available } = await getPoolStatus();
+    const now = Date.now();
+    const elapsed = now - lastPoolAlert.alertedAt;
+
+    if (available === 0) {
+      // Empty — alert immediately every cycle (no cooldown)
+      if (elapsed > POOL_ALERT.EMPTY_COOLDOWN_MS || lastPoolAlert.level !== "empty") {
+        lastPoolAlert = { level: "empty", alertedAt: now };
+        await sendAdminAlert(`🚨 POOL EMPTY — waitlist mode active. No bots available for new customers. Run /pool refill.`);
+      }
+    } else if (available < POOL_ALERT.CRITICAL_THRESHOLD) {
+      // Critical (<10) — alert every hour
+      if (elapsed > POOL_ALERT.CRIT_COOLDOWN_MS || lastPoolAlert.level !== "critical") {
+        lastPoolAlert = { level: "critical", alertedAt: now };
+        await sendAdminAlert(`⚠️ Pool critical: ${available} bot${available !== 1 ? "s" : ""} available. Run /pool refill.`);
+      }
+    } else if (available < POOL_ALERT.LOW_THRESHOLD) {
+      // Low (10-24) — alert once per day
+      if (elapsed > POOL_ALERT.LOW_COOLDOWN_MS || lastPoolAlert.level !== "low") {
+        lastPoolAlert = { level: "low", alertedAt: now };
+        await sendAdminAlert(`🟡 Pool low: ${available} bot${available !== 1 ? "s" : ""} available. Consider running /pool refill.`);
+      }
+    } else {
+      // Healthy — reset alert state so we re-alert if it drops again
+      lastPoolAlert = { level: "ok", alertedAt: now };
+    }
+  } catch {
+    // Non-fatal — don't let pool check break the fleet monitor
   }
 }
 
