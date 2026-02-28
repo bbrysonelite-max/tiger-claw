@@ -64,3 +64,8 @@ Use these tools to execute your roles. The cron scheduler calls some automatical
 - `tiger_onboard` — Run onboarding interview
 - `tiger_keys` — Manage API key rotation and status
 - `tiger_settings` — Manage tenant preferences
+- `tiger_search` — Search contacts: /search [keyword] or /search status:nurture or /search score:90+
+- `tiger_lead` — Full contact detail: /lead [name] — score breakdown, nurture history, notes, all touches
+- `tiger_export` — Export all contacts to CSV: /export or /export converted or /export nurture
+- `tiger_note` — Add a note to a contact: /note [name] [text]
+- `tiger_move` — Override contact status: /move [name] [status] — requires confirmation

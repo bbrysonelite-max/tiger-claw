@@ -377,7 +377,7 @@ function detectProvider(key: string): "anthropic" | "openai" | "unknown" {
 function validateAnthropicKey(key: string): Promise<{ valid: boolean; error?: string }> {
   return new Promise((resolve) => {
     const body = JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: process.env["PLATFORM_CHEAP_MODEL"] ?? "claude-haiku-4-5-20251001",
       max_tokens: 1,
       messages: [{ role: "user", content: "hi" }],
     });
@@ -520,7 +520,7 @@ function rewriteOpenClawKey(layer: LayerNumber, state: KeyState): void {
 
     // Layers 1+4 always use cheapest model (LOCKED per Block 1.7)
     if (layer === 1 || layer === 4) {
-      agent["model"] = "claude-haiku-4-5-20251001";
+      agent["model"] = process.env["PLATFORM_CHEAP_MODEL"] ?? "claude-haiku-4-5-20251001";
     }
 
     config["agent"] = agent;

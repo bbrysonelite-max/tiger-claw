@@ -226,6 +226,34 @@ router.get("/fleet/:tenantId/logs", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /admin/alerts — internal alert endpoint for skills and ops scripts
+// Called by tiger_keys.ts (key rotation/recovery events) and
+// pipeline-advance.sh (stage transitions, finalize reverts).
+// Without this endpoint those callers silently 404 and admins are never notified.
+// ---------------------------------------------------------------------------
+
+router.post("/alerts", async (req: Request, res: Response) => {
+  const { message, tenantId, severity } = req.body as {
+    message?: string;
+    tenantId?: string;
+    severity?: string;
+  };
+
+  if (!message) {
+    return res.status(400).json({ error: "message is required" });
+  }
+
+  const prefixed = severity === "high" ? `🚨 ${message}` : message;
+  await sendAdminAlert(prefixed);
+
+  if (tenantId) {
+    await logAdminEvent("skill_alert", tenantId, { message, severity });
+  }
+
+  return res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Admin Telegram alert utility (exported for use in webhooks.ts)
 // ---------------------------------------------------------------------------
 

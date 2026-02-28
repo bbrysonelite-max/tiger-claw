@@ -14,7 +14,6 @@
 //   stopContainer  → update status: suspended
 //   startContainer → update status: active (or onboarding if incomplete)
 
-import TelegramBot from "node-telegram-bot-api";
 import {
   createTenant,
   getTenantBySlug,
@@ -144,16 +143,10 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
   await updateTenantStatus(tenant.id, "onboarding");
   steps.push("Status: onboarding");
 
-  // 7. Send greeting via tenant's Telegram bot (if token available)
-  if (input.botToken && input.preferredChannel === "telegram") {
-    try {
-      await sendOnboardingGreeting(input.botToken, input.name, input.language);
-      steps.push("Greeting message sent via Telegram");
-    } catch (err) {
-      // Non-fatal — bot may not have a chat to send to yet at this point
-      steps.push(`Greeting skipped: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
+  // 7. Bot is live. tiger_onboard.ts will send the first greeting when the
+  //    tenant's first inbound message arrives — no proactive send here because
+  //    a brand-new bot has no chat_id until the tenant initiates contact.
+  steps.push("Bot ready — awaiting tenant's first inbound message to start onboarding");
 
   await logAdminEvent("provision", tenant.id, {
     slug: input.slug,
@@ -223,31 +216,3 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function sendOnboardingGreeting(
-  botToken: string,
-  tenantName: string,
-  _language: string
-): Promise<void> {
-  // The bot can only message a chat it has already seen. For a brand-new
-  // bot token, there may be no chat yet. This is a best-effort send; the
-  // onboarding flow via tiger_onboard will drive conversation from there.
-  //
-  // In practice, the tenant has just paid on Stan Store / Stripe checkout,
-  // so they are instructed to start the bot before payment completes, which
-  // creates the initial chat session. We send to a placeholder update queue
-  // via getUpdates to find the first chat_id.
-
-  const bot = new TelegramBot(botToken);
-  try {
-    const updates = await bot.getUpdates({ limit: 1, timeout: 2 });
-    const chatId = updates[0]?.message?.chat?.id;
-    if (chatId) {
-      const greeting =
-        `Hi ${tenantName}! I'm your Tiger Claw agent. I'm ready to get you set up. ` +
-        `Just say "hi" or "start" to begin your onboarding interview.`;
-      await bot.sendMessage(chatId, greeting);
-    }
-  } catch {
-    // Non-fatal — tenant will initiate the conversation themselves
-  }
-}

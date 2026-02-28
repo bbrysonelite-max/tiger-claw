@@ -81,6 +81,11 @@ const ALERT_THRESHOLD = {
   FAIL_CRIT: 3,      // → auto-restart
 };
 
+// Key layer alert dedup: only alert once per hour per tenant per layer.
+// Without this, a tenant stuck on Layer 3 would generate 2,880 alerts/day.
+const KEY_LAYER_ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const lastKeyLayerAlert: Record<string, { layer: number; alertedAt: number }> = {};
+
 async function runHealthMonitor(): Promise<void> {
   try {
     const tenants = await listTenants("active");
@@ -116,12 +121,19 @@ async function runHealthMonitor(): Promise<void> {
       } else {
         failureCount[tenant.slug] = 0;
 
-        // Check key layer degradation
+        // Check key layer degradation — alert at most once per hour per tenant
         if (health.keyLayerActive !== undefined && health.keyLayerActive >= 3) {
-          const severity = health.keyLayerActive === 4 ? "🚨 CRITICAL" : "⚠️";
-          await sendAdminAlert(
-            `${severity} Key layer ${health.keyLayerActive} active for ${tenant.name} (${tenant.slug})`
-          );
+          const prev = lastKeyLayerAlert[tenant.slug];
+          const now = Date.now();
+          const sameLayer = prev?.layer === health.keyLayerActive;
+          const withinCooldown = prev !== undefined && (now - prev.alertedAt) < KEY_LAYER_ALERT_COOLDOWN_MS;
+          if (!sameLayer || !withinCooldown) {
+            lastKeyLayerAlert[tenant.slug] = { layer: health.keyLayerActive, alertedAt: now };
+            const severity = health.keyLayerActive === 4 ? "🚨 CRITICAL" : "⚠️";
+            await sendAdminAlert(
+              `${severity} Key layer ${health.keyLayerActive} active for ${tenant.name} (${tenant.slug})`
+            );
+          }
         }
 
         // Check memory via Docker stats
