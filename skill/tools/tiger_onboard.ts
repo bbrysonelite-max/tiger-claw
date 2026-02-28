@@ -64,6 +64,10 @@ interface OnboardState {
   icpSingle: ICPAnswers;
   primaryKeyValidated: boolean;
   fallbackKeyValidated: boolean;
+  // Actual key values stored so key_state.json can be written on completion
+  // and the entrypoint can resolve the correct Layer 2/3 key after a restart.
+  primaryKey?: string;
+  fallbackKey?: string;
   botName?: string;
   flavor: string;
   language: string;
@@ -637,8 +641,9 @@ async function handleKeysPrimary(
     };
   }
 
-  // Primary key valid — move to fallback
+  // Primary key valid — persist the key value and move to fallback
   state.primaryKeyValidated = true;
+  state.primaryKey = key;
   state.phase = "keys_fallback";
   saveState(workdir, state);
 
@@ -690,8 +695,46 @@ async function handleKeysFallback(
     };
   }
 
-  // Both keys validated — deactivate platform onboarding key (Layer 1)
+  // Both keys validated — persist fallback key value
   state.fallbackKeyValidated = true;
+  state.fallbackKey = key;
+
+  // Write key_state.json so the entrypoint can resolve Layer 2/3 keys on restart.
+  // Uses the same shape as tiger_keys.ts KeyState — kept in sync manually.
+  // Tools don't import from each other, so we write the JSON directly.
+  const today = new Date().toISOString().slice(0, 10);
+  const keyStateData = {
+    activeLayer: 2,
+    layer2Key: state.primaryKey,
+    layer3Key: state.fallbackKey,
+    layer1MessageCount: 0,
+    layer3MessageCountToday: 0,
+    layer3CountDate: today,
+    layer4TotalMessages: 0,
+    tenantPaused: false,
+    events: [
+      {
+        type: "rotation",
+        timestamp: new Date().toISOString(),
+        fromLayer: 1,
+        toLayer: 2,
+        message: "Onboarding complete — switched from platform onboarding key to tenant primary key.",
+      },
+    ],
+    lastUpdated: new Date().toISOString(),
+  };
+  try {
+    fs.writeFileSync(
+      path.join(workdir, "key_state.json"),
+      JSON.stringify(keyStateData, null, 2),
+      "utf8"
+    );
+  } catch {
+    // Non-fatal — entrypoint will still load Layer 1 key as fallback, but
+    // the tenant will need to re-enter keys. Better than crashing onboarding.
+  }
+
+  // Deactivate the platform onboarding key (Layer 1) on the Tiger Claw API
   notifyKeyActivation(state.tenantId);
 
   // Move to naming ceremony

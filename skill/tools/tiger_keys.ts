@@ -121,6 +121,14 @@ interface KeyState {
   tenantPaused: boolean;
   tenantPausedAt?: string;
 
+  // Persisted tenant key values (written by restore_key so container restarts
+  // can resolve the correct active key without requiring env var re-injection).
+  // Keys are stored in plaintext here (data dir is inside the container volume,
+  // protected by container + host OS isolation). The ENCRYPTION_KEY env var is
+  // available if a future iteration adds at-rest encryption.
+  layer2Key?: string;   // Tenant primary key
+  layer3Key?: string;   // Tenant fallback key
+
   // Event log (last MAX_EVENTS)
   events: KeyEvent[];
 
@@ -462,6 +470,70 @@ async function validateApiKey(key: string): Promise<{ valid: boolean; error?: st
 }
 
 // ---------------------------------------------------------------------------
+// openclaw.json hot-key update
+// Rewrites agent.anthropicApiKey / agent.openaiApiKey in openclaw.json so
+// OpenClaw's Config Manager (OPENCLAW-BLUEPRINT.md §2.1) hot-reloads the new
+// key immediately without a container restart.
+//
+// Atomic write pattern: write to a .tmp file then fs.renameSync into place.
+// rename(2) is a single kernel syscall — the file watcher never sees a partial
+// write, preventing a corrupt-config reload race.
+//
+// Non-fatal: if the write fails for any reason, key_state.json still has the
+// correct activeLayer so the next container restart resolves to the right key.
+// ---------------------------------------------------------------------------
+
+const OPENCLAW_CONFIG_PATH = "/root/.openclaw/openclaw.json";
+const OPENCLAW_CONFIG_TMP  = "/root/.openclaw/openclaw.json.tmp";
+
+function detectProviderFromKey(key: string): "anthropic" | "openai" {
+  return key.startsWith("sk-ant-") ? "anthropic" : "openai";
+}
+
+function resolveKeyForLayer(layer: LayerNumber, state: KeyState): string {
+  switch (layer) {
+    case 1: return process.env["PLATFORM_ONBOARDING_KEY"] ?? "";
+    case 2: return state.layer2Key ?? process.env["TENANT_PRIMARY_KEY"] ?? "";
+    case 3: return state.layer3Key ?? process.env["TENANT_FALLBACK_KEY"] ?? "";
+    case 4: return process.env["PLATFORM_EMERGENCY_KEY"] ?? "";
+  }
+}
+
+function rewriteOpenClawKey(layer: LayerNumber, state: KeyState): void {
+  try {
+    const raw = fs.readFileSync(OPENCLAW_CONFIG_PATH, "utf8");
+    const config = JSON.parse(raw) as Record<string, unknown>;
+    const agent = (config["agent"] ?? {}) as Record<string, unknown>;
+
+    const key = resolveKeyForLayer(layer, state);
+    const provider = detectProviderFromKey(key);
+
+    // Clear both provider key fields, then set exactly the one that matches
+    delete agent["anthropicApiKey"];
+    delete agent["openaiApiKey"];
+
+    if (provider === "anthropic") {
+      agent["anthropicApiKey"] = key;
+    } else {
+      agent["openaiApiKey"] = key;
+    }
+
+    // Layers 1+4 always use cheapest model (LOCKED per Block 1.7)
+    if (layer === 1 || layer === 4) {
+      agent["model"] = "claude-haiku-4-5-20251001";
+    }
+
+    config["agent"] = agent;
+
+    // Atomic write: tmp → rename so the file watcher always reads a complete file
+    fs.writeFileSync(OPENCLAW_CONFIG_TMP, JSON.stringify(config, null, 2), "utf8");
+    fs.renameSync(OPENCLAW_CONFIG_TMP, OPENCLAW_CONFIG_PATH);
+  } catch {
+    // Non-fatal — key_state.json is already saved; next restart resolves correctly.
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Rotation — perform a layer switch
 // ---------------------------------------------------------------------------
 
@@ -487,6 +559,9 @@ function performRotation(
     });
 
     saveKeyState(workdir, state);
+    // No key rewrite on pause — OpenClaw will reject calls via the skill's
+    // record_message check (tenantPaused: true). The key in openclaw.json
+    // is irrelevant at this point since the agent won't proceed past that check.
     notifyAdmin(tenantId, `🔴 Tenant ${tenantId} auto-paused — Emergency key exhausted. Reason: ${reason}`);
 
     return {
@@ -520,6 +595,10 @@ function performRotation(
   });
 
   saveKeyState(workdir, state);
+
+  // Rewrite openclaw.json immediately so OpenClaw hot-reloads the new key
+  // without requiring a container restart (Block 4 runtime cascade).
+  rewriteOpenClawKey(toLayer, state);
 
   const requiresAdminAlert = toLayer === 3 || toLayer === 4;
   if (requiresAdminAlert) {
@@ -715,6 +794,11 @@ async function handleRestoreKey(
   const restoredLayer = params.layer as LayerNumber;
   const previousLayer = state.activeLayer;
 
+  // Persist the validated key value so container restarts can resolve it
+  // (entrypoint reads layer2Key / layer3Key from key_state.json at startup)
+  if (restoredLayer === 2) state.layer2Key = params.apiKey;
+  if (restoredLayer === 3) state.layer3Key = params.apiKey;
+
   // Switch to restored layer if it's better than current active
   // (e.g., primary restored while on fallback or emergency)
   const shouldSwitch =
@@ -740,6 +824,12 @@ async function handleRestoreKey(
   });
 
   saveKeyState(workdir, state);
+
+  // Hot-swap the key in openclaw.json so OpenClaw picks up the restored key
+  // immediately without a container restart.
+  if (shouldSwitch) {
+    rewriteOpenClawKey(state.activeLayer, state);
+  }
 
   logger.info("tiger_keys: key restored", {
     restoredLayer,
