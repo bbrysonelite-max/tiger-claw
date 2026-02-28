@@ -26,7 +26,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 [[ -f "$SCRIPT_DIR/../.env.deploy" ]] && source "$SCRIPT_DIR/../.env.deploy"
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-DEPLOY_STATE_FILE="${DEPLOY_STATE_FILE:-/home/ubuntu/tiger-claw/deploy-state.json}"
+DEPLOYMENT_STATE_FILE="${DEPLOYMENT_STATE_FILE:-/home/ubuntu/tiger-claw/deployment_state.json}"
+DEPLOY_STATE_FILE="$DEPLOYMENT_STATE_FILE"   # alias used throughout script
 DEPLOY_SCRIPT="${DEPLOY_SCRIPT:-$SCRIPT_DIR/deploy.sh}"
 NGINX_CONF_DIR="${NGINX_CONF_DIR:-/etc/nginx/conf.d}"
 TIGER_CLAW_API_URL="${TIGER_CLAW_API_URL:-http://localhost:4000}"

@@ -132,7 +132,63 @@ A tenant owns:
 2. If staging passes → **Canary group** (5 designated tenants) for 24 hours.
 3. If canary healthy → Rolling deployment: **10% → 25% → 50% → 100%** with 6-hour soak between each stage.
 4. Health check failure at ANY stage = automatic rollback for affected containers.
-5. Old images retained 30 days for emergency rollback.
+5. Last **5 versions** retained. Older images pruned automatically after each build.
+
+### Version Scheme
+
+**Format: `v{YEAR}.{MONTH}.{DAY}.{BUILD}`**
+
+- Date portion is today's UTC date at build time.
+- BUILD is an auto-incrementing integer per day, starting at 1. If two builds happen on the same day: `v2026.02.28.1`, `v2026.02.28.2`, etc.
+- Tags are **immutable** — once a version tag exists, it is never reused or overwritten.
+- Every version maps 1:1 to a Docker image: `tiger-claw-scout:v2026.02.28.1`
+
+**Build process (`ops/build.sh`):**
+1. Determine next version number from `deployment_state.json` (today's date + next BUILD counter).
+2. `docker build` → tag image with the version string.
+3. Record build entry in `deployment_state.json` (version, timestamp, commit hash, image tag).
+4. If files in `skill/`, `api/`, or `docker/` changed since last git tag → create and push `git tag v{VERSION}`.
+5. Prune all Docker images not in the last 5 builds (locally and optionally registry).
+
+**`deployment_state.json` schema:**
+```json
+{
+  "currentVersion": "v2026.02.27.1",
+  "previousVersion": "v2026.02.26.3",
+  "targetVersion": "v2026.02.28.1",
+  "stage": "stable",
+  "stageStartedAt": "2026-02-28T10:00:00Z",
+  "status": "stable",
+  "autoAdvance": true,
+  "updatedTenants": [],
+  "canaryTenants": [],
+  "pendingFinalize": [],
+  "history": [],
+  "builds": [
+    {
+      "version": "v2026.02.28.1",
+      "builtAt": "2026-02-28T09:00:00Z",
+      "imageTag": "tiger-claw-scout:v2026.02.28.1",
+      "commitHash": "abc1234",
+      "gitTagged": true
+    }
+  ]
+}
+```
+
+**Rollback:**
+- `ops/deploy.sh rollback` reads `previousVersion` from `deployment_state.json`.
+- Swaps **all containers currently on `targetVersion`** back to `previousVersion` via the blue-green mechanism.
+- Single command. No manual image hunting.
+
+> **LOCKED DECISIONS (v2 addition):**
+> | # | Decision | Status |
+> |---|----------|--------|
+> | 32 | Version scheme: `v{YEAR}.{MONTH}.{DAY}.{BUILD}` | LOCKED |
+> | 33 | Image retention: last 5 versions, older pruned automatically | LOCKED |
+> | 34 | `deployment_state.json` is single source of truth for version history | LOCKED |
+> | 35 | Git tag on every build that touches `skill/`, `api/`, or `docker/` | LOCKED |
+> | 36 | Rollback is one command — reads `previousVersion` from state | LOCKED |
 
 ## 1.7 Four-Layer Key Management
 

@@ -43,7 +43,9 @@ IMAGE_NAME="${IMAGE_NAME:-tiger-claw-scout}"
 REGISTRY="${REGISTRY:-}"
 TIGER_CLAW_API_URL="${TIGER_CLAW_API_URL:-http://localhost:4000}"
 ADMIN_TOKEN="${ADMIN_TOKEN:-}"
-DEPLOY_STATE_FILE="${DEPLOY_STATE_FILE:-/home/ubuntu/tiger-claw/deploy-state.json}"
+DEPLOYMENT_STATE_FILE="${DEPLOYMENT_STATE_FILE:-/home/ubuntu/tiger-claw/deployment_state.json}"
+# Legacy alias so existing variable references still resolve
+DEPLOY_STATE_FILE="$DEPLOYMENT_STATE_FILE"
 NGINX_CONF_DIR="${NGINX_CONF_DIR:-/etc/nginx/conf.d}"
 
 # Port offsets for blue/green slots (relative to tenant's external port)
@@ -57,8 +59,8 @@ GREEN_OFFSET=20000
 HEALTH_PRE_SWAP_SECS=60
 HEALTH_CHECK_INTERVAL_SECS=10
 
-# Image retention
-OLD_IMAGES_RETAIN_DAYS=30
+# Image retention is 5 versions (LOCKED per spec). Managed by build.sh + prune_old_images().
+MAX_BUILDS=5
 
 log()   { echo "[deploy] $(date '+%Y-%m-%d %H:%M:%S') $*"; }
 warn()  { echo "[deploy] WARN: $*" >&2; }
@@ -450,30 +452,41 @@ do_blue_green_update() {
 }
 
 # ── Stage 1: Build ─────────────────────────────────────────────────────────────
+# Build is owned by ops/build.sh (version scheme, git tagging, image retention).
+# deploy.sh 'build' is a thin wrapper for backwards compatibility.
 do_build() {
   local version="$1"
-  [[ -z "$version" ]] && error "version required: deploy.sh build v2.1.0"
+  log "Delegating build to ops/build.sh..."
 
-  log "Building ${IMAGE_NAME}:${version}..."
-  docker build -t "${IMAGE_NAME}:${version}" -t "${IMAGE_NAME}:latest" "$(dirname "$SCRIPT_DIR")"
+  local build_args=()
+  [[ -n "$version" ]] && build_args+=(--version "$version")
+  [[ -z "$REGISTRY" ]] && build_args+=(--no-push)
 
-  if [[ -n "$REGISTRY" ]]; then
-    docker tag "${IMAGE_NAME}:${version}" "${REGISTRY}/${IMAGE_NAME}:${version}"
-    docker push "${REGISTRY}/${IMAGE_NAME}:${version}"
-    log "Pushed to registry: ${REGISTRY}/${IMAGE_NAME}:${version}"
-  fi
+  "$SCRIPT_DIR/build.sh" "${build_args[@]}"
 
-  local prev_version; prev_version="$(get_state_field currentVersion)"
-  python3 - "$version" "$prev_version" "$DEPLOY_STATE_FILE" << 'PYEOF'
+  # After build.sh runs, set targetVersion and reset pipeline state
+  local built_version; built_version="$(python3 -c "
+import json
+try:
+    with open('$DEPLOY_STATE_FILE') as f:
+        d = json.load(f)
+    print(d.get('latestVersion', '$version'))
+except Exception:
+    print('$version')
+")"
+
+  python3 - "$built_version" "$DEPLOY_STATE_FILE" << 'PYEOF'
 import json, sys, datetime
-version, prev_version, state_file = sys.argv[1:]
+built_version, state_file = sys.argv[1:]
 try:
     with open(state_file) as f:
         d = json.load(f)
 except Exception:
     d = {}
-d['previousVersion'] = prev_version or d.get('currentVersion', 'unknown')
-d['targetVersion'] = version
+current = d.get('currentVersion', '')
+if current and current != built_version:
+    d['previousVersion'] = current
+d['targetVersion'] = built_version
 d['stage'] = 'built'
 d['stageStartedAt'] = datetime.datetime.utcnow().isoformat() + 'Z'
 d['status'] = 'ready'
@@ -484,7 +497,7 @@ with open(state_file, 'w') as f:
     json.dump(d, f, indent=2)
 PYEOF
 
-  log "✅ Build complete. Next: ./ops/deploy.sh staging ${version}"
+  log "✅ Build recorded. Next: ./ops/deploy.sh staging ${built_version}"
 }
 
 # ── Stage 2: Staging ──────────────────────────────────────────────────────────
@@ -690,13 +703,34 @@ port_to_container_name() {
 # ── Rollback ─────────────────────────────────────────────────────────────────
 do_rollback() {
   local bad_version="$1"
+
+  # Resolve previousVersion: prefer explicit state field, fall back to second
+  # entry in the builds array (second-most-recent build).
   local prev_version; prev_version="$(get_state_field previousVersion)"
-  [[ -z "$prev_version" ]] && error "No previousVersion in state — cannot rollback"
+  if [[ -z "$prev_version" || "$prev_version" == "$bad_version" ]]; then
+    prev_version="$(python3 -c "
+import json, sys
+try:
+    with open('$DEPLOY_STATE_FILE') as f:
+        d = json.load(f)
+    builds = d.get('builds', [])
+    # Find the first build that is NOT the bad version
+    for b in builds:
+        if b.get('version') != '$bad_version':
+            print(b['version'])
+            break
+except Exception:
+    pass
+")"
+  fi
+
+  [[ -z "$prev_version" ]] && error "No previousVersion resolvable from deployment_state.json — cannot rollback"
 
   log "🚨 Rolling back from ${bad_version} to ${prev_version}..."
 
   # For each tenant with a pendingFinalize entry (mid-transition), revert Nginx
-  python3 - "$DEPLOY_STATE_FILE" << 'PYEOF'
+  local pending_entries
+  pending_entries="$(python3 - "$DEPLOY_STATE_FILE" << 'PYEOF'
 import json, sys
 state_file = sys.argv[1]
 try:
@@ -707,13 +741,15 @@ except Exception:
 for entry in d.get('pendingFinalize', []):
     print(f"{entry['slug']} {entry['tenantPort']} {entry['newPort']} {entry['oldPort']}")
 PYEOF
-  | while read -r slug tenant_port new_port old_port; do
+)"
+  while IFS=' ' read -r slug tenant_port new_port old_port; do
+    [[ -z "$slug" ]] && continue
     log "  Reverting Nginx for ${slug}: ${tenant_port} → ${old_port}"
     nginx_write_config "$slug" "$tenant_port" "$old_port"
     local new_name; new_name="$(port_to_container_name "$slug" "$new_port" "$tenant_port")"
     docker stop "$new_name" 2>/dev/null || true
     docker rm   "$new_name" 2>/dev/null || true
-  done
+  done <<< "$pending_entries"
 
   nginx_reload || true
 
@@ -776,11 +812,38 @@ next_percent() {
 }
 
 # ── Helper: prune old Docker images ──────────────────────────────────────────
+# Reads the builds list from deployment_state.json and removes any local images
+# for this IMAGE_NAME whose tag is NOT in the last 5 builds (LOCKED: 5 versions).
 prune_old_images() {
-  log "Pruning images older than ${OLD_IMAGES_RETAIN_DAYS} days..."
-  docker image prune -a --force \
-    --filter "until=${OLD_IMAGES_RETAIN_DAYS}d" \
-    --filter "label=org.opencontainers.image.title=${IMAGE_NAME}" 2>/dev/null || true
+  log "Pruning local images beyond last 5 retained versions..."
+  python3 - "$DEPLOY_STATE_FILE" "$IMAGE_NAME" << 'PYEOF'
+import json, sys, subprocess
+
+state_file, image_name = sys.argv[1:]
+
+try:
+    with open(state_file) as f:
+        d = json.load(f)
+    keep_tags = {b['version'] for b in d.get('builds', [])}
+except Exception:
+    keep_tags = set()
+
+result = subprocess.run(
+    ['docker', 'images', image_name, '--format', '{{.Tag}}'],
+    capture_output=True, text=True
+)
+all_tags = [t.strip() for t in result.stdout.splitlines() if t.strip() and t.strip() != '<none>']
+
+pruned = 0
+for tag in all_tags:
+    if tag not in keep_tags and tag != 'latest':
+        full = f'{image_name}:{tag}'
+        print(f'  [prune] {full}')
+        subprocess.run(['docker', 'rmi', full], capture_output=True)
+        pruned += 1
+
+print(f'  {pruned} image(s) pruned.' if pruned else '  Nothing to prune.')
+PYEOF
 }
 
 # ── Main dispatch ─────────────────────────────────────────────────────────────
