@@ -35,6 +35,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
+import { classifyBucket, getBucketResponse, fillTemplate } from "./tiger_objection";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -955,12 +956,25 @@ function handleRecordResponse(
           };
         }
 
-        // Build gap-closing response touch
+        // Classify prospect's gap answer through objection buckets
+        const flavor = onboard.flavor ?? "network-marketer";
+        const bucket = classifyBucket(params.responseText, flavor);
+        const bucketDef = getBucketResponse(bucket, flavor);
+
+        let gapMessage: string;
+        if (bucketDef) {
+          gapMessage = fillTemplate(bucketDef.responseTemplate, onboard) +
+            "\n\n" +
+            fillTemplate(bucketDef.followUpQuestion, onboard);
+        } else {
+          gapMessage = buildTouchMessage("gap_closing", record, onboard, params.responseText);
+        }
+
         const nextScheduled = acceleratedNextTouch();
         const gapTouch: TouchRecord = {
           touchNumber: record.currentTouchNumber + 1,
           type: "gap_closing",
-          messageText: buildTouchMessage("gap_closing", record, onboard, params.responseText),
+          messageText: gapMessage,
           scheduledFor: nextScheduled,
         };
         record.touchHistory.push(gapTouch);
@@ -969,17 +983,20 @@ function handleRecordResponse(
         store[params.nurtureId] = record;
         saveNurture(workdir, store);
 
+        logger.info("tiger_nurture: gap-closing via objection bucket", { bucket, flavor, round: record.oneToTenRound });
+
         return {
           ok: true,
           output: [
             `${record.leadDisplayName} answered Part 2: "${params.responseText.slice(0, 80)}".`,
-            `Gap-closing response ready (round ${record.oneToTenRound}/2). Sends in 24 hours.`,
+            `Objection classified as: ${bucket}. Bucket-specific response ready (round ${record.oneToTenRound}/2). Sends in 24 hours.`,
           ].join("\n"),
           data: {
             nurtureId: params.nurtureId,
             status: "gap_closing",
             round: record.oneToTenRound,
             gapAnswer: params.responseText,
+            objectionBucket: bucket,
           },
         };
       }
