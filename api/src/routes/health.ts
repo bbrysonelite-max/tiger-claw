@@ -1,8 +1,10 @@
 // Tiger Claw API — GET /health
-// System-wide health: PostgreSQL, Docker, fleet container summary
+// System-wide health: PostgreSQL, Redis, Docker, disk, memory, container count
 // TIGERCLAW-MASTER-SPEC-v2.md Block 6.2
 
 import { Router, type Request, type Response } from "express";
+import { execSync } from "child_process";
+import { createClient } from "redis";
 import { getPool } from "../services/db.js";
 import { listTigerContainers } from "../services/docker.js";
 import * as os from "os";
@@ -21,6 +23,18 @@ router.get("/", async (_req: Request, res: Response) => {
     checks["postgres"] = `error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
+  // Redis
+  try {
+    const redisUrl = process.env["REDIS_URL"] ?? "redis://localhost:6379";
+    const client = createClient({ url: redisUrl });
+    await client.connect();
+    await client.ping();
+    await client.disconnect();
+    checks["redis"] = "ok";
+  } catch (err) {
+    checks["redis"] = `error: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
   // Docker
   let containerCount = 0;
   let runningCount = 0;
@@ -33,13 +47,32 @@ router.get("/", async (_req: Request, res: Response) => {
     checks["docker"] = `error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
+  // Disk usage
+  let diskUsagePercent = 0;
+  try {
+    const dfOutput = execSync("df -P /home/ubuntu/customers 2>/dev/null || df -P /", {
+      encoding: "utf8",
+    });
+    const lines = dfOutput.trim().split("\n");
+    if (lines.length >= 2) {
+      const parts = lines[1]!.split(/\s+/);
+      diskUsagePercent = parseInt(parts[4]?.replace("%", "") ?? "0", 10);
+    }
+    checks["disk"] = "ok";
+  } catch {
+    checks["disk"] = "unknown";
+  }
+
   // System stats
   const totalMemMb = Math.round(os.totalmem() / 1024 / 1024);
   const freeMemMb = Math.round(os.freemem() / 1024 / 1024);
   const usedMemPercent = Math.round(((totalMemMb - freeMemMb) / totalMemMb) * 100);
   const loadAvg = os.loadavg()[0];
 
-  const healthy = checks["postgres"] === "ok" && checks["docker"] === "ok";
+  const healthy =
+    checks["postgres"] === "ok" &&
+    checks["redis"] === "ok" &&
+    checks["docker"] === "ok";
 
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded",
@@ -55,6 +88,7 @@ router.get("/", async (_req: Request, res: Response) => {
       totalMemMb,
       freeMemMb,
       usedMemPercent,
+      diskUsagePercent,
       loadAvg1m: Math.round(loadAvg * 100) / 100,
     },
     timestamp: new Date().toISOString(),
