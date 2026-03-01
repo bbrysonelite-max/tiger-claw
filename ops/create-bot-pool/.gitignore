@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# Session files contain auth credentials — never commit these
+sessions/*.session
+.env
