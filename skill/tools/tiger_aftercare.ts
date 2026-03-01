@@ -69,13 +69,16 @@ const BRONZE_TOUCHES: Array<{ day: number; type: CustomerTouchType }> = [
 // Silver adds onto Bronze
 const SILVER_EXTRA_TOUCHES: Array<{ dayOffset: number; type: CustomerTouchType }> = [
   { dayOffset: 0,  type: "silver_welcome" },
-  { dayOffset: 7,  type: "referral_campaign_1" },
-  { dayOffset: 14, type: "referral_campaign_2" },
-  { dayOffset: 21, type: "referral_campaign_3" },
-  { dayOffset: 28, type: "upsell_intro" },
-  { dayOffset: 35, type: "referral_campaign_4" },
-  { dayOffset: 42, type: "usage_report" },
-  { dayOffset: 50, type: "upsell_followup" },
+  { dayOffset: 5,  type: "referral_campaign_1" },
+  { dayOffset: 10, type: "referral_campaign_2" },
+  { dayOffset: 16, type: "referral_campaign_3" },
+  { dayOffset: 22, type: "upsell_intro" },
+  { dayOffset: 28, type: "referral_campaign_4" },
+  { dayOffset: 35, type: "referral_campaign_5" },
+  { dayOffset: 42, type: "referral_campaign_6" },
+  { dayOffset: 50, type: "usage_report" },
+  { dayOffset: 58, type: "referral_campaign_7" },
+  { dayOffset: 65, type: "upsell_followup" },
 ];
 
 // Gold adds on top of Silver
@@ -130,6 +133,7 @@ type CustomerTouchType =
   | "three_month_checkin"
   | "silver_welcome"
   | "referral_campaign_1" | "referral_campaign_2" | "referral_campaign_3" | "referral_campaign_4"
+  | "referral_campaign_5" | "referral_campaign_6" | "referral_campaign_7"
   | "upsell_intro"
   | "usage_report"
   | "upsell_followup"
@@ -578,17 +582,82 @@ function buildCustomerMessage(
       ].join("\n");
 
     case "referral_campaign_1":
-    case "referral_campaign_2":
-    case "referral_campaign_3":
-    case "referral_campaign_4":
       return [
         `Hey ${name},`,
         ``,
         `As a Silver member, you have access to our referral program.`,
         ``,
-        `Do you know one or two people who might benefit from ${product}? If you introduce me to them, I'll handle the conversation — you just need to make the introduction.`,
+        `Do you know one or two people who might benefit from ${product}? If you introduce me to them, I'll handle the conversation — you just make the intro.`,
         ``,
         `Any names come to mind?`,
+        ``,
+        `— ${botName}`,
+      ].join("\n");
+
+    case "referral_campaign_2":
+      return [
+        `Hey ${name},`,
+        ``,
+        `Quick thought — the people who get the most from ${product} usually heard about it from someone they trust. That's you for your circle.`,
+        ``,
+        `Is there a friend or family member who's been dealing with a similar situation to what you had before?`,
+        ``,
+        `— ${botName}`,
+      ].join("\n");
+
+    case "referral_campaign_3":
+      return [
+        `Hey ${name},`,
+        ``,
+        `Just wanted to check — did anyone come to mind from last time? No pressure at all. If the timing isn't right, that's totally fine.`,
+        ``,
+        `Sometimes it's just a matter of "hey, this helped me, thought of you."`,
+        ``,
+        `— ${botName}`,
+      ].join("\n");
+
+    case "referral_campaign_4":
+      return [
+        `Hey ${name},`,
+        ``,
+        `Here's something ${tenantName} shared with me: the best referrals don't come from a pitch. They come from someone saying "this worked for me."`,
+        ``,
+        `If you've had a good experience, that's all you'd need to say. I'll take it from there.`,
+        ``,
+        `— ${botName}`,
+      ].join("\n");
+
+    case "referral_campaign_5":
+      return [
+        `Hey ${name},`,
+        ``,
+        `People in your world — coworkers, gym friends, neighbors — some of them are probably dealing with the same thing you were before ${product}.`,
+        ``,
+        `Would you feel comfortable sharing my contact with just one of them? I'll be respectful and low-key.`,
+        ``,
+        `— ${botName}`,
+      ].join("\n");
+
+    case "referral_campaign_6":
+      return [
+        `Hey ${name},`,
+        ``,
+        `Quick update from ${tenantName}: people who've been referred by friends like you tend to stick around longer and get better results. There's something about trust that makes the whole thing click.`,
+        ``,
+        `If anyone's mentioned something that ${product} could help with, let me know. Even just a first name and I can reach out gently.`,
+        ``,
+        `— ${botName}`,
+      ].join("\n");
+
+    case "referral_campaign_7":
+      return [
+        `Hey ${name},`,
+        ``,
+        `Last check-in on this — I won't keep asking, I promise.`,
+        ``,
+        `If you've ever thought "so-and-so could use this," now's a great time. And if not, no worries at all. Your experience with ${product} is what matters most.`,
+        ``,
+        `Thanks for being part of this.`,
         ``,
         `— ${botName}`,
       ].join("\n");
