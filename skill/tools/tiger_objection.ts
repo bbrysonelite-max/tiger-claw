@@ -479,7 +479,7 @@ const BUCKET_KEYWORDS: Record<string, Record<string, string[]>> = {
 // Classify objection
 // ---------------------------------------------------------------------------
 
-function classifyBucket(text: string, flavor: string): AnyBucket {
+export function classifyBucket(text: string, flavor: string): AnyBucket {
   const bucketMap = BUCKET_KEYWORDS[flavor] ?? BUCKET_KEYWORDS["network-marketer"];
   const lower = text.toLowerCase();
   let best: AnyBucket = "unknown";
@@ -500,7 +500,7 @@ function classifyBucket(text: string, flavor: string): AnyBucket {
 // Get response for bucket
 // ---------------------------------------------------------------------------
 
-function getBucketResponse(bucket: AnyBucket, flavor: string): ObjectionResponse | null {
+export function getBucketResponse(bucket: AnyBucket, flavor: string): ObjectionResponse | null {
   if (flavor === "network-marketer") return NM_BUCKETS[bucket as NMBucket] ?? null;
   if (flavor === "real-estate") return RE_BUCKETS[bucket as REBucket] ?? null;
   if (flavor === "health-wellness") return HW_BUCKETS[bucket as HWBucket] ?? null;
@@ -511,7 +511,7 @@ function getBucketResponse(bucket: AnyBucket, flavor: string): ObjectionResponse
 // Template substitution
 // ---------------------------------------------------------------------------
 
-function fillTemplate(template: string, onboard: OnboardState): string {
+export function fillTemplate(template: string, onboard: OnboardState): string {
   return template
     .replace(/\{tenantName\}/g, onboard.identity.name ?? "your operator")
     .replace(/\{years\}/g, onboard.identity.yearsInProfession ?? "several years")
