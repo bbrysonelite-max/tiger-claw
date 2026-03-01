@@ -15,6 +15,9 @@
 //   GET  /admin/fleet/:id/logs
 //   GET  /hive/patterns
 //   POST /hive/patterns
+//   PATCH /tenants/:id/status
+//   POST  /tenants/:id/keys/activate
+//   POST  /tenants/:id/scout
 //
 // Health monitor:
 //   Every 30 seconds, pings all active container /health endpoints.
@@ -35,6 +38,7 @@ import healthRouter from "./routes/health.js";
 import webhooksRouter from "./routes/webhooks.js";
 import adminRouter from "./routes/admin.js";
 import hiveRouter from "./routes/hive.js";
+import tenantsRouter from "./routes/tenants.js";
 
 const app = express();
 const PORT = Number(process.env["PORT"] ?? 4000);
@@ -57,6 +61,7 @@ app.use("/health", healthRouter);
 app.use("/webhooks", webhooksRouter);
 app.use("/admin", adminRouter);
 app.use("/hive", hiveRouter);
+app.use("/tenants", tenantsRouter);
 
 // Root ping
 app.get("/", (_req: Request, res: Response) => {
@@ -80,12 +85,17 @@ const ALERT_THRESHOLD = {
   MEMORY_CRIT: 95,   // % → restart
   FAIL_WARN: 1,
   FAIL_CRIT: 3,      // → auto-restart
+  ACTIVITY_WARN_H: 24,  // hours → flag as potentially churned
+  ACTIVITY_CRIT_H: 72,  // hours → critical churn flag
+  DISK_WARN: 80,     // %
+  DISK_CRIT: 95,     // % → alert, run cleanup
 };
 
-// Key layer alert dedup: only alert once per hour per tenant per layer.
-// Without this, a tenant stuck on Layer 3 would generate 2,880 alerts/day.
-const KEY_LAYER_ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+// Alert dedup: only alert once per hour per tenant per condition.
+const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 const lastKeyLayerAlert: Record<string, { layer: number; alertedAt: number }> = {};
+const lastActivityAlert: Record<string, { level: string; alertedAt: number }> = {};
+const lastDiskAlert: { level: string; alertedAt: number } = { level: "ok", alertedAt: 0 };
 
 // Pool level alert state — Block 5.3 Decision 9
 // Alert thresholds: ≥25=no action, 10-24=once/day, <10=every hour, 0=immediate
@@ -138,7 +148,7 @@ async function runHealthMonitor(): Promise<void> {
           const prev = lastKeyLayerAlert[tenant.slug];
           const now = Date.now();
           const sameLayer = prev?.layer === health.keyLayerActive;
-          const withinCooldown = prev !== undefined && (now - prev.alertedAt) < KEY_LAYER_ALERT_COOLDOWN_MS;
+          const withinCooldown = prev !== undefined && (now - prev.alertedAt) < ALERT_COOLDOWN_MS;
           if (!sameLayer || !withinCooldown) {
             lastKeyLayerAlert[tenant.slug] = { layer: health.keyLayerActive, alertedAt: now };
             const severity = health.keyLayerActive === 4 ? "🚨 CRITICAL" : "⚠️";
@@ -162,10 +172,63 @@ async function runHealthMonitor(): Promise<void> {
             );
           }
         }
+
+        // Check agent activity — flag inactive tenants as potential churn
+        if (health.lastAgentActivity) {
+          const idleMs = Date.now() - new Date(health.lastAgentActivity).getTime();
+          const idleHours = idleMs / (1000 * 60 * 60);
+          const prev = lastActivityAlert[tenant.slug];
+          const now = Date.now();
+          const cooldownOk = !prev || (now - prev.alertedAt) > ALERT_COOLDOWN_MS;
+
+          if (idleHours >= ALERT_THRESHOLD.ACTIVITY_CRIT_H && cooldownOk) {
+            lastActivityAlert[tenant.slug] = { level: "critical", alertedAt: now };
+            await sendAdminAlert(
+              `🚨 No agent activity for ${tenant.name} (${tenant.slug}) in ${Math.round(idleHours)}h — potential churn`
+            );
+          } else if (idleHours >= ALERT_THRESHOLD.ACTIVITY_WARN_H && cooldownOk) {
+            lastActivityAlert[tenant.slug] = { level: "warning", alertedAt: now };
+            await sendAdminAlert(
+              `⚠️ No agent activity for ${tenant.name} (${tenant.slug}) in ${Math.round(idleHours)}h — monitoring`
+            );
+          }
+        }
       }
     }
   } catch (err) {
     console.error("[monitor] Health monitor error:", err);
+  }
+
+  // Disk usage check — Block 6.2 threshold
+  try {
+    const { execSync } = await import("child_process");
+    const dfOutput = execSync("df -P /home/ubuntu/customers 2>/dev/null || df -P /", {
+      encoding: "utf8",
+    });
+    const lines = dfOutput.trim().split("\n");
+    if (lines.length >= 2) {
+      const parts = lines[1]!.split(/\s+/);
+      const usageStr = parts[4]?.replace("%", "");
+      const usage = usageStr ? parseInt(usageStr, 10) : 0;
+      const now = Date.now();
+      const cooldownOk = (now - lastDiskAlert.alertedAt) > ALERT_COOLDOWN_MS;
+
+      if (usage >= ALERT_THRESHOLD.DISK_CRIT && cooldownOk) {
+        lastDiskAlert.level = "critical";
+        lastDiskAlert.alertedAt = now;
+        await sendAdminAlert(
+          `🚨 Disk usage at ${usage}% — run cleanup immediately`
+        );
+      } else if (usage >= ALERT_THRESHOLD.DISK_WARN && cooldownOk) {
+        lastDiskAlert.level = "warning";
+        lastDiskAlert.alertedAt = now;
+        await sendAdminAlert(
+          `⚠️ Disk usage at ${usage}% (threshold: ${ALERT_THRESHOLD.DISK_WARN}%)`
+        );
+      }
+    }
+  } catch {
+    // Non-fatal — disk check is best-effort
   }
 
   // Pool level check — Block 5.3 Decision 9

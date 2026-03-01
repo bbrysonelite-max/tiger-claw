@@ -16,7 +16,7 @@ import { apiGet, apiPost, apiDelete } from "../api-client.js";
 // Deploy state is written/read by ops/deploy.sh
 const DEPLOY_STATE_PATH =
   process.env["DEPLOY_STATE_PATH"] ??
-  path.join(process.cwd(), "../../deploy-state.json");
+  path.join(process.cwd(), "../../deployment_state.json");
 
 interface DeployState {
   currentVersion: string;
