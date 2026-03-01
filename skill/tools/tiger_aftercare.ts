@@ -1162,6 +1162,22 @@ function handleRecordSignal(
   store[params.aftercareId] = record;
   saveJson(storePath, store);
 
+  // Advance involvement level based on aftercare signals
+  const leadsPath = path.join(workdir, "leads.json");
+  const allLeads = loadJson<Record<string, { involvementLevel?: number }>>(leadsPath) ?? {};
+  const theLead = allLeads[record.leadId];
+  if (theLead) {
+    const cur = theLead.involvementLevel ?? 2;
+    let next = cur;
+    if (record.purchaseCount >= 2 && cur < 3) next = 3;             // Repeat customer
+    if (record.referralCount >= 1 && cur < 4) next = 4;             // Referral source
+    if (record.status === "upgrade_flagged" && cur < 6) next = 6;   // Side hustle builder
+    if (next > cur) {
+      (theLead as Record<string, unknown>).involvementLevel = next;
+      saveJson(leadsPath, allLeads);
+    }
+  }
+
   logger.info("tiger_aftercare: record_signal", {
     aftercareId: params.aftercareId,
     signalType: params.signalType,
