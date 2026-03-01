@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install OpenClaw at pinned version
-# TODO: Pin to specific tested commit hash before launch
-RUN npm i -g openclaw
+ARG OPENCLAW_VERSION=0.1.0
+RUN npm i -g "openclaw@${OPENCLAW_VERSION}"
 
 # Create workspace structure
 RUN mkdir -p /root/.openclaw/workspace/skills/tiger-claw

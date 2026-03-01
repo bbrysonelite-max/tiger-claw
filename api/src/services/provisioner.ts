@@ -167,6 +167,7 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
       botToken: resolvedBotToken,
       timezone: input.timezone,
       platformOnboardingKey: process.env["PLATFORM_ONBOARDING_KEY"],
+      platformEmergencyKey: process.env["PLATFORM_EMERGENCY_KEY"],
       tigerClawApiUrl: process.env["TIGER_CLAW_API_URL"] ?? `http://host.docker.internal:4000`,
       databaseUrl: process.env["DATABASE_URL"],
       redisUrl: process.env["REDIS_URL"],
