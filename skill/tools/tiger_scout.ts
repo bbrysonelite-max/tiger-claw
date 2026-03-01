@@ -108,6 +108,7 @@ interface LeadRecord {
   optedOut: boolean;
   intentSignalHistory: IntentSignalRecord[];
   engagementEvents: EngagementEventRecord[];
+  involvementLevel: number;
   discoveredAt: string;
   lastSignalAt: string;
   lastScoredAt: string;
@@ -471,6 +472,7 @@ function buildAndSaveLead(
     optedOut: false,
     intentSignalHistory: intentSignals,
     engagementEvents: [],
+    involvementLevel: 0,
     discoveredAt: now,
     lastSignalAt: now,
     lastScoredAt: now,
@@ -617,6 +619,36 @@ function httpsGet(
       req.destroy();
       reject(new Error("Request timed out"));
     });
+  });
+}
+
+function httpsPost(
+  url: string,
+  body: string,
+  headers: Record<string, string> = {}
+): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = https.request(
+      {
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        method: "POST",
+        headers: { ...headers, "Content-Length": Buffer.byteLength(body).toString() },
+      },
+      (res) => {
+        let respBody = "";
+        res.on("data", (chunk) => (respBody += chunk));
+        res.on("end", () => resolve({ statusCode: res.statusCode ?? 0, body: respBody }));
+      }
+    );
+    req.on("error", reject);
+    req.setTimeout(20000, () => {
+      req.destroy();
+      reject(new Error("Request timed out"));
+    });
+    req.write(body);
+    req.end();
   });
 }
 
@@ -824,36 +856,183 @@ async function fetchTelegramMessages(
 }
 
 // ---------------------------------------------------------------------------
-// Source: Facebook (stubbed — requires credentials)
+// Source: Facebook Groups (Tier 2 — Public Passive via Serper search)
 // ---------------------------------------------------------------------------
 
 async function fetchFacebookPosts(
-  _keywords: string[],
-  _limit: number,
+  keywords: string[],
+  limit: number,
   logger: ToolContext["logger"]
 ): Promise<DiscoveredProfile[]> {
-  logger.info("tiger_scout: Facebook source — requires Facebook Graph API credentials (not yet configured)");
-  // Facebook Graph API requires app review for group content access.
-  // Implementation: POST /search?q={keywords}&type=post using user access token.
-  // For now, this source is stubbed. Profiles will be empty until credentials are configured.
-  return [];
+  if (keywords.length === 0) return [];
+
+  const serperKey = process.env.SERPER_KEY_1 ?? process.env.SERPER_KEY_2 ?? process.env.SERPER_KEY_3;
+  if (!serperKey) {
+    logger.warn("tiger_scout: No SERPER_KEY configured — skipping Facebook source");
+    return [];
+  }
+
+  const query = `site:facebook.com/groups ${keywords.slice(0, 5).join(" OR ")}`;
+  logger.info("tiger_scout: searching Facebook Groups via Serper", { query });
+
+  let results: Array<{ title?: string; snippet?: string; link?: string }> = [];
+  try {
+    const body = JSON.stringify({ q: query, num: Math.min(limit, 20) });
+    const res = await httpsPost("https://google.serper.dev/search", body, {
+      "X-API-KEY": serperKey,
+      "Content-Type": "application/json",
+    });
+    if (res.statusCode !== 200) {
+      logger.warn("tiger_scout: Serper returned non-200 for Facebook", { statusCode: res.statusCode });
+      return [];
+    }
+    const parsed = JSON.parse(res.body) as { organic?: typeof results };
+    results = parsed.organic ?? [];
+  } catch (err) {
+    logger.error("tiger_scout: Serper Facebook fetch failed", { err: String(err) });
+    return [];
+  }
+
+  const profiles: DiscoveredProfile[] = [];
+  const seenUrls = new Set<string>();
+
+  for (const item of results) {
+    if (!item.link || !item.snippet) continue;
+    if (seenUrls.has(item.link)) continue;
+    seenUrls.add(item.link);
+
+    // Extract a display name from the title or URL
+    const titleMatch = item.title?.match(/(.+?)[\s\-–|]/);
+    const displayName = titleMatch?.[1]?.trim() || item.title?.slice(0, 60) || "Facebook User";
+
+    // Create a stable platformId from the URL
+    const urlHash = crypto.createHash("md5").update(item.link).digest("hex").slice(0, 12);
+
+    profiles.push({
+      platform: "facebook",
+      platformId: `facebook:${urlHash}`,
+      displayName,
+      profileUrl: item.link,
+      recentPostText: `${item.title ?? ""} ${item.snippet}`.slice(0, 1000),
+      sourceUrl: item.link,
+      postExcerpt: item.snippet.slice(0, 300),
+    });
+
+    if (profiles.length >= limit) break;
+  }
+
+  return profiles;
 }
 
 // ---------------------------------------------------------------------------
-// Source: LINE OpenChat (stubbed — requires credentials)
+// Source: LINE OpenChat (Tier 2 — Public Passive)
+// Reads webhook-delivered messages stored in line_messages.json by the
+// OpenClaw LINE channel adapter. Filters by ICP keywords.
+// Falls back to Serper search if no local messages and SERPER_KEY is set.
 // ---------------------------------------------------------------------------
 
+interface LINEMessage {
+  userId: string;
+  displayName?: string;
+  text: string;
+  groupId: string;
+  groupName?: string;
+  timestamp: number;
+}
+
 async function fetchLINEPosts(
-  _keywords: string[],
-  _limit: number,
+  keywords: string[],
+  limit: number,
   logger: ToolContext["logger"]
 ): Promise<DiscoveredProfile[]> {
-  logger.info("tiger_scout: LINE source — requires LINE Messaging API credentials (not yet configured)");
-  // LINE OpenChat reading requires LINE channel credentials.
-  // Implementation: Use LINE Messaging API webhook to receive group messages,
-  // then filter by keywords.
-  // For now, this source is stubbed.
-  return [];
+  if (keywords.length === 0) return [];
+
+  // Strategy 1: Read locally stored LINE OpenChat messages (delivered by webhook)
+  const lineMessagesPath = path.join(process.env.WORKDIR ?? ".", "line_messages.json");
+  let lineMessages: LINEMessage[] = [];
+  try {
+    if (fs.existsSync(lineMessagesPath)) {
+      lineMessages = JSON.parse(fs.readFileSync(lineMessagesPath, "utf8")) as LINEMessage[];
+    }
+  } catch { /* fall through */ }
+
+  if (lineMessages.length > 0) {
+    logger.info("tiger_scout: reading LINE OpenChat messages", { count: lineMessages.length });
+
+    const keywordSet = new Set(keywords.map((k) => k.toLowerCase()));
+    const profiles: DiscoveredProfile[] = [];
+    const seenUsers = new Set<string>();
+
+    for (const msg of lineMessages) {
+      if (!msg.userId || !msg.text || seenUsers.has(msg.userId)) continue;
+
+      const textLower = msg.text.toLowerCase();
+      const hasKeyword = [...keywordSet].some((k) => textLower.includes(k));
+      if (!hasKeyword && keywords.length > 0) continue;
+
+      seenUsers.add(msg.userId);
+
+      profiles.push({
+        platform: "line",
+        platformId: `line:${msg.userId}`,
+        displayName: msg.displayName ?? `LINE:${msg.userId.slice(0, 8)}`,
+        recentPostText: msg.text.slice(0, 1000),
+        postExcerpt: msg.text.slice(0, 300),
+        sourceUrl: msg.groupName ? `LINE OpenChat: ${msg.groupName}` : undefined,
+      });
+
+      if (profiles.length >= limit) break;
+    }
+
+    if (profiles.length > 0) return profiles;
+  }
+
+  // Strategy 2: Serper fallback — search for LINE OpenChat content on the web
+  const serperKey = process.env.SERPER_KEY_1 ?? process.env.SERPER_KEY_2 ?? process.env.SERPER_KEY_3;
+  if (!serperKey) {
+    logger.info("tiger_scout: LINE source — no local messages and no SERPER_KEY");
+    return [];
+  }
+
+  const query = `site:line.me/ti/g2 OR "LINE OpenChat" ${keywords.slice(0, 4).join(" OR ")}`;
+  logger.info("tiger_scout: searching LINE OpenChat via Serper", { query });
+
+  try {
+    const body = JSON.stringify({ q: query, num: Math.min(limit, 15) });
+    const res = await httpsPost("https://google.serper.dev/search", body, {
+      "X-API-KEY": serperKey,
+      "Content-Type": "application/json",
+    });
+    if (res.statusCode !== 200) {
+      logger.warn("tiger_scout: Serper returned non-200 for LINE", { statusCode: res.statusCode });
+      return [];
+    }
+    const parsed = JSON.parse(res.body) as { organic?: Array<{ title?: string; snippet?: string; link?: string }> };
+    const results = parsed.organic ?? [];
+
+    const profiles: DiscoveredProfile[] = [];
+    for (const item of results) {
+      if (!item.snippet) continue;
+      const urlHash = crypto.createHash("md5").update(item.link ?? item.snippet).digest("hex").slice(0, 12);
+
+      profiles.push({
+        platform: "line",
+        platformId: `line:serper:${urlHash}`,
+        displayName: item.title?.slice(0, 60) || "LINE User",
+        profileUrl: item.link,
+        recentPostText: `${item.title ?? ""} ${item.snippet}`.slice(0, 1000),
+        sourceUrl: item.link,
+        postExcerpt: item.snippet.slice(0, 300),
+      });
+
+      if (profiles.length >= limit) break;
+    }
+
+    return profiles;
+  } catch (err) {
+    logger.error("tiger_scout: Serper LINE fetch failed", { err: String(err) });
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
