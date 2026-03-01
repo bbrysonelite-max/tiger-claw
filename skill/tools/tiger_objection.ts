@@ -72,6 +72,7 @@ interface ObjectionLog {
 interface OnboardState {
   phase: string;
   flavor: string;
+  region?: string;
   identity: {
     name?: string;
     productOrOpportunity?: string;
@@ -539,6 +540,117 @@ const PATTERN_INTERRUPTS: Record<string, PatternInterruptStory[]> = {
 };
 
 // ---------------------------------------------------------------------------
+// Regional pattern interrupt overrides (Block 2.3 Regional Config)
+// Thai content per spec decision 16: "provided by Thai organization leader"
+// ---------------------------------------------------------------------------
+
+const REGIONAL_PATTERN_INTERRUPTS: Record<string, Record<string, PatternInterruptStory[]>> = {
+  "th-th": {
+    "network-marketer": [
+      {
+        name: "เรื่องเครื่องบิน (The Airplane Question)",
+        moment: ["stall", "pre_takeaway", "general"],
+        storyTemplate: [
+          `ขอถามอะไรสักอย่างก่อนนะคะ`,
+          ``,
+          `ถ้ามีคนเสนอเงินล้านบาทให้กระโดดออกจากเครื่องบินโดยไม่มีร่มชูชีพ จะทำไหมคะ?`,
+          ``,
+          `คนส่วนใหญ่จะบอกไม่ทันที แต่ไม่มีใครบอกว่าเครื่องบินอยู่กลางอากาศนะคะ มันจอดอยู่บนรันเวย์`,
+          ``,
+          `บทเรียนคือ: อย่าเพิ่งปฏิเสธก่อนที่จะได้รู้ข้อมูลทั้งหมด`,
+          ``,
+          `{tenantName} แค่อยากให้ได้ฟังข้อมูลครบก่อนตัดสินใจค่ะ`,
+          ``,
+          `— {botName}`,
+        ].join("\n"),
+      },
+      {
+        name: "คนขับแท็กซี่ (The Taxi Driver)",
+        moment: ["stall", "general"],
+        storyTemplate: [
+          `{tenantName} เล่าให้ฟังเรื่องคนขับแท็กซี่คนหนึ่ง`,
+          ``,
+          `ขับวันละ 14 ชั่วโมง หกวันต่อสัปดาห์ มีครอบครัว มีค่าใช้จ่าย แบบเราทุกคน มีคนแนะนำให้ลอง {product} เป็นงานเสริม`,
+          ``,
+          `ไม่มีเวลา ไม่มีเงิน ไม่มีคอนเนคชั่น แต่มีสิ่งหนึ่ง — คุยกับคนได้ทั้งวัน ซึ่งปกติก็ทำอยู่แล้วฟรีๆ`,
+          ``,
+          `ภายในปีเดียว ลดวันขับรถลงครึ่งหนึ่ง ภายในสองปี หยุดขับเลย`,
+          ``,
+          `ไม่ได้บอกว่าคุณจะเหมือนกัน แค่บอกว่า "ไม่มีเวลา" อาจไม่ได้เป็นจริงเสมอไปค่ะ`,
+          ``,
+          `— {botName}`,
+        ].join("\n"),
+      },
+      {
+        name: "ตลาดนัด (The Market Stall)",
+        moment: ["stall", "general"],
+        storyTemplate: [
+          `ลองนึกถึงคนขายของที่ตลาดนัดค่ะ`,
+          ``,
+          `คนที่มาก่อนเจ้าอื่นได้ที่ดีที่สุด มีลูกค้ามากที่สุด เพราะมาตอนที่คนอื่นยังไม่มา`,
+          ``,
+          `ตอนนี้ {product} ยังเป็นโอกาสใหม่ คนส่วนใหญ่ยังไม่รู้จัก นั่นไม่ใช่ปัญหา — นั่นคือข้อได้เปรียบค่ะ`,
+          ``,
+          `คนที่เริ่มก่อนไม่ได้แข่งกับใคร — เขาเป็นผู้นำเลย`,
+          ``,
+          `— {botName}`,
+        ].join("\n"),
+      },
+    ],
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Regional objection bucket overrides
+// Culturally adapted responses for th-th region
+// ---------------------------------------------------------------------------
+
+const REGIONAL_BUCKET_OVERRIDES: Record<string, Record<string, Partial<Record<string, ObjectionResponse>>>> = {
+  "th-th": {
+    "network-marketer": {
+      compensation: {
+        bucket: "compensation",
+        label: "รายได้ / ค่าตอบแทน",
+        responseTemplate: [
+          `เรื่องรายได้ — คำถามที่ดีมากค่ะ`,
+          ``,
+          `พูดตรงๆ นะคะ: นี่ไม่ใช่ลอตเตอรี่ {tenantName} ไม่เคยบอกว่าเป็น แต่สำหรับคนที่ทำ 3 คนต่อวันสม่ำเสมอ มันเป็นรายได้ที่เติบโตตามเครือข่าย`,
+          ``,
+          `{tenantName} ทำมา {years} แล้ว {biggestWin} ไม่ใช่เรื่องข้ามคืน แต่เกิดจากทำทุกวันอย่างต่อเนื่อง`,
+          ``,
+          `มีตัวเลขจริงที่แชร์ได้ค่ะ ตัวเลขที่ซื่อสัตย์และอ้างอิงจากการทำงานจริง`,
+        ].join("\n"),
+        followUpQuestion: `อยากรู้ตัวเลขที่เป็นไปได้สำหรับสถานการณ์ของคุณไหมคะ?`,
+      },
+      time: {
+        bucket: "time",
+        label: "เวลา / ตารางงาน",
+        responseTemplate: [
+          `เรื่องเวลา — เข้าใจเลยค่ะ คนไทยเราทำงานหนักกันอยู่แล้ว`,
+          ``,
+          `{tenantName} สร้างธุรกิจนี้ควบคู่กับงานอื่น กฎ 3 คนต่อวันฟังดูเยอะ แต่จริงๆ คนเราคุยกับคนวันละ 3 คนอยู่แล้ว แค่เปลี่ยนบทสนทนาเล็กน้อย`,
+          ``,
+          `เวลาที่ต้องใช้จริงน้อยกว่าที่คิด {differentiator}`,
+        ].join("\n"),
+        followUpQuestion: `ถ้าเห็นตารางที่เป็นไปได้จริงๆ ต่อสัปดาห์ จะสนใจไหมคะ?`,
+      },
+      trust: {
+        bucket: "trust",
+        label: "ความน่าเชื่อถือ / ใครคือคนนี้",
+        responseTemplate: [
+          `ยังไม่รู้จัก {tenantName} เป็นการส่วนตัว — เข้าใจค่ะ`,
+          ``,
+          `{tenantName} {biggestWin} ทำมาแล้ว {years} ในวงการนี้ มีผลงานจริงกับคนจริงที่แนะนำได้ ความเชื่อใจมันต้องสร้างผ่านการพูดคุย — ซึ่งเป็นสิ่งที่อยากจัดให้ค่ะ`,
+          ``,
+          `ในวัฒนธรรมเรา ความเชื่อใจเริ่มต้นจากการแนะนำ — และนี่คือสิ่งที่ {tenantName} อยากทำ พูดคุยกันตัวต่อตัว`,
+        ].join("\n"),
+        followUpQuestion: `ถ้าได้คุยกับ {tenantName} โดยตรง จะสบายใจขึ้นไหมคะ?`,
+      },
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Bucket keyword maps — for classification
 // ---------------------------------------------------------------------------
 
@@ -596,7 +708,12 @@ export function classifyBucket(text: string, flavor: string): AnyBucket {
 // Get response for bucket
 // ---------------------------------------------------------------------------
 
-export function getBucketResponse(bucket: AnyBucket, flavor: string): ObjectionResponse | null {
+export function getBucketResponse(bucket: AnyBucket, flavor: string, region?: string): ObjectionResponse | null {
+  // Check regional override first
+  if (region) {
+    const regionalOverride = REGIONAL_BUCKET_OVERRIDES[region]?.[flavor]?.[bucket];
+    if (regionalOverride) return regionalOverride;
+  }
   if (flavor === "network-marketer") return NM_BUCKETS[bucket as NMBucket] ?? null;
   if (flavor === "real-estate") return RE_BUCKETS[bucket as REBucket] ?? null;
   if (flavor === "health-wellness") return HW_BUCKETS[bucket as HWBucket] ?? null;
@@ -664,8 +781,9 @@ function handleClassify(
   }
 
   const flavor = onboard.flavor ?? "network-marketer";
+  const region = onboard.region ?? process.env["REGION"] ?? "us-en";
   const bucket = classifyBucket(params.prospectText, flavor);
-  const def = getBucketResponse(bucket, flavor);
+  const def = getBucketResponse(bucket, flavor, region);
 
   const responseText = def
     ? fillTemplate(def.responseTemplate, onboard) +
@@ -729,7 +847,8 @@ function handleRespond(
   }
 
   const flavor = onboard.flavor ?? "network-marketer";
-  const def = getBucketResponse(params.bucket, flavor);
+  const region = onboard.region ?? process.env["REGION"] ?? "us-en";
+  const def = getBucketResponse(params.bucket, flavor, region);
 
   if (!def) {
     return {
@@ -782,13 +901,20 @@ function handlePatternInterrupt(
   }
 
   const flavor = onboard.flavor ?? "network-marketer";
-  const stories = PATTERN_INTERRUPTS[flavor] ?? PATTERN_INTERRUPTS["network-marketer"];
+  const region = onboard.region ?? process.env["REGION"] ?? "us-en";
+
+  // Prefer regional stories, fall back to default
+  const regionalStories = REGIONAL_PATTERN_INTERRUPTS[region]?.[flavor];
+  const defaultStories = PATTERN_INTERRUPTS[flavor] ?? PATTERN_INTERRUPTS["network-marketer"];
+  const stories = regionalStories && regionalStories.length > 0 ? regionalStories : defaultStories;
   const moment = params.moment ?? "general";
 
   let story: PatternInterruptStory | undefined;
 
   if (params.storyName) {
-    story = stories.find((s) => s.name.toLowerCase() === params.storyName!.toLowerCase());
+    // Search both regional and default for named stories
+    story = stories.find((s) => s.name.toLowerCase() === params.storyName!.toLowerCase())
+      ?? defaultStories.find((s) => s.name.toLowerCase() === params.storyName!.toLowerCase());
   }
 
   if (!story) {
@@ -818,6 +944,7 @@ function handlePatternInterrupt(
 function handleListBuckets(workdir: string): ToolResult {
   const onboard = loadOnboard(workdir);
   const flavor = onboard?.flavor ?? "network-marketer";
+  const region = onboard?.region ?? process.env["REGION"] ?? "us-en";
 
   const bucketMaps: Record<string, Record<string, ObjectionResponse>> = {
     "network-marketer": NM_BUCKETS as unknown as Record<string, ObjectionResponse>,
@@ -826,14 +953,18 @@ function handleListBuckets(workdir: string): ToolResult {
   };
 
   const map = bucketMaps[flavor] ?? bucketMaps["network-marketer"];
-  const lines = [`Objection buckets for flavor "${flavor}":`, ``];
+  const regionalOverrides = REGIONAL_BUCKET_OVERRIDES[region]?.[flavor] ?? {};
+  const lines = [`Objection buckets for flavor "${flavor}" (region: ${region}):`, ``];
 
   for (const [key, def] of Object.entries(map)) {
-    lines.push(`  ${key.padEnd(20)} ${(def as ObjectionResponse).label}`);
+    const isRegional = key in regionalOverrides;
+    lines.push(`  ${key.padEnd(20)} ${(def as ObjectionResponse).label}${isRegional ? " [regional]" : ""}`);
   }
 
-  const stories = PATTERN_INTERRUPTS[flavor] ?? PATTERN_INTERRUPTS["network-marketer"];
-  lines.push(``, `Pattern interrupt stories:`);
+  const regionalStories = REGIONAL_PATTERN_INTERRUPTS[region]?.[flavor];
+  const defaultStories = PATTERN_INTERRUPTS[flavor] ?? PATTERN_INTERRUPTS["network-marketer"];
+  const stories = regionalStories && regionalStories.length > 0 ? regionalStories : defaultStories;
+  lines.push(``, `Pattern interrupt stories${regionalStories ? ` (${region} regional)` : ""}:`);
   for (const s of stories) {
     lines.push(`  "${s.name}" — moments: ${s.moment.join(", ")}`);
   }
