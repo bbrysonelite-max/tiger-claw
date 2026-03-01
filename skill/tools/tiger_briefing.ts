@@ -70,6 +70,20 @@ interface NurtureRecord {
   convertedAt?: string;
 }
 
+interface AftercareRecordBrief {
+  id: string;
+  leadId: string;
+  leadDisplayName: string;
+  platform: string;
+  oar: "builder" | "customer";
+  status: string;
+  tier?: string;
+  nextTouchScheduledFor?: string;
+  consecutiveNoResponses: number;
+  flaggedInactiveAt?: string;
+  flaggedForUpgradeAt?: string;
+}
+
 interface ContactRecord {
   id: string;
   leadId: string;
@@ -185,6 +199,10 @@ interface BriefingData {
 
   // Section 7: Active conversation count (for 3-per-day rule)
   activeConversations: number;
+
+  // Section 8: Aftercare highlights
+  aftercareActive: Array<{ name: string; platform: string; oar: string; tier?: string; status: string; nextTouch?: string }>;
+  aftercareAlerts: Array<{ name: string; platform: string; alertType: string }>;
 }
 
 function aggregateData(workdir: string, lastBriefingAt?: string): BriefingData {
@@ -204,8 +222,10 @@ function aggregateData(workdir: string, lastBriefingAt?: string): BriefingData {
     ["active", "accelerated", "gap_closing"].includes(r.status)
   );
 
-  // Conversion-ready
-  const conversionReady = allNurture.filter((r) => r.status === "converted" && !r.convertedAt);
+  // Conversion-ready: scored 8+ since last briefing, ready for tiger_convert handoff
+  const conversionReady = allNurture.filter(
+    (r) => r.status === "converted" && r.convertedAt && new Date(r.convertedAt) > cutoff
+  );
 
   // Nurture records with a positive response since cutoff
   const hotLeads: BriefingData["hotLeads"] = [];
@@ -289,6 +309,27 @@ function aggregateData(workdir: string, lastBriefingAt?: string): BriefingData {
   ).length;
   const activeConversations = activeNurture.length + activeContactsSent;
 
+  // Aftercare
+  const aftercareStore = loadJson<Record<string, AftercareRecordBrief>>(path.join(workdir, "aftercare.json")) ?? {};
+  const allAftercare = Object.values(aftercareStore);
+  const aftercareActive: BriefingData["aftercareActive"] = allAftercare
+    .filter((r) => ["active", "inactive_flagged", "upgrade_flagged"].includes(r.status))
+    .map((r) => ({
+      name: r.leadDisplayName,
+      platform: r.platform,
+      oar: r.oar,
+      tier: r.tier,
+      status: r.status,
+      nextTouch: r.nextTouchScheduledFor,
+    }));
+  const aftercareAlerts: BriefingData["aftercareAlerts"] = allAftercare
+    .filter((r) => r.status === "inactive_flagged" || r.status === "upgrade_flagged")
+    .map((r) => ({
+      name: r.leadDisplayName,
+      platform: r.platform,
+      alertType: r.status === "upgrade_flagged" ? "builder upgrade signal" : "inactive — 2 no-responses",
+    }));
+
   return {
     tenantName,
     flavor,
@@ -301,6 +342,8 @@ function aggregateData(workdir: string, lastBriefingAt?: string): BriefingData {
     consecutiveNoResponseWarnings,
     slowDripTransitions,
     activeConversations,
+    aftercareActive,
+    aftercareAlerts,
   };
 }
 
@@ -414,7 +457,21 @@ function assembleBriefing(data: BriefingData): string {
     lines.push(``);
   }
 
+  // ---- Section 8: Aftercare ----
+  if (data.aftercareAlerts.length > 0) {
+    lines.push(`🏆 AFTERCARE ALERTS`);
+    for (const a of data.aftercareAlerts) {
+      lines.push(`  • ${a.name} (${a.platform}) — ${a.alertType}`);
+    }
+    lines.push(``);
+  }
+  if (data.aftercareActive.length > 0 && data.aftercareAlerts.length === 0) {
+    lines.push(`🏆 AFTERCARE: ${data.aftercareActive.length} active (${data.aftercareActive.filter((a) => a.oar === "builder").length} builders, ${data.aftercareActive.filter((a) => a.oar === "customer").length} customers)`);
+    lines.push(``);
+  }
+
   // ---- Nothing to report ----
+  const hasAftercare = data.aftercareActive.length > 0 || data.aftercareAlerts.length > 0;
   if (
     data.conversionReady.length === 0 &&
     data.hotLeads.length === 0 &&
@@ -422,6 +479,7 @@ function assembleBriefing(data: BriefingData): string {
     data.newQualified.length === 0 &&
     !hasRecs &&
     !hasWarnings &&
+    !hasAftercare &&
     data.activeConversations >= THREE_PER_DAY_MINIMUM
   ) {
     lines.push(`All quiet overnight. ${data.activeConversations} active conversation${data.activeConversations === 1 ? "" : "s"} in flight.`);

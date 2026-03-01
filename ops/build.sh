@@ -35,6 +35,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 IMAGE_NAME="${IMAGE_NAME:-tiger-claw-scout}"
 REGISTRY="${REGISTRY:-}"
 DEPLOYMENT_STATE_FILE="${DEPLOYMENT_STATE_FILE:-$REPO_ROOT/deployment_state.json}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-0.1.0}"
 MAX_BUILDS=5   # LOCKED: retain last 5 versions
 
 # Flags (settable via args)
@@ -255,6 +256,8 @@ main() {
   # 2. Build Docker image
   log "Building Docker image..."
   docker build \
+    -f "$REPO_ROOT/docker/customer/Dockerfile" \
+    --build-arg "OPENCLAW_VERSION=${OPENCLAW_VERSION}" \
     -t "${IMAGE_NAME}:${version}" \
     -t "${IMAGE_NAME}:latest" \
     --label "tc.version=${version}" \

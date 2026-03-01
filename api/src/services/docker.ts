@@ -36,12 +36,17 @@ export interface ProvisionContainerParams {
   region: string;
   botToken?: string;
   timezone?: string;
-  // Four-layer key system injected from environment
-  platformOnboardingKey?: string;
+  // Four-layer key system (Block 1.7, Block 4)
+  platformOnboardingKey?: string;   // Layer 1
+  tenantPrimaryKey?: string;        // Layer 2
+  tenantFallbackKey?: string;       // Layer 3
+  platformEmergencyKey?: string;    // Layer 4
   tigerClawApiUrl?: string;
   databaseUrl?: string;
   redisUrl?: string;
   encryptionKey?: string;
+  hiveToken?: string;
+  gatewayToken?: string;
 }
 
 const IMAGE = process.env["TIGER_CLAW_IMAGE"] ?? "tiger-claw-scout:latest";
@@ -64,9 +69,19 @@ export async function startContainer(params: ProvisionContainerParams): Promise<
 
   if (params.botToken) env.push(`TELEGRAM_BOT_TOKEN=${params.botToken}`);
   if (params.timezone) env.push(`TZ=${params.timezone}`);
-  if (params.platformOnboardingKey) {
-    env.push(`PLATFORM_ONBOARDING_KEY=${params.platformOnboardingKey}`);
-  }
+  if (params.platformOnboardingKey) env.push(`PLATFORM_ONBOARDING_KEY=${params.platformOnboardingKey}`);
+  if (params.tenantPrimaryKey) env.push(`TENANT_PRIMARY_KEY=${params.tenantPrimaryKey}`);
+  if (params.tenantFallbackKey) env.push(`TENANT_FALLBACK_KEY=${params.tenantFallbackKey}`);
+
+  // Layer 4 + hive/gateway tokens: always inject from platform env if available
+  const emergencyKey = params.platformEmergencyKey ?? process.env["PLATFORM_EMERGENCY_KEY"];
+  if (emergencyKey) env.push(`PLATFORM_EMERGENCY_KEY=${emergencyKey}`);
+  const hiveToken = params.hiveToken ?? process.env["TIGER_CLAW_HIVE_TOKEN"];
+  if (hiveToken) env.push(`TIGER_CLAW_HIVE_TOKEN=${hiveToken}`);
+  const gatewayToken = params.gatewayToken ?? process.env["OPENCLAW_GATEWAY_TOKEN"];
+  if (gatewayToken) env.push(`OPENCLAW_GATEWAY_TOKEN=${gatewayToken}`);
+  const cheapModel = process.env["PLATFORM_CHEAP_MODEL"];
+  if (cheapModel) env.push(`PLATFORM_CHEAP_MODEL=${cheapModel}`);
 
   // Pass Serper keys if configured
   for (const k of ["SERPER_KEY_1", "SERPER_KEY_2", "SERPER_KEY_3"]) {
