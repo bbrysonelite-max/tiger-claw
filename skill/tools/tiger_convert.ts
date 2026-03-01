@@ -657,12 +657,15 @@ function handleConfirm(
   store[params.conversionId] = record;
   saveJson(path.join(workdir, "conversions.json"), store);
 
-  // Mark lead as converted
+  // Mark lead as converted + advance involvement: 1 (Engaged) → 2 (Customer)
   const leads = loadJson<Record<string, LeadRecord>>(path.join(workdir, "leads.json")) ?? {};
   const lead = leads[record.leadId];
   if (lead) {
     lead.converted = true;
     lead.convertedAt = now;
+    if (((lead as Record<string, unknown>).involvementLevel as number ?? 0) < 2) {
+      (lead as Record<string, unknown>).involvementLevel = 2;
+    }
     leads[record.leadId] = lead;
     saveJson(path.join(workdir, "leads.json"), leads);
   }

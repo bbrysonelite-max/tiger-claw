@@ -155,6 +155,7 @@ interface LeadRecord {
   qualified: boolean;
   optedOut: boolean;
   intentSignalHistory: Array<{ type: string; excerpt?: string }>;
+  involvementLevel?: number;
 }
 
 interface ToolContext {
@@ -603,6 +604,15 @@ function handleEnroll(
 
   store[id] = record;
   saveNurture(workdir, store);
+
+  // Advance involvement level: 0 (Prospect) → 1 (Engaged)
+  if ((lead.involvementLevel ?? 0) < 1) {
+    const allLeads = loadLeads(workdir);
+    if (allLeads[params.leadId]) {
+      (allLeads[params.leadId] as Record<string, unknown>).involvementLevel = 1;
+      saveLeads(workdir, allLeads);
+    }
+  }
 
   logger.info("tiger_nurture: enrolled", {
     nurtureId: id,

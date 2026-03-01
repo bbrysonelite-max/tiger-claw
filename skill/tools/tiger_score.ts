@@ -122,6 +122,11 @@ interface LeadRecord {
   intentSignalHistory: IntentSignalRecord[];
   engagementEvents: EngagementEventRecord[];
 
+  // Involvement Spectrum (Block 3.3): 0=Prospect, 1=Engaged, 2=Customer,
+  // 3=Repeat customer, 4=Referral source, 5=Wholesale buyer,
+  // 6=Side hustle builder, 7=Full-time builder
+  involvementLevel: number;
+
   // Lifecycle timestamps
   discoveredAt: string;
   lastSignalAt: string;
@@ -487,6 +492,8 @@ function buildLeadRecord(input: ScoreInput, existingId?: string): LeadRecord {
 
     intentSignalHistory,
     engagementEvents: [],
+
+    involvementLevel: 0,
 
     discoveredAt: now,
     lastSignalAt: now,
