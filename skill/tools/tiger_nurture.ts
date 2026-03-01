@@ -968,8 +968,9 @@ function handleRecordResponse(
 
         // Classify prospect's gap answer through objection buckets
         const flavor = onboard.flavor ?? "network-marketer";
+        const region = process.env["REGION"] ?? "us-en";
         const bucket = classifyBucket(params.responseText, flavor);
-        const bucketDef = getBucketResponse(bucket, flavor);
+        const bucketDef = getBucketResponse(bucket, flavor, region);
 
         let gapMessage: string;
         if (bucketDef) {
