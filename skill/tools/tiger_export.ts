@@ -256,7 +256,7 @@ async function execute(
   const allContacts = loadContacts(workdir);
   const allNurture = loadNurture(workdir);
   const settings = loadSettings(workdir);
-  const lang = (settings.preferredLanguage as string) ?? "en";
+  const lang = (settings.language as string) ?? "en";
 
   // Index by leadId
   const contactsByLead: Record<string, ContactRecord[]> = {};

@@ -68,6 +68,7 @@ interface NurtureRecord {
   lastOneToTenScore?: number;
   nextTouchScheduledFor?: string;
   convertedAt?: string;
+  slowDripCount?: number;
 }
 
 interface AftercareRecordBrief {
@@ -441,7 +442,7 @@ function assembleBriefing(data: BriefingData): string {
       lines.push(`  • ${r.leadDisplayName} — 1 no-response so far. One more and they exit nurture.`);
     }
     for (const r of data.slowDripTransitions) {
-      lines.push(`  • ${r.leadDisplayName} — moved to slow drip (${r.slowDripCount}/3 drips sent).`);
+      lines.push(`  • ${r.leadDisplayName} — moved to slow drip (${r.slowDripCount ?? 0}/3 drips sent).`);
     }
     lines.push(``);
   }
