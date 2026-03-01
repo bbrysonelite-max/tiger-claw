@@ -64,13 +64,14 @@ interface LeadRecord {
 
 interface NurtureTouchRecord {
   touchNumber: number;
-  touchType: string;
+  type: string;
+  messageText?: string;
   scheduledFor: string;
   sentAt?: string;
-  response?: string;
+  responseText?: string;
   responseAt?: string;
-  responseScore?: number; // 1-10 framework response
-  gapClosingRound?: number;
+  oneToTenScore?: number;
+  responseClassification?: string;
 }
 
 interface NurtureRecord {
@@ -80,9 +81,9 @@ interface NurtureRecord {
   enrolledAt: string;
   lastTouchSentAt?: string;
   convertedAt?: string;
-  involvementLevel: number;
-  touches: NurtureTouchRecord[];
-  gapClosingRounds?: number;
+  touchHistory: NurtureTouchRecord[];
+  currentTouchNumber?: number;
+  consecutiveNoResponses?: number;
   slowDripCount?: number;
 }
 
@@ -286,8 +287,8 @@ function buildDetailView(
   lines.push(`[ ${statusHeader} ]`);
   lines.push(`  Status:      ${status}`);
   lines.push(`  OAR:         ${oarLabel}`);
-  if (nurture) {
-    lines.push(`  Involvement: ${involvementLabel(nurture.involvementLevel ?? 0)} (Level ${nurture.involvementLevel ?? 0})`);
+  if (lead.involvementLevel !== undefined) {
+    lines.push(`  Involvement: ${involvementLabel(lead.involvementLevel)} (Level ${lead.involvementLevel})`);
   }
   lines.push(`  Discovered:  ${formatDate(lead.discoveredAt)}`);
   lines.push(`  Platform:    ${lead.platform}`);
@@ -298,20 +299,20 @@ function buildDetailView(
   lines.push("");
 
   // ── Nurture sequence ──
-  if (nurture && nurture.touches && nurture.touches.length > 0) {
+  if (nurture && nurture.touchHistory && nurture.touchHistory.length > 0) {
     const nurtureHeader = isEn ? "NURTURE SEQUENCE" : "ลำดับการดูแล";
     lines.push(`[ ${nurtureHeader} ] — ${nurture.status.toUpperCase()}`);
     lines.push(`  Enrolled: ${formatDate(nurture.enrolledAt)}`);
     if (nurture.convertedAt) lines.push(`  Converted: ${formatDate(nurture.convertedAt)}`);
     lines.push("");
 
-    for (const touch of nurture.touches) {
+    for (const touch of nurture.touchHistory) {
       const sentLabel = touch.sentAt ? `sent ${formatDate(touch.sentAt)}` : `scheduled ${formatDate(touch.scheduledFor)}`;
-      const responseLabel = touch.response
-        ? ` → response: "${touch.response}"${touch.responseScore !== undefined ? ` (${touch.responseScore}/10)` : ""}`
+      const responseLabel = touch.responseText
+        ? ` → response: "${touch.responseText}"${touch.oneToTenScore !== undefined ? ` (${touch.oneToTenScore}/10)` : ""}`
         : "";
       lines.push(
-        `  Touch ${touch.touchNumber}: ${touchTypeLabel(touch.touchType)}  [${sentLabel}]${responseLabel}`
+        `  Touch ${touch.touchNumber}: ${touchTypeLabel(touch.type)}  [${sentLabel}]${responseLabel}`
       );
     }
     lines.push("");
@@ -388,7 +389,7 @@ async function execute(
   const allContacts = loadContacts(workdir);
   const allNurture = loadNurture(workdir);
   const settings = loadSettings(workdir);
-  const lang = (settings.preferredLanguage as string) ?? "en";
+  const lang = (settings.language as string) ?? "en";
 
   const matches = findLeadByName(leads, nameQuery);
 

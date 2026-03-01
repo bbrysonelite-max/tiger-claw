@@ -113,7 +113,7 @@ async function execute(
 
   const leads = loadLeads(workdir);
   const settings = loadSettings(workdir);
-  const lang = (settings.preferredLanguage as string) ?? "en";
+  const lang = (settings.language as string) ?? "en";
 
   const matches = findLeadByName(leads, nameQuery);
 

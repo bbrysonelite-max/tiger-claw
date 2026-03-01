@@ -873,8 +873,31 @@ function handleRecordMessage(
   const today = new Date().toISOString().slice(0, 10);
   const layer = state.activeLayer;
 
-  // Layer 1: total message count
+  // Layer 1: 72-hour expiry + total message count
   if (layer === 1) {
+    // Check 72-hour expiry first
+    if (state.layer1ActivatedAt) {
+      const elapsedMs = Date.now() - new Date(state.layer1ActivatedAt).getTime();
+      const expiryMs = LAYER_LIMITS[1].expiryHours * 60 * 60 * 1000;
+      if (elapsedMs >= expiryMs) {
+        appendEvent(state, {
+          type: "limit_exceeded",
+          timestamp: new Date().toISOString(),
+          message: `Layer 1 expired (${LAYER_LIMITS[1].expiryHours}h elapsed).`,
+        });
+        const rotation = performRotation(state, 1, "Layer 1 time limit reached (72h)", workdir, tenantId);
+        saveKeyState(workdir, state);
+        return {
+          ok: true,
+          output: rotation.tenantMessage,
+          data: { layer, timeExpired: true, rotatedTo: rotation.toLayer },
+        };
+      }
+    } else {
+      // First Layer 1 message — record activation time
+      state.layer1ActivatedAt = new Date().toISOString();
+    }
+
     state.layer1MessageCount++;
     const remaining = LAYER_LIMITS[1].totalMessages - state.layer1MessageCount;
 

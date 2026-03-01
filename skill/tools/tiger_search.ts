@@ -289,7 +289,7 @@ async function execute(
   const allContacts = loadContacts(workdir);
   const allNurture = loadNurture(workdir);
   const settings = loadSettings(workdir);
-  const lang = (settings.preferredLanguage as string) ?? "en";
+  const lang = (settings.language as string) ?? "en";
 
   // Index contacts and nurture by leadId for O(1) lookup
   const contactsByLead: Record<string, ContactRecord[]> = {};
