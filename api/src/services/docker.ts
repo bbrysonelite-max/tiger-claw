@@ -51,6 +51,7 @@ export interface ProvisionContainerParams {
 
 const IMAGE = process.env["TIGER_CLAW_IMAGE"] ?? "tiger-claw-scout:latest";
 const OPENCLAW_PORT = 18789;
+const CUSTOMERS_DIR = process.env["CUSTOMERS_DIR"] ?? "/home/ubuntu/customers";
 
 export async function startContainer(params: ProvisionContainerParams): Promise<string> {
   const containerName = `tiger-claw-${params.slug}`;
@@ -88,6 +89,32 @@ export async function startContainer(params: ProvisionContainerParams): Promise<
     if (process.env[k]) env.push(`${k}=${process.env[k]}`);
   }
 
+  // Ensure host directory layout exists for persistent volume + ops compatibility
+  const customerDir = `${CUSTOMERS_DIR}/${params.slug}`;
+  const dataDir = `${customerDir}/data`;
+  const fs = await import("fs");
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  // Write docker-compose.yml so deploy.sh and backup.sh can manage this tenant
+  const composeContent = [
+    `version: "3.8"`,
+    `services:`,
+    `  bot:`,
+    `    container_name: ${containerName}`,
+    `    image: ${IMAGE}`,
+    `    restart: unless-stopped`,
+    `    ports:`,
+    `      - "${params.port}:${OPENCLAW_PORT}"`,
+    `    volumes:`,
+    `      - ${dataDir}:/app/data`,
+    `    extra_hosts:`,
+    `      - "host.docker.internal:host-gateway"`,
+    `    environment:`,
+    ...env.map((e) => `      - ${e}`),
+    ``,
+  ].join("\n");
+  fs.writeFileSync(`${customerDir}/docker-compose.yml`, composeContent, "utf8");
+
   const container = await docker.createContainer({
     name: containerName,
     Image: IMAGE,
@@ -97,6 +124,7 @@ export async function startContainer(params: ProvisionContainerParams): Promise<
       PortBindings: {
         [`${OPENCLAW_PORT}/tcp`]: [{ HostPort: String(params.port) }],
       },
+      Binds: [`${dataDir}:/app/data`],
       RestartPolicy: { Name: "unless-stopped" },
       ExtraHosts: ["host.docker.internal:host-gateway"],
     },
