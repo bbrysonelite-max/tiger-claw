@@ -43,7 +43,7 @@ const PURGE_DAYS = 90;
 // ---------------------------------------------------------------------------
 
 type OarType = "builder" | "customer" | "both";
-type SourceName = "reddit" | "telegram" | "facebook" | "line";
+type SourceName = "reddit" | "telegram" | "facebook_groups" | "line_openchat";
 
 interface ICP {
   idealPerson?: string;
@@ -909,7 +909,7 @@ async function fetchFacebookPosts(
     const urlHash = crypto.createHash("md5").update(item.link).digest("hex").slice(0, 12);
 
     profiles.push({
-      platform: "facebook",
+      platform: "facebook_groups",
       platformId: `facebook:${urlHash}`,
       displayName,
       profileUrl: item.link,
@@ -943,12 +943,13 @@ interface LINEMessage {
 async function fetchLINEPosts(
   keywords: string[],
   limit: number,
-  logger: ToolContext["logger"]
+  logger: ToolContext["logger"],
+  workdir?: string
 ): Promise<DiscoveredProfile[]> {
   if (keywords.length === 0) return [];
 
   // Strategy 1: Read locally stored LINE OpenChat messages (delivered by webhook)
-  const lineMessagesPath = path.join(process.env.WORKDIR ?? ".", "line_messages.json");
+  const lineMessagesPath = path.join(workdir ?? ".", "line_messages.json");
   let lineMessages: LINEMessage[] = [];
   try {
     if (fs.existsSync(lineMessagesPath)) {
@@ -973,7 +974,7 @@ async function fetchLINEPosts(
       seenUsers.add(msg.userId);
 
       profiles.push({
-        platform: "line",
+        platform: "line_openchat",
         platformId: `line:${msg.userId}`,
         displayName: msg.displayName ?? `LINE:${msg.userId.slice(0, 8)}`,
         recentPostText: msg.text.slice(0, 1000),
@@ -1016,7 +1017,7 @@ async function fetchLINEPosts(
       const urlHash = crypto.createHash("md5").update(item.link ?? item.snippet).digest("hex").slice(0, 12);
 
       profiles.push({
-        platform: "line",
+        platform: "line_openchat",
         platformId: `line:serper:${urlHash}`,
         displayName: item.title?.slice(0, 60) || "LINE User",
         profileUrl: item.link,
@@ -1041,10 +1042,10 @@ async function fetchLINEPosts(
 
 function getActiveSources(region: string): SourceName[] {
   const regionSources: Record<string, SourceName[]> = {
-    "us-en": ["reddit", "facebook", "telegram"],
-    "th-th": ["facebook", "telegram", "line"],
+    "us-en": ["reddit", "facebook_groups", "telegram"],
+    "th-th": ["facebook_groups", "telegram", "line_openchat"],
   };
-  return regionSources[region] ?? ["reddit", "telegram"]; // Fallback to US sources
+  return regionSources[region] ?? ["reddit", "telegram"];
 }
 
 // ---------------------------------------------------------------------------
@@ -1107,11 +1108,11 @@ async function runHunt(
         case "telegram":
           profiles = await fetchTelegramMessages(allPositive, perSourceLimit, logger);
           break;
-        case "facebook":
+        case "facebook_groups":
           profiles = await fetchFacebookPosts(allPositive, perSourceLimit, logger);
           break;
-        case "line":
-          profiles = await fetchLINEPosts(allPositive, perSourceLimit, logger);
+        case "line_openchat":
+          profiles = await fetchLINEPosts(allPositive, perSourceLimit, logger, workdir);
           break;
       }
     } catch (err) {

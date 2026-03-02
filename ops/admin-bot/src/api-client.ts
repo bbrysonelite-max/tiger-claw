@@ -110,7 +110,7 @@ export interface HealthResponse {
   responseMs: number;
   checks: Record<string, unknown>;
   fleet: { total: number; running: number; stopped: number };
-  system: { totalMemMb: number; freeMemMb: number; usedMemPercent: number; loadAvg1m: number };
+  system: { totalMemMb: number; freeMemMb: number; usedMemPercent: number; diskUsagePercent?: number; loadAvg1m: number };
   timestamp: string;
 }
 
