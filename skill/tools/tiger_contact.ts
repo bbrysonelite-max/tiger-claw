@@ -187,28 +187,50 @@ function selectStrategy(lead: LeadRecord, referredBy?: string): ContactStrategy 
 }
 
 // ---------------------------------------------------------------------------
-// Timing — randomized 1-4 hour delay, 9 AM–8 PM window
+// Timing — randomized 1-4 hour delay, 9 AM–8 PM prospect local window
 // ---------------------------------------------------------------------------
+
+/**
+ * Returns the hour (0-23) in the prospect's local timezone.
+ * Uses the tenant's TZ env var as proxy for prospect timezone.
+ * Falls back to UTC if TZ is not set or Intl is unavailable.
+ */
+function getLocalHour(date: Date): number {
+  const tz = process.env["TZ"];
+  if (!tz) return date.getUTCHours();
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      hour12: false,
+    });
+    return parseInt(formatter.format(date), 10);
+  } catch {
+    return date.getUTCHours();
+  }
+}
 
 /**
  * Returns the scheduled send time for a contact.
  * Adds a random 1-4 hour delay from now.
- * If the result falls outside 9 AM–8 PM UTC (proxy for "reasonable hours"),
+ * If the result falls outside 9 AM–8 PM in the prospect's timezone,
  * it is pushed to 9 AM the following day with a small additional jitter.
  */
 function computeScheduledTime(): string {
   const delayMs = (3600000 + Math.random() * 3 * 3600000); // 1-4 hours in ms
   const scheduled = new Date(Date.now() + delayMs);
 
-  const hour = scheduled.getUTCHours();
-  const isReasonableHour = hour >= 9 && hour < 20; // 9 AM–8 PM UTC
+  const localHour = getLocalHour(scheduled);
+  const isReasonableHour = localHour >= 9 && localHour < 20; // 9 AM–8 PM local
 
   if (!isReasonableHour) {
-    // Push to 9 AM next day (UTC) with 0-60 min jitter
-    const tomorrow = new Date(scheduled);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    tomorrow.setUTCHours(9, Math.floor(Math.random() * 60), 0, 0);
-    return tomorrow.toISOString();
+    // Calculate offset to push to 9 AM local tomorrow
+    // Add 24h then adjust to the next 9 AM slot
+    const hoursUntil9AM = localHour >= 20
+      ? (24 - localHour + 9)     // evening → next morning
+      : (9 - localHour);         // early morning → same-day 9 AM
+    const pushMs = hoursUntil9AM * 3600000 + Math.random() * 3600000; // +0-60 min jitter
+    return new Date(scheduled.getTime() + pushMs).toISOString();
   }
 
   return scheduled.toISOString();

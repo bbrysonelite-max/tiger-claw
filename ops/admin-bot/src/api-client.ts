@@ -163,6 +163,15 @@ export const getTenantLogs = (idOrSlug: string, tail = 50) =>
 // System health
 export const getSystemHealth = () => request<HealthResponse>("GET", "/health");
 
+// Recent events (for daily briefing)
+export interface RecentEventsResponse {
+  totalEvents: number;
+  keyFailures: number;
+  keyFailureDetails: Array<{ tenantName: string; action: string; at: string; details?: Record<string, unknown> }>;
+  containerRestarts: number;
+}
+export const getRecentEvents = () => request<RecentEventsResponse>("GET", "/admin/events/recent");
+
 // Generic helpers (used by update.ts for canary commands and deploy integration)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const apiGet    = (path: string) => request<any>("GET",    path);

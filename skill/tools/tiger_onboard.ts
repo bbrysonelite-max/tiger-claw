@@ -16,6 +16,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as https from "https";
 import * as http from "http";
+import { resolveConfig, generateSoulMd, type TenantData } from "../config/index.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -762,48 +763,32 @@ function generateSOULmd(state: OnboardState): string {
   const botName = state.botName ?? "Tiger";
   const tenantName = state.identity.name ?? "your operator";
   const profession = professionLabel(state.flavor);
-  const language = state.language === "th" ? "Thai" : "English";
 
-  const builderICP = isTwoOarFlavor(state.flavor) ? state.icpBuilder : null;
-  const customerICP = isTwoOarFlavor(state.flavor) ? state.icpCustomer : state.icpSingle;
+  // Use the four-layer config system (Base → Regional → Flavor → Tenant)
+  const config = resolveConfig(state.flavor, state.region ?? process.env["REGION"] ?? "us-en");
 
-  const icpBuilderSection = builderICP
-    ? [
-        `## Ideal Business Builder (Recruit)`,
-        `- Who they are: ${builderICP.idealPerson ?? "—"}`,
-        `- Problem they face: ${builderICP.problemFaced ?? "—"}`,
-        `- What's not working for them: ${builderICP.currentApproachFailing ?? "—"}`,
-        `- Where they hang out online: ${builderICP.onlinePlatforms ?? "—"}`,
-        `- Types to avoid: ${builderICP.typesToAvoid ?? "—"}`,
-      ].join("\n")
-    : "";
+  const tenantData: TenantData = {
+    botName,
+    name: tenantName,
+    productOrOpportunity: state.identity.productOrOpportunity ?? profession,
+    yearsInProfession: state.identity.yearsInProfession ?? "—",
+    biggestWin: state.identity.biggestWin ?? "—",
+    differentiator: state.identity.differentiator ?? "—",
+    preferredLanguage: config.language,
+    timezone: process.env["TZ"],
+    monthlyIncomeGoal: state.identity.monthlyIncomeGoal,
+  };
 
-  const icpCustomerLabel = state.flavor === "real-estate" ? "Ideal Client" : "Ideal Customer";
-  const icpCustomerSection = customerICP
-    ? [
-        `## ${icpCustomerLabel}`,
-        `- Who they are: ${customerICP.idealPerson ?? "—"}`,
-        `- Problem they face: ${customerICP.problemFaced ?? "—"}`,
-        `- What's not working for them: ${customerICP.currentApproachFailing ?? "—"}`,
-        `- Where they hang out online: ${customerICP.onlinePlatforms ?? "—"}`,
-        `- Types to avoid: ${customerICP.typesToAvoid ?? "—"}`,
-      ].join("\n")
-    : "";
+  // Config system generates: Identity, Macro Narrative, Tone, Language,
+  // Never Do, Cultural Context, Scoring, Conversion Goal
+  const configSoul = generateSoulMd(config, tenantData);
 
-  return [
-    `# ${botName}`,
-    ``,
-    `You are **${botName}**, built on Tiger Claw technology, powered by OpenClaw.`,
-    `You serve ONE person: **${tenantName}**. Their success is your mission.`,
-    ``,
-    `## Identity`,
-    ``,
-    `- Built on Tiger Claw technology, powered by OpenClaw`,
-    `- You are an AI-powered ${profession} assistant`,
-    `- When asked who you are: "I'm ${botName}, built on Tiger Claw technology, powered by OpenClaw."`,
-    ``,
+  // Append tenant-specific sections from onboarding interviews
+  const tenantSections: string[] = [];
+
+  // Operator edification (from Identity interview)
+  tenantSections.push([
     `## Your Operator — ${tenantName}`,
-    ``,
     `- **Name:** ${tenantName}`,
     `- **Profession:** ${profession}`,
     `- **Years in profession:** ${state.identity.yearsInProfession ?? "—"}`,
@@ -811,28 +796,38 @@ function generateSOULmd(state: OnboardState): string {
     `- **Their biggest win:** ${state.identity.biggestWin ?? "—"}`,
     `- **What makes them different:** ${state.identity.differentiator ?? "—"}`,
     `- **Monthly income goal:** ${state.identity.monthlyIncomeGoal ?? "—"}`,
-    ``,
-    icpBuilderSection,
-    icpBuilderSection ? `` : "",
-    icpCustomerSection,
-    ``,
-    `## Language`,
-    ``,
-    `- Always respond to ${tenantName} in **${language}**.`,
-    `- Generate outreach messages in the **prospect's detected language**.`,
-    `- A Thai operator messaging a Vietnamese prospect: your replies to the operator in Thai, outreach messages in Vietnamese.`,
-    ``,
-    `## Tone`,
-    ``,
-    `Direct. Warm. Confident. You are their competitive edge, not their cheerleader.`,
-    `Scarcity and selectivity from the first touch. Never chase. Never beg.`,
-    ``,
-    `## Onboarding Complete`,
-    ``,
-    `Onboarding completed: ${new Date().toISOString()}`,
-  ]
-    .filter((line) => line !== undefined)
-    .join("\n");
+  ].join("\n"));
+
+  // ICP sections (from ICP interview)
+  const builderICP = isTwoOarFlavor(state.flavor) ? state.icpBuilder : null;
+  const customerICP = isTwoOarFlavor(state.flavor) ? state.icpCustomer : state.icpSingle;
+
+  if (builderICP) {
+    tenantSections.push([
+      `## Ideal Business Builder (Recruit)`,
+      `- Who they are: ${builderICP.idealPerson ?? "—"}`,
+      `- Problem they face: ${builderICP.problemFaced ?? "—"}`,
+      `- What's not working for them: ${builderICP.currentApproachFailing ?? "—"}`,
+      `- Where they hang out online: ${builderICP.onlinePlatforms ?? "—"}`,
+      `- Types to avoid: ${builderICP.typesToAvoid ?? "—"}`,
+    ].join("\n"));
+  }
+
+  if (customerICP) {
+    const label = state.flavor === "real-estate" ? "Ideal Client" : "Ideal Customer";
+    tenantSections.push([
+      `## ${label}`,
+      `- Who they are: ${customerICP.idealPerson ?? "—"}`,
+      `- Problem they face: ${customerICP.problemFaced ?? "—"}`,
+      `- What's not working for them: ${customerICP.currentApproachFailing ?? "—"}`,
+      `- Where they hang out online: ${customerICP.onlinePlatforms ?? "—"}`,
+      `- Types to avoid: ${customerICP.typesToAvoid ?? "—"}`,
+    ].join("\n"));
+  }
+
+  tenantSections.push(`## Onboarding Complete\nOnboarding completed: ${new Date().toISOString()}`);
+
+  return configSoul + "\n\n---\n\n" + tenantSections.join("\n\n---\n\n");
 }
 
 function handleNaming(
