@@ -431,10 +431,11 @@ router.post("/pool/:botId/assign", async (req: Request, res: Response) => {
   const { tenantId } = req.body as { tenantId?: string };
   if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
 
-  const tenant = await getTenant(req.params["botId"]!);  // reuse resolve — but this is a botId
-  // Directly use tenantId; admin is responsible for valid value
+  const tenant = await getTenant(tenantId);
+  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
   await assignToTenant(req.params["botId"]!, tenantId);
-  return res.json({ ok: true });
+  return res.json({ ok: true, tenantId: tenant.id, slug: tenant.slug });
 });
 
 // POST /admin/pool/:botIdOrUsername/release — release back to available pool

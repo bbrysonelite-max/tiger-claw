@@ -80,8 +80,11 @@ export async function generateDailyBriefing(
   lines.push(
     `Fleet: ${health.fleet.running} running / ${health.fleet.total} total`
   );
+  const diskStr = health.system.diskUsagePercent !== undefined
+    ? ` \\| Disk: ${health.system.diskUsagePercent}%`
+    : "";
   lines.push(
-    `Memory: ${health.system.usedMemPercent}% \\| Load: ${health.system.loadAvg1m}`
+    `Memory: ${health.system.usedMemPercent}% \\| Load: ${health.system.loadAvg1m}${diskStr}`
   );
   lines.push("");
 

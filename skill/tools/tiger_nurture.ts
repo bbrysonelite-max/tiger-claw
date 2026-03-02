@@ -35,7 +35,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
-import { classifyBucket, getBucketResponse, fillTemplate } from "./tiger_objection";
+import { classifyBucket, getBucketResponse, fillTemplate } from "./tiger_objection.js";
 
 // ---------------------------------------------------------------------------
 // Constants
