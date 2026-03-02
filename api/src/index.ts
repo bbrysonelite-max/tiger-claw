@@ -26,7 +26,7 @@
 
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
-import { initSchema, listTenants, updateTenantStatus } from "./services/db.js";
+import { initSchema, listTenants, updateTenantStatus, logAdminEvent } from "./services/db.js";
 import {
   getContainerHealth,
   inspectContainer,
@@ -127,6 +127,9 @@ async function runHealthMonitor(): Promise<void> {
           try {
             await startExistingContainer(tenant.slug);
             failureCount[tenant.slug] = 0;
+            await logAdminEvent("container_restart", tenant.id, {
+              slug: tenant.slug, failures: count, source: "health_monitor",
+            });
             await sendAdminAlert(
               `⚠️ Auto-restarted container for ${tenant.name} (${tenant.slug}) after ${count} health check failures.`
             );

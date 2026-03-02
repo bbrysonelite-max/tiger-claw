@@ -273,14 +273,47 @@ export async function getNextAvailablePort(): Promise<number> {
 }
 
 export async function logAdminEvent(
-  action: string,
+  eventOrAction: string | { action: string; tenantId?: string; details?: Record<string, unknown> },
   tenantId?: string,
   details?: Record<string, unknown>
 ): Promise<void> {
+  // Support both positional args and object form
+  const action = typeof eventOrAction === "string" ? eventOrAction : eventOrAction.action;
+  const tid = typeof eventOrAction === "string" ? tenantId : eventOrAction.tenantId;
+  const det = typeof eventOrAction === "string" ? details : eventOrAction.details;
   await getPool().query(
     "INSERT INTO admin_events (action, tenant_id, details) VALUES ($1,$2,$3)",
-    [action, tenantId ?? null, details ? JSON.stringify(details) : null]
+    [action, tid ?? null, det ? JSON.stringify(det) : null]
   );
+}
+
+export interface AdminEvent {
+  id: string;
+  action: string;
+  tenantId?: string;
+  tenantName?: string;
+  details?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export async function getRecentAdminEvents(sinceHours = 24): Promise<AdminEvent[]> {
+  const result = await getPool().query(
+    `SELECT e.id, e.action, e.tenant_id, t.name AS tenant_name, e.details, e.created_at
+     FROM admin_events e
+     LEFT JOIN tenants t ON t.id = e.tenant_id
+     WHERE e.created_at > NOW() - INTERVAL '1 hour' * $1
+     ORDER BY e.created_at DESC
+     LIMIT 200`,
+    [sinceHours]
+  );
+  return result.rows.map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    action: r.action as string,
+    tenantId: r.tenant_id as string | undefined,
+    tenantName: r.tenant_name as string | undefined,
+    details: r.details as Record<string, unknown> | undefined,
+    createdAt: (r.created_at as Date).toISOString(),
+  }));
 }
 
 // ---------------------------------------------------------------------------

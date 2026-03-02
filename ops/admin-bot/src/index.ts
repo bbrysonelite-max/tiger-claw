@@ -40,7 +40,7 @@ import {
   handlePoolRefill,
 } from "./commands/pool.js";
 import { generateDailyBriefing } from "./briefing.js";
-import { getFleet, getSystemHealth } from "./api-client.js";
+import { getFleet, getSystemHealth, getRecentEvents } from "./api-client.js";
 
 // ---------------------------------------------------------------------------
 // Bot setup
@@ -227,8 +227,10 @@ bot.on("message", async (msg) => {
 cron.schedule("30 14 * * *", async () => {
   console.log("[admin-bot] Generating daily briefing...");
   try {
-    const [fleet, health] = await Promise.all([getFleet(), getSystemHealth()]);
-    const msg = await generateDailyBriefing(fleet, health);
+    const [fleet, health, events] = await Promise.all([
+      getFleet(), getSystemHealth(), getRecentEvents().catch(() => undefined),
+    ]);
+    const msg = await generateDailyBriefing(fleet, health, events);
     await reply(msg);
     console.log("[admin-bot] Daily briefing sent.");
   } catch (err) {

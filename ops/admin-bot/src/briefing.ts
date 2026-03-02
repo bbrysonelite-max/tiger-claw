@@ -14,12 +14,13 @@
 //     • Nancy's primary key expired 6 hours ago — monitor
 //     • Container tiger-claw-somchai using 92% memory — investigate
 
-import { type FleetResponse, type HealthResponse } from "./api-client.js";
+import { type FleetResponse, type HealthResponse, type RecentEventsResponse } from "./api-client.js";
 import { escMd } from "./commands/fleet.js";
 
 export async function generateDailyBriefing(
   fleet: FleetResponse,
-  health: HealthResponse
+  health: HealthResponse,
+  events?: RecentEventsResponse
 ): Promise<string> {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", {
@@ -43,6 +44,36 @@ export async function generateDailyBriefing(
   );
   lines.push("");
 
+  // Last 24h summary
+  const oneDayAgo = Date.now() - 86400_000;
+  const newToday = tenants.filter(
+    (t) => new Date(t.createdAt).getTime() > oneDayAgo
+  ).length;
+
+  lines.push(`*Last 24 hours:*`);
+  lines.push(`  New signups: ${newToday}`);
+  lines.push(`  Key failures: ${events?.keyFailures ?? 0}`);
+  lines.push(`  Container restarts: ${events?.containerRestarts ?? 0}`);
+  lines.push("");
+
+  // Key failure details
+  if (events && events.keyFailures > 0) {
+    for (const kf of events.keyFailureDetails.slice(0, 5)) {
+      lines.push(`  🔑 ${escMd(kf.tenantName)} — ${escMd(kf.action)} at ${escMd(kf.at.slice(11, 16))}`);
+    }
+    lines.push("");
+  }
+
+  // New signup names
+  if (newToday > 0) {
+    const newNames = tenants
+      .filter((t) => new Date(t.createdAt).getTime() > oneDayAgo)
+      .map((t) => escMd(t.name))
+      .join(", ");
+    lines.push(`🆕 *New:* ${newNames}`);
+    lines.push("");
+  }
+
   // System health summary
   const sysOk = health.status === "ok";
   lines.push(`System: ${sysOk ? "✅ OK" : "⚠️ DEGRADED"}`);
@@ -54,23 +85,15 @@ export async function generateDailyBriefing(
   );
   lines.push("");
 
-  // New signups in last 24h
-  const oneDayAgo = Date.now() - 86400_000;
-  const newToday = tenants.filter(
-    (t) => new Date(t.createdAt).getTime() > oneDayAgo
-  ).length;
-  if (newToday > 0) {
-    lines.push(`🆕 *New signups today: ${newToday}*`);
-    const newNames = tenants
-      .filter((t) => new Date(t.createdAt).getTime() > oneDayAgo)
-      .map((t) => escMd(t.name))
-      .join(", ");
-    lines.push(`  ${newNames}`);
-    lines.push("");
-  }
-
   // Action needed
   const actions: string[] = [];
+
+  // Key failure actions
+  if (events && events.keyFailures > 0) {
+    for (const kf of events.keyFailureDetails.slice(0, 3)) {
+      actions.push(`${escMd(kf.tenantName)} — ${escMd(kf.action)} — monitor`);
+    }
+  }
 
   // Churn risk: inactive > 7 days
   const sevenDaysAgo = Date.now() - 7 * 86400_000;

@@ -23,6 +23,7 @@ import {
   setCanaryGroup,
   listCanaryTenants,
   listBotPool,
+  getRecentAdminEvents,
   type Tenant,
 } from "../services/db.js";
 import {
@@ -262,6 +263,42 @@ router.post("/alerts", async (req: Request, res: Response) => {
   }
 
   return res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/events/recent — last 24h admin events for daily briefing
+// ---------------------------------------------------------------------------
+
+router.get("/events/recent", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const events = await getRecentAdminEvents(24);
+
+    const keyFailures = events.filter((e) =>
+      ["key_rotation", "onboarding_key_deactivated", "key_recovery"].includes(e.action) ||
+      (e.details && (e.details as Record<string, unknown>)["type"] === "key_failure")
+    );
+
+    const containerRestarts = events.filter((e) =>
+      e.action === "container_restart" ||
+      (e.details && String((e.details as Record<string, unknown>)["message"] ?? "").includes("Auto-restarted"))
+    );
+
+    res.json({
+      totalEvents: events.length,
+      keyFailures: keyFailures.length,
+      keyFailureDetails: keyFailures.map((e) => ({
+        tenantName: e.tenantName ?? "unknown",
+        action: e.action,
+        at: e.createdAt,
+        details: e.details,
+      })),
+      containerRestarts: containerRestarts.length,
+      events: events.slice(0, 50),
+    });
+  } catch (err) {
+    console.error("[admin] events/recent error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // ---------------------------------------------------------------------------
