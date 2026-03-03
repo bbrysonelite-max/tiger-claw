@@ -114,6 +114,45 @@ else
   export ANTHROPIC_API_KEY="$ACTIVE_KEY"
 fi
 
+# ── SecretRef initialization (ADR-0007) ──────────────────────────────────────
+# File layout:
+#   ~/.openclaw/secrets.json  — single JSON file with the active API key
+#     { "active": { "apiKey": "sk-ant-..." } }
+#
+# Rotation flow (handled at runtime by tiger_keys.ts):
+#   1. tiger_keys writes new key to secrets.json /active/apiKey
+#   2. tiger_keys POSTs secrets.reload to gateway RPC
+#   3. Gateway atomically swaps in-memory snapshot (or keeps last-known-good)
+#   4. tiger_keys polls /readyz to confirm
+#
+# openclaw.json references this file via:
+#   secrets.providers.filemain → { source: "file", path: "~/.openclaw/secrets.json" }
+#   models.providers.anthropic.apiKey → { source: "file", provider: "filemain", id: "/active/apiKey" }
+#
+# Migration: if key_state.json exists but secrets.json does not, the container
+# is upgrading to SecretRef. The active key was already resolved above from
+# key_state.json via resolve_key_state(), so we seed secrets.json with it.
+# For fresh containers: ACTIVE_KEY is the Layer 1 platform key from env vars.
+#
+# Source: https://docs.openclaw.ai/gateway/secrets
+SECRETS_FILE="/root/.openclaw/secrets.json"
+
+if [ -n "$ACTIVE_KEY" ]; then
+  cat > "$SECRETS_FILE" << SECEOF
+{
+  "active": {
+    "apiKey": "${ACTIVE_KEY}"
+  }
+}
+SECEOF
+  chmod 600 "$SECRETS_FILE"
+  echo "   SecretRef: seeded secrets.json (Layer ${ACTIVE_LAYER})"
+else
+  echo '{ "active": { "apiKey": "" } }' > "$SECRETS_FILE"
+  chmod 600 "$SECRETS_FILE"
+  echo "   SecretRef: seeded empty secrets.json (no key available)"
+fi
+
 # ── Timezone-aware cron schedule computation ─────────────────────────────────
 # Block 5.1 LOCKED: Daily scout at 5 AM tenant timezone.
 # Block 5.1 LOCKED: Daily report at 7 AM tenant timezone.
@@ -186,8 +225,9 @@ fi
 #     (NOT "token" — rejected by schema validator)
 #   channels.telegram.streaming — https://docs.openclaw.ai/gateway/configuration
 #     (v2026.3.2 defaults to "partial"; we override to "off" per ADR-0009)
-#   API keys — set via env vars (ANTHROPIC_API_KEY / OPENAI_API_KEY), NOT in config
-#     Source: https://docs.openclaw.ai/help/environment
+#   API keys — resolved via SecretRef (ADR-0007). Env vars (ANTHROPIC_API_KEY /
+#     OPENAI_API_KEY) are still exported as fallback for non-SecretRef surfaces.
+#     Source: https://docs.openclaw.ai/gateway/secrets
 #   cron — openclaw.json only accepts global cron settings (enabled, maxConcurrentRuns).
 #     Individual jobs are registered via "openclaw cron add" CLI or cron.add tool call
 #     and stored in ~/.openclaw/cron/jobs.json, NOT in openclaw.json.
@@ -205,10 +245,26 @@ cat > /root/.openclaw/openclaw.json << EOF
       "token": "${OPENCLAW_GATEWAY_TOKEN:-dev-token}"
     }
   },
+  "secrets": {
+    "providers": {
+      "filemain": {
+        "source": "file",
+        "path": "~/.openclaw/secrets.json",
+        "mode": "json"
+      }
+    }
+  },
   "agents": {
     "defaults": {
       "model": "${ACTIVE_MODEL}",
       "thinkingDefault": "low"
+    }
+  },
+  "models": {
+    "providers": {
+      "anthropic": {
+        "apiKey": { "source": "file", "provider": "filemain", "id": "/active/apiKey" }
+      }
     }
   },
   "channels": {
