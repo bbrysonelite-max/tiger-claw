@@ -35,7 +35,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 IMAGE_NAME="${IMAGE_NAME:-tiger-claw-scout}"
 REGISTRY="${REGISTRY:-}"
 DEPLOYMENT_STATE_FILE="${DEPLOYMENT_STATE_FILE:-$REPO_ROOT/deployment_state.json}"
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-0.1.0}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.3.2}"
 MAX_BUILDS=5   # LOCKED: retain last 5 versions
 
 # Flags (settable via args)
