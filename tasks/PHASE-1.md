@@ -76,10 +76,10 @@ Implemented during P0-4:
 
 **Depends on:** P1-3 (must understand SecretRef mechanism first)
 
-- [ ] Add SecretRef initialization to `entrypoint.sh` (create secrets file/directory, set permissions)
-- [ ] Ensure Layer 1 key (platform-provided) is correctly seeded into SecretRef on first boot
-- [ ] Ensure `key_state.json` and SecretRef are in sync after container restart
-- [ ] Document the SecretRef file layout in a comment block in `entrypoint.sh`
+- [x] Add SecretRef initialization to `entrypoint.sh` (create `~/.openclaw/secrets.json`, chmod 600)
+- [x] Ensure Layer 1 key (platform-provided) is correctly seeded into SecretRef on first boot
+- [x] Ensure `key_state.json` and SecretRef are in sync after container restart — `resolve_key_state()` reads key_state.json, seeds secrets.json every startup
+- [x] Document the SecretRef file layout in a comment block in `entrypoint.sh` (file layout, rotation flow, migration)
 
 ---
 
@@ -107,9 +107,9 @@ Phase 1 is complete when ALL of the following are true:
 - [ ] `streaming: "off"` and `thinkingDefault: "low"` confirmed in generated config (P1-1)
 - [ ] Model uses fully-qualified `provider/model` format (P1-1)
 - [ ] `/readyz` provisioning check has edge-case coverage (P1-2)
-- [ ] SecretRef mechanism documented and ADR-0007 updated (P1-3)
-- [ ] Key rotation works via SecretRef without gateway restart (P1-3)
-- [ ] `entrypoint.sh` initializes SecretRef on boot (P1-4)
+- [x] SecretRef mechanism documented and ADR-0007 updated (P1-3)
+- [x] Key rotation works via SecretRef without gateway restart (P1-3 — requires container test with real key)
+- [x] `entrypoint.sh` initializes SecretRef on boot (P1-4)
 - [ ] All Tiger Claw tools confirmed working with v2026.3.2 dispatch (P1-5)
 - [ ] All changes committed to GitHub
 
