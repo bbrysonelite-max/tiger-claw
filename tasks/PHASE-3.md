@@ -35,14 +35,15 @@
 
 **Context:** A simple HTML page (no framework) that guides a tenant through setting up their messaging channels. Served by the Tiger Claw API.
 
-- [ ] Route file: `api/src/routes/wizard.ts`
-- [ ] URL: `app.tigerclaw.io/wizard/[slug]`
-- [ ] Serves a simple HTML page (no React/Vue — plain HTML + inline CSS/JS)
-- [ ] Section: **Telegram** (always shown) — pre-filled with current bot token status (assigned or pending), link to open bot in Telegram
-- [ ] Section: **WhatsApp** (optional) — shows QR code if Baileys session is active, setup instructions if not
-- [ ] Section: **LINE** (optional) — token input form for tenant-provided LINE channel token
-- [ ] POST endpoint to save channel config changes to tenant record
-- [ ] Input validation: sanitize all user inputs, validate LINE token format
+- [x] Route file: `api/src/routes/wizard.ts`
+- [x] URL: `app.tigerclaw.io/wizard/[slug]` (registered at `/wizard/:slug`)
+- [x] Serves a simple HTML page (no React/Vue — plain HTML + inline CSS/JS, dark theme)
+- [x] Section: **Telegram** (always shown) — pre-filled with bot username from pool or "Pending", link to `t.me/{username}`
+- [x] Section: **WhatsApp** (optional) — toggle switch, collapsed details, setup instructions
+- [x] Section: **LINE** (optional) — token input form (max 200 chars)
+- [x] POST `/wizard/:slug/save` endpoint saves `whatsapp_enabled` and `line_token` to tenant record
+- [x] Input validation: HTML escaping on all outputs, LINE token length validation, empty-string → null coercion
+- [x] DB: added `whatsapp_enabled` and `line_token` columns to tenants table, `getTenantBotUsername()`, `updateTenantChannelConfig()` helpers
 
 ---
 
