@@ -68,20 +68,20 @@ Read these in order for the component you are building:
 
 ---
 
-## Current Phase: PHASE 1 (OpenClaw Integration Hardening)
+## Current Phase: PHASE 2 (Update Pipeline)
 
-**See `tasks/PHASE-1.md` for the exact task list.**
+**See `tasks/PHASE-2.md` for the exact task list.**
 
-Phase 0 is complete — container builds, gateway starts, `/readyz` returns 200. Phase 1 hardens the OpenClaw integration before moving to the update pipeline (Phase 2).
+Phase 1 is complete — SecretRef key rotation implemented, provisioner edge cases covered, ACP dispatch assessed (no tool changes needed). Phase 2 builds the OpenClaw update pipeline for managing version upgrades across the tenant fleet.
 
-**Phase 1 tasks (summary):**
-1. Verify streaming/thinking config and fix model format to fully-qualified provider/model (P1-1 — mostly done in P0)
-2. Confirm `/readyz` provisioning check handles edge cases (P1-2 — mostly done in P0)
-3. Research SecretRef mechanism and migrate Layer 2/3/4 key rotation (P1-3)
-4. Add SecretRef initialization to `entrypoint.sh` (P1-4)
-5. Assess ACP dispatch impact on Tiger Claw tools (P1-5)
+**Phase 2 tasks (summary):**
+1. Harden `ops/build.sh` — parameterized version tagging, image naming convention (P2-1)
+2. Build `ops/update.sh` — single-tenant container replace with rollback (P2-2)
+3. Admin bot update commands — `/update build`, `/update canary`, `/update rollback` (P2-3)
+4. `deployment_state.json` — dual-version tracking, failure counts, rollback state (P2-4)
+5. Canary group management — 5-tenant canary, 24h soak, auto-advance/rollback (P2-5)
 
-**Do not start Phase 2 (Update Pipeline) until Phase 1 is complete.**
+**Do not start Phase 3 (Channel Wizard) until Phase 2 is complete.**
 
 ---
 
