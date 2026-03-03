@@ -37,14 +37,14 @@
 
 **Context:** Single-tenant container replace flow. Stops the old container, pulls the new image, starts a new container with the same volume mounts, verifies `/readyz`, and rolls back on failure. Must preserve all tenant data (volumes are not touched).
 
-- [ ] Accept `--slug` (tenant slug) and `--image-tag` arguments
-- [ ] Stop the existing container for the tenant
-- [ ] Pull the new image
-- [ ] Start a new container with identical volume mounts and env vars (read from provisioner state or `deployment_state.json`)
-- [ ] Poll `/readyz` with timeout (60s, matching provisioner behavior from P1-2)
-- [ ] On success: remove old container, log result
-- [ ] On failure: stop new container, restart old container (rollback), log failure, return non-zero exit code
-- [ ] Support `--dry-run` flag to show what would happen without executing
+- [x] Accept `--slug` (tenant slug) and `--image-tag` (full GHCR path) arguments; also `--dry-run` and `--no-pull`
+- [x] Resolve running container state via `docker inspect`: host port, volume binds, env vars, extra hosts, restart policy
+- [x] Pull new image from GHCR (requires `GITHUB_TOKEN`; skippable with `--no-pull`)
+- [x] Start new container with identical port, volumes, env vars, restart policy, and new image
+- [x] Poll `/readyz` with 60s timeout, 2s interval (matching provisioner.ts behavior)
+- [x] On success: remove old container, update `deployment_state.json` (success count), exit 0
+- [x] On failure: stop/remove new container, rename old back, restart old, verify old health, update `deployment_state.json` (failure count), exit 1
+- [x] `--dry-run` prints every action without executing any Docker commands
 
 ---
 
