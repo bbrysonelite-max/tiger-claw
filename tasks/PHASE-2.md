@@ -1,7 +1,7 @@
 # Phase 2 — Update Pipeline
 
 **Status:** COMPLETE
-**Completed:** 2026-02-27. All tasks done. Live canary deployment validation pending (requires staging environment — validate during Phase 3 integration test).
+**Completed:** 2026-03-03. Full update pipeline implemented. SecretRef end-to-end validation pending first live canary deployment.
 **Prerequisite:** Phase 1 complete (verified — SecretRef key rotation, provisioner edge cases, ACP dispatch assessment)
 **Completion signal:** All five tasks below are checked off, committed, and verified with a canary deployment test.
 
