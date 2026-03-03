@@ -129,6 +129,9 @@ interface KeyState {
   layer2Key?: string;   // Tenant primary key
   layer3Key?: string;   // Tenant fallback key
 
+  // SecretRef reload tracking
+  secretsReloadedAt?: string;
+
   // Event log (last MAX_EVENTS)
   events: KeyEvent[];
 
@@ -376,8 +379,10 @@ function detectProvider(key: string): "anthropic" | "openai" | "unknown" {
 
 function validateAnthropicKey(key: string): Promise<{ valid: boolean; error?: string }> {
   return new Promise((resolve) => {
+    const rawModel = process.env["PLATFORM_CHEAP_MODEL"] ?? "claude-haiku-4-5-20251001";
+    const model = rawModel.includes("/") ? rawModel.split("/").pop()! : rawModel;
     const body = JSON.stringify({
-      model: process.env["PLATFORM_CHEAP_MODEL"] ?? "claude-haiku-4-5-20251001",
+      model,
       max_tokens: 1,
       messages: [{ role: "user", content: "hi" }],
     });
@@ -470,25 +475,21 @@ async function validateApiKey(key: string): Promise<{ valid: boolean; error?: st
 }
 
 // ---------------------------------------------------------------------------
-// openclaw.json hot-key update
-// Rewrites agent.anthropicApiKey / agent.openaiApiKey in openclaw.json so
-// OpenClaw's Config Manager (OPENCLAW-BLUEPRINT.md §2.1) hot-reloads the new
-// key immediately without a container restart.
+// SecretRef key rotation (ADR-0007)
 //
-// Atomic write pattern: write to a .tmp file then fs.renameSync into place.
-// rename(2) is a single kernel syscall — the file watcher never sees a partial
-// write, preventing a corrupt-config reload race.
+// Writes the active key to ~/.openclaw/secrets.json and triggers
+// OpenClaw's secrets.reload RPC. The gateway atomically swaps to the
+// new in-memory snapshot. On failure, the gateway keeps the last-known-good
+// snapshot — no crash, no data loss.
 //
-// Non-fatal: if the write fails for any reason, key_state.json still has the
-// correct activeLayer so the next container restart resolves to the right key.
+// Layer rules:
+//   Layer 1/4 (env-var-sourced): write to secrets.json only (best-effort).
+//   Layer 2/3 (tenant keys):     write → reload → poll /readyz.
 // ---------------------------------------------------------------------------
 
-const OPENCLAW_CONFIG_PATH = "/root/.openclaw/openclaw.json";
-const OPENCLAW_CONFIG_TMP  = "/root/.openclaw/openclaw.json.tmp";
-
-function detectProviderFromKey(key: string): "anthropic" | "openai" {
-  return key.startsWith("sk-ant-") ? "anthropic" : "openai";
-}
+const SECRETS_FILE_PATH = "/root/.openclaw/secrets.json";
+const OPENCLAW_GATEWAY_PORT = parseInt(process.env["OPENCLAW_PORT"] ?? "18789", 10);
+const SECRETS_RELOAD_TIMEOUT_MS = 10_000;
 
 function resolveKeyForLayer(layer: LayerNumber, state: KeyState): string {
   switch (layer) {
@@ -499,37 +500,96 @@ function resolveKeyForLayer(layer: LayerNumber, state: KeyState): string {
   }
 }
 
-function rewriteOpenClawKey(layer: LayerNumber, state: KeyState): void {
+function writeSecretsFile(key: string): void {
+  const dir = path.dirname(SECRETS_FILE_PATH);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    SECRETS_FILE_PATH,
+    JSON.stringify({ active: { apiKey: key } }, null, 2),
+    "utf8"
+  );
+}
+
+function triggerSecretsReload(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const token = process.env["OPENCLAW_GATEWAY_TOKEN"] ?? "";
+    const body = JSON.stringify({ method: "secrets.reload" });
+    const req = http.request(
+      {
+        hostname: "localhost",
+        port: OPENCLAW_GATEWAY_PORT,
+        path: "/rpc",
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        timeout: 5000,
+      },
+      (res) => { resolve(res.statusCode === 200); }
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+    req.write(body);
+    req.end();
+  });
+}
+
+function checkReadyz(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { hostname: "localhost", port: OPENCLAW_GATEWAY_PORT, path: "/readyz", timeout: 5000 },
+      (res) => { resolve(res.statusCode === 200); }
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+  });
+}
+
+async function pollReadyz(timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await checkReadyz()) return true;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+async function rotateViaSecretRef(
+  layer: LayerNumber,
+  state: KeyState,
+  logger: ToolContext["logger"]
+): Promise<void> {
+  const key = resolveKeyForLayer(layer, state);
+  if (!key) {
+    logger.warn("tiger_keys: no key available for SecretRef write", { layer });
+    return;
+  }
+
   try {
-    const raw = fs.readFileSync(OPENCLAW_CONFIG_PATH, "utf8");
-    const config = JSON.parse(raw) as Record<string, unknown>;
-    const agent = (config["agent"] ?? {}) as Record<string, unknown>;
+    writeSecretsFile(key);
+  } catch (err) {
+    logger.error("tiger_keys: failed to write secrets.json", { err: String(err) });
+    return;
+  }
 
-    const key = resolveKeyForLayer(layer, state);
-    const provider = detectProviderFromKey(key);
+  // Layer 1/4: env-var-sourced keys — write-only, no reload trigger
+  if (layer === 1 || layer === 4) return;
 
-    // Clear both provider key fields, then set exactly the one that matches
-    delete agent["anthropicApiKey"];
-    delete agent["openaiApiKey"];
+  // Layer 2/3: full reload + readyz confirmation
+  const reloaded = await triggerSecretsReload();
+  if (!reloaded) {
+    logger.error("tiger_keys: secrets.reload RPC failed — gateway keeps last-known-good key");
+    return;
+  }
 
-    if (provider === "anthropic") {
-      agent["anthropicApiKey"] = key;
-    } else {
-      agent["openaiApiKey"] = key;
-    }
-
-    // Layers 1+4 always use cheapest model (LOCKED per Block 1.7)
-    if (layer === 1 || layer === 4) {
-      agent["model"] = process.env["PLATFORM_CHEAP_MODEL"] ?? "claude-haiku-4-5-20251001";
-    }
-
-    config["agent"] = agent;
-
-    // Atomic write: tmp → rename so the file watcher always reads a complete file
-    fs.writeFileSync(OPENCLAW_CONFIG_TMP, JSON.stringify(config, null, 2), "utf8");
-    fs.renameSync(OPENCLAW_CONFIG_TMP, OPENCLAW_CONFIG_PATH);
-  } catch {
-    // Non-fatal — key_state.json is already saved; next restart resolves correctly.
+  const ready = await pollReadyz(SECRETS_RELOAD_TIMEOUT_MS);
+  if (ready) {
+    state.secretsReloadedAt = new Date().toISOString();
+    logger.info("tiger_keys: SecretRef reload confirmed, /readyz passed");
+  } else {
+    logger.error("tiger_keys: /readyz did not pass within 10s after secrets.reload");
   }
 }
 
@@ -537,13 +597,14 @@ function rewriteOpenClawKey(layer: LayerNumber, state: KeyState): void {
 // Rotation — perform a layer switch
 // ---------------------------------------------------------------------------
 
-function performRotation(
+async function performRotation(
   state: KeyState,
   fromLayer: LayerNumber,
   reason: string,
   workdir: string,
-  tenantId: string
-): { toLayer: LayerNumber | null; tenantMessage: string; adminAlert: boolean } {
+  tenantId: string,
+  logger: ToolContext["logger"]
+): Promise<{ toLayer: LayerNumber | null; tenantMessage: string; adminAlert: boolean }> {
   const toLayer = nextLayer(fromLayer);
 
   if (toLayer === null) {
@@ -596,9 +657,8 @@ function performRotation(
 
   saveKeyState(workdir, state);
 
-  // Rewrite openclaw.json immediately so OpenClaw hot-reloads the new key
-  // without requiring a container restart (Block 4 runtime cascade).
-  rewriteOpenClawKey(toLayer, state);
+  // Write key to secrets.json and trigger SecretRef reload (ADR-0007).
+  await rotateViaSecretRef(toLayer, state, logger);
 
   const requiresAdminAlert = toLayer === 3 || toLayer === 4;
   if (requiresAdminAlert) {
@@ -639,13 +699,13 @@ function performRotation(
 // Action: report_error
 // ---------------------------------------------------------------------------
 
-function handleReportError(
+async function handleReportError(
   params: ReportErrorParams,
   state: KeyState,
   workdir: string,
   tenantId: string,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   if (state.tenantPaused) {
     return {
       ok: true,
@@ -674,12 +734,13 @@ function handleReportError(
 
   switch (decision) {
     case "rotate": {
-      const result = performRotation(
+      const result = await performRotation(
         state,
         state.activeLayer,
         `HTTP ${params.httpStatus ?? "timeout"} — ${errorType}`,
         workdir,
-        tenantId
+        tenantId,
+        logger
       );
 
       return {
@@ -825,10 +886,9 @@ async function handleRestoreKey(
 
   saveKeyState(workdir, state);
 
-  // Hot-swap the key in openclaw.json so OpenClaw picks up the restored key
-  // immediately without a container restart.
+  // Write key to secrets.json and trigger SecretRef reload (ADR-0007).
   if (shouldSwitch) {
-    rewriteOpenClawKey(state.activeLayer, state);
+    await rotateViaSecretRef(state.activeLayer, state, logger);
   }
 
   logger.info("tiger_keys: key restored", {
@@ -864,12 +924,12 @@ async function handleRestoreKey(
 // Action: record_message
 // ---------------------------------------------------------------------------
 
-function handleRecordMessage(
+async function handleRecordMessage(
   state: KeyState,
   workdir: string,
   tenantId: string,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   const today = new Date().toISOString().slice(0, 10);
   const layer = state.activeLayer;
 
@@ -885,7 +945,7 @@ function handleRecordMessage(
           timestamp: new Date().toISOString(),
           message: `Layer 1 expired (${LAYER_LIMITS[1].expiryHours}h elapsed).`,
         });
-        const rotation = performRotation(state, 1, "Layer 1 time limit reached (72h)", workdir, tenantId);
+        const rotation = await performRotation(state, 1, "Layer 1 time limit reached (72h)", workdir, tenantId, logger);
         saveKeyState(workdir, state);
         return {
           ok: true,
@@ -907,7 +967,7 @@ function handleRecordMessage(
         timestamp: new Date().toISOString(),
         message: `Layer 1 exhausted (${LAYER_LIMITS[1].totalMessages} messages used).`,
       });
-      const rotation = performRotation(state, 1, "Layer 1 message limit reached", workdir, tenantId);
+      const rotation = await performRotation(state, 1, "Layer 1 message limit reached", workdir, tenantId, logger);
       saveKeyState(workdir, state);
       return {
         ok: true,
@@ -943,7 +1003,7 @@ function handleRecordMessage(
         message: `Layer 3 daily limit reached (${LAYER_LIMITS[3].dailyMessages} messages).`,
       });
 
-      const rotation = performRotation(state, 3, "Layer 3 daily message limit reached", workdir, tenantId);
+      const rotation = await performRotation(state, 3, "Layer 3 daily message limit reached", workdir, tenantId, logger);
       saveKeyState(workdir, state);
 
       return {
@@ -983,7 +1043,7 @@ function handleRecordMessage(
       const hoursSinceActivation =
         (Date.now() - new Date(state.layer4ActivatedAt).getTime()) / 3600000;
       if (hoursSinceActivation >= LAYER_LIMITS[4].pauseAfterHours) {
-        const rotation = performRotation(state, 4, "Layer 4 active for 24 hours — auto-pause", workdir, tenantId);
+        const rotation = await performRotation(state, 4, "Layer 4 active for 24 hours — auto-pause", workdir, tenantId, logger);
         saveKeyState(workdir, state);
         return {
           ok: true,
@@ -1001,7 +1061,7 @@ function handleRecordMessage(
         message: `Layer 4 exhausted (${LAYER_LIMITS[4].totalMessages} messages used).`,
       });
 
-      const rotation = performRotation(state, 4, "Layer 4 message limit exhausted", workdir, tenantId);
+      const rotation = await performRotation(state, 4, "Layer 4 message limit exhausted", workdir, tenantId, logger);
       saveKeyState(workdir, state);
 
       return {
@@ -1038,13 +1098,13 @@ function handleRecordMessage(
 // Action: rotate (manual override)
 // ---------------------------------------------------------------------------
 
-function handleRotate(
+async function handleRotate(
   params: RotateParams,
   state: KeyState,
   workdir: string,
   tenantId: string,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   if (state.tenantPaused) {
     return {
       ok: true,
@@ -1056,7 +1116,7 @@ function handleRotate(
   const reason = params.reason ?? "Manual rotation requested";
   logger.info("tiger_keys: manual rotation", { fromLayer: state.activeLayer, reason });
 
-  const result = performRotation(state, state.activeLayer, reason, workdir, tenantId);
+  const result = await performRotation(state, state.activeLayer, reason, workdir, tenantId, logger);
 
   return {
     ok: true,
@@ -1158,16 +1218,16 @@ async function execute(
   try {
     switch (action) {
       case "report_error":
-        return handleReportError(params as unknown as ReportErrorParams, state, workdir, tenantId, logger);
+        return await handleReportError(params as unknown as ReportErrorParams, state, workdir, tenantId, logger);
 
       case "restore_key":
         return await handleRestoreKey(params as unknown as RestoreKeyParams, state, workdir, logger);
 
       case "record_message":
-        return handleRecordMessage(state, workdir, tenantId, logger);
+        return await handleRecordMessage(state, workdir, tenantId, logger);
 
       case "rotate":
-        return handleRotate(params as unknown as RotateParams, state, workdir, tenantId, logger);
+        return await handleRotate(params as unknown as RotateParams, state, workdir, tenantId, logger);
 
       case "status":
         return handleStatus(state);

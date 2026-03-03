@@ -63,10 +63,10 @@ Implemented during P0-4:
 - [x] Update ADR-0007 with the confirmed SecretRef mechanism
 
 **Implementation:**
-- [ ] Modify `tiger_keys.ts` to use SecretRef for Layer 2/3 key storage and rotation
-- [ ] Layer 4 (platform emergency) remains env-var-only — no SecretRef needed
-- [ ] Ensure key rotation triggers are compatible with the cron job schema (if cron-driven)
-- [ ] Test: rotate a key via `tiger_keys restore_key` and confirm the gateway picks it up without restart
+- [x] Modify `tiger_keys.ts` to use SecretRef for Layer 2/3 key storage and rotation
+- [x] Layer 4 (platform emergency) remains env-var-only — writes to secrets.json but no reload trigger
+- [x] Ensure key rotation triggers are compatible with the cron job schema (if cron-driven) — rotation is event-driven via tool calls, no cron dependency
+- [ ] Test: rotate a key via `tiger_keys restore_key` and confirm the gateway picks it up without restart (requires P1-4 entrypoint.sh changes first)
 
 ---
 
