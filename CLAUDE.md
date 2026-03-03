@@ -125,6 +125,8 @@ These cannot be changed. Do not propose changes. Do not work around them. If you
 **Platform infrastructure:**
 - Server: DigitalOcean (209.97.168.251)
 - Platform domain: `tigerclaw.io` (marketing + Channel Wizard), `app.tigerclaw.io` (tenant portal), `api.tigerclaw.io` (Tiger Claw API proxy)
+- Domain registrar: Porkbun (`porkbun.com/account/domainsSpeedy`) — currently parked, DNS not yet configured
+- When ready to go live: point `tigerclaw.io` A record to DigitalOcean server (209.97.168.251), add SSL via Let's Encrypt
 - Tiger Claw API port: 4000
 - Container port: 18789 (OpenClaw gateway)
 - Database: PostgreSQL (platform ops) + SQLite (per-tenant data)
