@@ -47,8 +47,8 @@ Implemented during P0-4:
 - `api/src/services/provisioner.ts` — switched from `waitForHealth` to `waitForReady`, timeout 60s (ADR-0008)
 
 **Remaining work:**
-- [ ] Confirm `getContainerReady()` handles edge cases (container crash during startup, port not yet bound)
-- [ ] Add a unit test for `waitForReady` timeout behavior
+- [x] Confirm `getContainerReady()` handles edge cases — ECONNREFUSED (crash/port not bound) already handled by `.on("error")` → resolves false
+- [x] Add a unit test for `waitForReady` timeout behavior — 4 tests in `api/src/services/__tests__/provisioner.test.ts`
 
 ---
 

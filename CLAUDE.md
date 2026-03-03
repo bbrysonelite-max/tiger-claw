@@ -102,7 +102,7 @@ These cannot be changed. Do not propose changes. Do not work around them. If you
 | 9 | Canary group: 5 tenants, 24h soak minimum before fleet rollout. |
 | 10 | Health check every 30 seconds per container. |
 | 11 | `channels.telegram.streaming` is explicitly `"off"` in all generated configs. |
-| 12 | `agents.defaults.think` is explicitly `"low"` in all generated configs. |
+| 12 | `agents.defaults.thinkingDefault` is explicitly `"low"` in all generated configs. |
 | 13 | Layer 2/3 API keys use OpenClaw SecretRef (`~/.openclaw/secrets.json`). Layer 4 stays as env var. Never hot-write `openclaw.json` for key rotation. |
 | 14 | Container readiness uses `/readyz` endpoint. Container liveness uses `/healthz`. |
 

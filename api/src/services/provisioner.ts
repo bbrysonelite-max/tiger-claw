@@ -191,16 +191,16 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
   const healthy = await waitForReady(input.slug, port, 60);
   if (!healthy) {
     await updateTenantStatus(tenant.id, "suspended", {
-      suspendedReason: "Health check timed out (30s)",
+      suspendedReason: "Readiness check timed out (60s)",
     });
     return {
       success: false,
-      error: "Container did not respond to health check within 30 seconds.",
-      steps: [...steps, "Health check FAILED (30s timeout)"],
+      error: `Container ${input.slug} did not pass /readyz within 60 seconds.`,
+      steps: [...steps, "Readiness check FAILED (60s timeout)"],
       tenant,
     };
   }
-  steps.push("Health check PASSED");
+  steps.push("Readiness check PASSED (/readyz → 200)");
 
   // 7. Status → onboarding
   await updateTenantStatus(tenant.id, "onboarding");
@@ -310,16 +310,23 @@ export async function deprovisionTenant(tenant: Tenant): Promise<{ steps: string
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function waitForReady(slug: string, port: number, timeoutSeconds: number): Promise<boolean> {
+export async function waitForReady(slug: string, port: number, timeoutSeconds: number): Promise<boolean> {
   const deadline = Date.now() + timeoutSeconds * 1000;
+  let attempt = 0;
   while (Date.now() < deadline) {
-    if (await getContainerReady(slug, port)) return true;
+    attempt++;
+    if (await getContainerReady(slug, port)) {
+      console.log(`[provisioner] ${slug}: /readyz passed on attempt ${attempt}`);
+      return true;
+    }
+    console.log(`[provisioner] ${slug}: /readyz attempt ${attempt} failed, retrying in 2s`);
     await sleep(2000);
   }
+  console.error(`[provisioner] ${slug}: /readyz failed after ${attempt} attempts (${timeoutSeconds}s timeout)`);
   return false;
 }
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
