@@ -18,6 +18,7 @@ Each ADR documents a significant architectural decision: the context that led to
 | [0008](0008-readyz-for-provisioning.md) | Use `/readyz` for Container Provisioning Readiness | Accepted | 2026-03-03 |
 | [0009](0009-explicit-streaming-off.md) | Telegram Streaming Explicitly Disabled | Accepted — Immutable | 2026-03-03 |
 | [0010](0010-explicit-think-low.md) | Thinking Level Explicitly Set to Low | Accepted | 2026-03-03 |
+| [0011](0011-gateway-mode-local-bind-lan.md) | Gateway Mode `local` and Bind `lan` Required for Containers | Accepted | 2026-03-03 |
 
 ## How to Add a New ADR
 

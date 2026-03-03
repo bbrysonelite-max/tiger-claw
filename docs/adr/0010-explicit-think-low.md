@@ -24,11 +24,14 @@ All generated `openclaw.json` files must include:
 {
   agents: {
     defaults: {
-      think: "low"
+      thinkingDefault: "low"
     }
   }
 }
 ```
+
+> **Note (P0-5b):** The correct config key is `thinkingDefault`, not `think`.
+> `think` is a display/template alias only. Source: docs.openclaw.ai/gateway/configuration-reference
 
 This is an explicit override that does not rely on the OpenClaw default.
 
@@ -42,8 +45,8 @@ If a specific Tiger Claw tool genuinely needs deeper reasoning (e.g., `tiger_obj
 
 ## Agent Rule
 
-`entrypoint.sh` must always set `agents.defaults.think: "low"`. Never remove this line. Never set it to `"adaptive"` at the platform level.
+`entrypoint.sh` must always set `agents.defaults.thinkingDefault: "low"`. Never remove this line. Never set it to `"adaptive"` at the platform level.
 
 ## Status of Implementation
 
-Pending. Phase 0 Task P0-5 in `tasks/PHASE-0.md`.
+Complete. Implemented in `docker/customer/entrypoint.sh` (P0-5/P0-5b). Config key corrected from `think` to `thinkingDefault` during P0-5b.
