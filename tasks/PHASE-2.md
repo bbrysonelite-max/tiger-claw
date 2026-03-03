@@ -1,6 +1,6 @@
 # Phase 2 — Update Pipeline
 
-**Status:** NOT STARTED
+**Status:** ACTIVE
 **Prerequisite:** Phase 1 complete (verified — SecretRef key rotation, provisioner edge cases, ACP dispatch assessment)
 **Completion signal:** All five tasks below are checked off, committed, and verified with a canary deployment test.
 
@@ -21,13 +21,13 @@
 
 **Context:** The build script must produce immutable Docker images with parameterized version tagging. Containers are never updated in-place — a new image is built with the target OpenClaw version baked in.
 
-- [ ] Accept `--tc-version` and `--oc-version` CLI arguments
-- [ ] Generate image tag in locked format: `tiger-claw:{TC_VERSION}-oc{OC_VERSION}`
-- [ ] Build Docker image using `docker/customer/Dockerfile`
-- [ ] Run `openclaw config validate` inside the image as a post-build sanity check
-- [ ] Push image to registry (DigitalOcean Container Registry or Docker Hub — confirm target)
-- [ ] Print image tag on success for use by `ops/update.sh`
-- [ ] Error handling: fail fast on build errors, missing args, or registry push failures
+- [x] Accept `--tc-version` and `--oc-version` CLI arguments (both required, error on missing)
+- [x] Generate image tag in locked format: `tiger-claw:{TC_VERSION}-oc{OC_VERSION}`
+- [x] Build Docker image using `docker/customer/Dockerfile` with both build args
+- [x] Config validate skipped — `openclaw.json` is generated at runtime by `entrypoint.sh` (no static config at build time). Config validated by `/readyz` at container startup.
+- [x] Push image to GHCR: `ghcr.io/bbrysonelite-max/tiger-claw:{tag}` (requires `GITHUB_TOKEN`)
+- [x] Print full image tag to stdout on success for use by `ops/update.sh`
+- [x] Error handling: fail fast on build errors, missing args, missing `GITHUB_TOKEN`, or push failures
 
 ---
 
