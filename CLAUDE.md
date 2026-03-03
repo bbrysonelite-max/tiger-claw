@@ -124,7 +124,7 @@ These cannot be changed. Do not propose changes. Do not work around them. If you
 
 **Platform infrastructure:**
 - Server: DigitalOcean (209.97.168.251)
-- Platform domain: `thegoods.ai` (marketing), `app.thegoods.ai` (Channel Wizard + portal), `api.thegoods.ai` (Tiger Claw API proxy)
+- Platform domain: `tigerclaw.io` (marketing + Channel Wizard), `app.tigerclaw.io` (tenant portal), `api.tigerclaw.io` (Tiger Claw API proxy)
 - Tiger Claw API port: 4000
 - Container port: 18789 (OpenClaw gateway)
 - Database: PostgreSQL (platform ops) + SQLite (per-tenant data)
