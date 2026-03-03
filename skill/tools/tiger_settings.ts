@@ -419,6 +419,118 @@ function handleReset(
 }
 
 // ---------------------------------------------------------------------------
+// Action: channels
+// ---------------------------------------------------------------------------
+
+type ChannelSubAction = "list" | "add" | "remove";
+type ChannelName = "whatsapp" | "line";
+
+interface ChannelsParams {
+  action: "channels";
+  subAction: ChannelSubAction;
+  channel?: ChannelName;
+  lineToken?: string;
+}
+
+async function handleChannels(
+  params: ChannelsParams,
+  _workdir: string,
+  logger: ToolContext["logger"],
+): Promise<ToolResult> {
+  const slug = process.env["TENANT_SLUG"] ?? process.env["TENANT_ID"] ?? "";
+  const apiBase = process.env["TIGER_CLAW_API_URL"] ?? "http://host.docker.internal:4000";
+
+  if (!slug) {
+    return { ok: false, error: "TENANT_SLUG env var is not set — cannot manage channels." };
+  }
+
+  switch (params.subAction) {
+    case "list": {
+      // Telegram is always active; read WhatsApp/LINE from settings.json for local state
+      const settings = loadSettings(_workdir);
+      const lines = [
+        "Channel status:",
+        "",
+        "  Telegram   ACTIVE   (primary — always on)",
+        `  WhatsApp   ${settings.preferredChannel === "whatsapp" || process.env["WHATSAPP_ENABLED"] === "true" ? "ENABLED" : "DISABLED"}`,
+        `  LINE       ${settings.preferredChannel === "line" ? "CONFIGURED" : "NOT CONFIGURED"}`,
+        "",
+        "To add/remove: tiger_settings channels add whatsapp, channels remove line, etc.",
+      ];
+      return { ok: true, output: lines.join("\n") };
+    }
+
+    case "add": {
+      if (!params.channel) {
+        return { ok: false, error: "channel is required for add. Valid: whatsapp | line" };
+      }
+
+      if (params.channel === "whatsapp") {
+        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/whatsapp`, { enabled: true });
+        if (!resp.ok) return { ok: false, error: resp.error ?? "Failed to enable WhatsApp." };
+        logger.info("tiger_settings: channels add whatsapp");
+        return {
+          ok: true,
+          output: "WhatsApp enabled. Your agent will send a QR code to this chat shortly. Scan it with WhatsApp to link your account.",
+        };
+      }
+
+      if (params.channel === "line") {
+        if (!params.lineToken || params.lineToken.length > 200) {
+          return { ok: false, error: "lineToken is required (max 200 characters)." };
+        }
+        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/line`, { token: params.lineToken });
+        if (!resp.ok) return { ok: false, error: resp.error ?? "Failed to configure LINE." };
+        logger.info("tiger_settings: channels add line");
+        return { ok: true, output: "LINE channel configured." };
+      }
+
+      return { ok: false, error: `Unknown channel: "${params.channel}". Valid: whatsapp | line` };
+    }
+
+    case "remove": {
+      if (!params.channel) {
+        return { ok: false, error: "channel is required for remove. Valid: whatsapp | line" };
+      }
+
+      if (params.channel === "whatsapp") {
+        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/whatsapp`, { enabled: false });
+        if (!resp.ok) return { ok: false, error: resp.error ?? "Failed to disable WhatsApp." };
+        logger.info("tiger_settings: channels remove whatsapp");
+        return { ok: true, output: "WhatsApp disabled." };
+      }
+
+      if (params.channel === "line") {
+        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/line`, { token: null });
+        if (!resp.ok) return { ok: false, error: resp.error ?? "Failed to remove LINE." };
+        logger.info("tiger_settings: channels remove line");
+        return { ok: true, output: "LINE channel removed." };
+      }
+
+      return { ok: false, error: `Unknown channel: "${params.channel}". Valid: whatsapp | line` };
+    }
+
+    default:
+      return { ok: false, error: `Unknown subAction: "${params.subAction}". Valid: list | add | remove` };
+  }
+}
+
+async function apiPost(url: string, body: unknown): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (resp.ok) return { ok: true };
+    const data = await resp.json().catch(() => ({}));
+    return { ok: false, error: (data as Record<string, string>).error ?? `HTTP ${resp.status}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main execute dispatcher
 // ---------------------------------------------------------------------------
 
@@ -442,10 +554,13 @@ async function execute(
       case "reset":
         return handleReset(params as unknown as ResetParams, workdir, logger);
 
+      case "channels":
+        return await handleChannels(params as unknown as ChannelsParams, workdir, logger);
+
       default:
         return {
           ok: false,
-          error: `Unknown action: "${action}". Valid: get | set | reset`,
+          error: `Unknown action: "${action}". Valid: get | set | reset | channels`,
         };
     }
   } catch (err) {
@@ -464,23 +579,37 @@ async function execute(
 export const tiger_settings = {
   name: "tiger_settings",
   description:
-    "Tenant settings management. Reads and writes settings.json in the workdir. Other tools read this file directly (tiger_contact reads manualApproval, tiger_briefing reads dailyBriefingEnabled, etc). Settings: manualApproval (require approval before first contacts), hiveOptIn (share patterns with platform Hive), preferredChannel (telegram/whatsapp/line/sms), timezone (IANA), language, dailyBriefingEnabled, scoutEnabled, maxDailyContacts, contactWindowStart/End (hours), slowDripEnabled, aftercareEnabled, notifyOnConversion, notifyOnNewQualified, botName override. All settings have safe defaults — tool is safe to call with get at any time.",
+    "Tenant settings and channel management. Actions: get/set/reset for settings.json, channels for managing messaging channels (Telegram, WhatsApp, LINE). Settings: manualApproval, hiveOptIn, preferredChannel, timezone, language, dailyBriefingEnabled, scoutEnabled, maxDailyContacts, contactWindowStart/End, slowDripEnabled, aftercareEnabled, notifyOnConversion, notifyOnNewQualified, botName. Channel commands: channels list (show status), channels add whatsapp/line, channels remove whatsapp/line.",
 
   parameters: {
     type: "object",
     properties: {
       action: {
         type: "string",
-        enum: ["get", "set", "reset"],
+        enum: ["get", "set", "reset", "channels"],
         description:
-          "get: show all current settings with descriptions. set: update one setting by key + value. reset: reset one setting (key required) or all settings (no key) to defaults.",
+          "get: show all current settings. set: update one setting. reset: reset to defaults. channels: manage messaging channels (requires subAction).",
       },
       key: {
         type: "string",
-        description: "Setting name. Required for set and reset (single-key reset). Valid keys: manualApproval, hiveOptIn, slowDripEnabled, aftercareEnabled, scoutEnabled, dailyBriefingEnabled, maxDailyContacts, contactWindowStart, contactWindowEnd, notifyOnConversion, notifyOnNewQualified, preferredChannel, timezone, language, botName.",
+        description: "Setting name. Required for set and reset (single-key reset).",
       },
       value: {
-        description: "New value for the setting. Required for set. Type depends on the setting (boolean, number, or string).",
+        description: "New value for the setting. Required for set.",
+      },
+      subAction: {
+        type: "string",
+        enum: ["list", "add", "remove"],
+        description: "Channel sub-action. Required when action is 'channels'.",
+      },
+      channel: {
+        type: "string",
+        enum: ["whatsapp", "line"],
+        description: "Channel to add or remove. Required for channels add/remove.",
+      },
+      lineToken: {
+        type: "string",
+        description: "LINE Messaging API channel token. Required for channels add line.",
       },
     },
     required: ["action"],

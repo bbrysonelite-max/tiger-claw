@@ -14,10 +14,14 @@ import { Router, type Request, type Response } from "express";
 import * as http from "http";
 import {
   getTenant,
+  getTenantBySlug,
   updateTenantStatus,
+  updateTenantChannelConfig,
   logAdminEvent,
   type TenantStatus,
 } from "../services/db.js";
+import { recreateContainerWithEnv } from "../services/docker.js";
+import { waitForReady } from "../services/provisioner.js";
 
 const router = Router();
 
@@ -165,6 +169,92 @@ router.post("/:tenantId/scout", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("[tenants] POST scout error:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /tenants/:slug/channels/whatsapp
+// Body: { enabled: boolean }
+// Called by tiger_settings channels action to enable/disable WhatsApp.
+// Saves config and recreates the container with updated WHATSAPP_ENABLED env var.
+// ---------------------------------------------------------------------------
+
+router.post("/:slug/channels/whatsapp", async (req: Request, res: Response) => {
+  try {
+    const tenant = await getTenantBySlug(req.params["slug"]!);
+    if (!tenant) {
+      return res.status(404).json({ error: "Tenant not found" });
+    }
+
+    const { enabled } = req.body as { enabled?: boolean };
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "enabled (boolean) is required." });
+    }
+
+    await updateTenantChannelConfig(tenant.id, { whatsappEnabled: enabled });
+
+    // Recreate container with updated WHATSAPP_ENABLED env var
+    if (tenant.port) {
+      try {
+        const envUpdates: Record<string, string | undefined> = enabled
+          ? { WHATSAPP_ENABLED: "true" }
+          : { WHATSAPP_ENABLED: undefined };
+        await recreateContainerWithEnv(tenant.slug, envUpdates);
+        await waitForReady(tenant.slug, tenant.port, 60);
+      } catch (err) {
+        console.error(`[tenants] WhatsApp container restart failed for ${tenant.slug}:`, err);
+        return res.status(500).json({ error: "Channel config saved but container restart failed." });
+      }
+    }
+
+    await logAdminEvent({
+      tenantId: tenant.id,
+      action: "channel_whatsapp",
+      details: { enabled, source: "channels_api" },
+    });
+
+    return res.json({ ok: true, whatsappEnabled: enabled });
+  } catch (err) {
+    console.error("[tenants] POST channels/whatsapp error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /tenants/:slug/channels/line
+// Body: { token: string | null }
+// Called by tiger_settings channels action to configure/remove LINE.
+// Saves config — no container restart needed (LINE token read at runtime).
+// ---------------------------------------------------------------------------
+
+router.post("/:slug/channels/line", async (req: Request, res: Response) => {
+  try {
+    const tenant = await getTenantBySlug(req.params["slug"]!);
+    if (!tenant) {
+      return res.status(404).json({ error: "Tenant not found" });
+    }
+
+    const { token } = req.body as { token?: string | null };
+    if (token !== null && token !== undefined) {
+      if (typeof token !== "string" || token.length > 200) {
+        return res.status(400).json({ error: "LINE token must be a string of 200 characters or fewer." });
+      }
+    }
+
+    await updateTenantChannelConfig(tenant.id, {
+      lineToken: token === null ? null : (token ?? undefined),
+    });
+
+    await logAdminEvent({
+      tenantId: tenant.id,
+      action: token ? "channel_line_add" : "channel_line_remove",
+      details: { source: "channels_api" },
+    });
+
+    return res.json({ ok: true, lineConfigured: !!token });
+  } catch (err) {
+    console.error("[tenants] POST channels/line error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
