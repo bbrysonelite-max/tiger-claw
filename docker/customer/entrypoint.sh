@@ -102,11 +102,11 @@ if [ -z "$ACTIVE_KEY" ]; then
   echo "              Bot will start but LLM calls will fail until a key is provided."
 fi
 
-# Build the provider-specific API key field for openclaw.json
+# Build the provider-specific JSON block for openclaw.json "providers" section
 if [ "$ACTIVE_PROVIDER" = "openai" ]; then
-  API_KEY_FIELD='"openaiApiKey": "'"$ACTIVE_KEY"'"'
+  PROVIDERS_BLOCK='"openai": { "apiKey": "'"$ACTIVE_KEY"'" }'
 else
-  API_KEY_FIELD='"anthropicApiKey": "'"$ACTIVE_KEY"'"'
+  PROVIDERS_BLOCK='"anthropic": { "apiKey": "'"$ACTIVE_KEY"'" }'
 fi
 
 # ── Timezone-aware cron schedule computation ─────────────────────────────────
@@ -172,6 +172,8 @@ if [ -n "${LINE_CHANNEL_SECRET:-}" ] && [ -n "${LINE_CHANNEL_ACCESS_TOKEN:-}" ];
 fi
 
 # ── Generate openclaw.json ───────────────────────────────────────────────────
+# Config structure matches OpenClaw v2026.3.2 schema (OPENCLAW-TYPES.md §8)
+# LOCKED overrides: streaming "off" (ADR-0009), think "low" (ADR-0010)
 cat > /root/.openclaw/openclaw.json << EOF
 {
   "gateway": {
@@ -181,14 +183,20 @@ cat > /root/.openclaw/openclaw.json << EOF
       "token": "${OPENCLAW_GATEWAY_TOKEN:-dev-token}"
     }
   },
-  "agent": {
-    "model": "${ACTIVE_MODEL}",
-    ${API_KEY_FIELD}
+  "agents": {
+    "defaults": {
+      "model": "${ACTIVE_MODEL}",
+      "think": "low"
+    }
+  },
+  "providers": {
+    ${PROVIDERS_BLOCK}
   },
   "channels": {
     "telegram": {
       "enabled": ${TELEGRAM_ENABLED},
-      "token": "${TELEGRAM_BOT_TOKEN:-}"
+      "token": "${TELEGRAM_BOT_TOKEN:-}",
+      "streaming": "off"
     },
     "line": {
       "enabled": ${LINE_ENABLED},
