@@ -137,6 +137,7 @@ export type TenantStatus =
   | "pending"
   | "onboarding"
   | "active"
+  | "updating"
   | "paused"
   | "suspended"
   | "terminated";
