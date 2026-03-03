@@ -53,13 +53,14 @@
 
 **Context:** Tenants can manage channels directly from their Telegram chat using the settings tool, without visiting the web wizard.
 
-- [ ] Add `channels` sub-action to `skill/tools/tiger_settings.ts`
-- [ ] `channels list` — show all configured channels and their status (active/inactive/pending)
-- [ ] `channels add whatsapp` — enable WhatsApp, trigger QR code flow, restart container with `WHATSAPP_ENABLED=true`
-- [ ] `channels remove whatsapp` — disable WhatsApp, restart container without WhatsApp env var
-- [ ] `channels add line [token]` — validate LINE token, save to tenant config, restart container
-- [ ] `channels remove line` — remove LINE token from tenant config, restart container
-- [ ] Each command updates the tenant's channel config and triggers container restart if needed
+- [x] Add `channels` sub-action to `skill/tools/tiger_settings.ts` (action: "channels", subAction: list/add/remove, channel: whatsapp/line)
+- [x] `channels list` — shows Telegram (always active), WhatsApp (enabled/disabled), LINE (configured/not)
+- [x] `channels add whatsapp` — POSTs to API, container recreated with `WHATSAPP_ENABLED=true`, returns QR code instructions
+- [x] `channels remove whatsapp` — POSTs to API, container recreated without `WHATSAPP_ENABLED`, returns confirmation
+- [x] `channels add line [token]` — validates token (max 200 chars), POSTs to API, saves to tenant record
+- [x] `channels remove line` — POSTs to API with `token: null`, removes from tenant record
+- [x] API endpoints: `POST /tenants/:slug/channels/whatsapp` and `POST /tenants/:slug/channels/line` in `tenants.ts`
+- [x] Container restart via `recreateContainerWithEnv()` in `docker.ts` — preserves all config, updates only changed env vars
 
 ---
 

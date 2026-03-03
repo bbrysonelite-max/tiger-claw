@@ -163,6 +163,62 @@ export async function removeContainer(slug: string, force = false): Promise<void
   }
 }
 
+/**
+ * Recreate a container with modified env vars. Inspects the running container,
+ * stops/removes it, and creates a new one with the same config + env changes.
+ * envUpdates: key-value pairs to set (value=undefined removes the var).
+ */
+export async function recreateContainerWithEnv(
+  slug: string,
+  envUpdates: Record<string, string | undefined>,
+): Promise<string> {
+  const name = `tiger-claw-${slug}`;
+  const container = docker.getContainer(name);
+  const info = await container.inspect();
+
+  // Build updated env list
+  const existingEnv = info.Config.Env ?? [];
+  const envMap = new Map<string, string>();
+  for (const entry of existingEnv) {
+    const eqIdx = entry.indexOf("=");
+    if (eqIdx > 0) envMap.set(entry.slice(0, eqIdx), entry.slice(eqIdx + 1));
+  }
+  for (const [k, v] of Object.entries(envUpdates)) {
+    if (v === undefined) envMap.delete(k);
+    else envMap.set(k, v);
+  }
+  const newEnv = Array.from(envMap.entries()).map(([k, v]) => `${k}=${v}`);
+
+  // Preserve config from current container
+  const portBindings = info.HostConfig.PortBindings ?? {};
+  const binds = info.HostConfig.Binds ?? [];
+  const extraHosts = info.HostConfig.ExtraHosts ?? [];
+  const restartPolicy = info.HostConfig.RestartPolicy ?? { Name: "unless-stopped" };
+  const image = info.Config.Image;
+  const exposedPorts = info.Config.ExposedPorts ?? {};
+
+  // Stop and remove
+  try { await container.stop({ t: 10 }); } catch { /* already stopped */ }
+  try { await container.remove({ force: true }); } catch { /* already removed */ }
+
+  // Recreate
+  const newContainer = await docker.createContainer({
+    name,
+    Image: image,
+    Env: newEnv,
+    ExposedPorts: exposedPorts,
+    HostConfig: {
+      PortBindings: portBindings,
+      Binds: binds,
+      RestartPolicy: restartPolicy,
+      ExtraHosts: extraHosts,
+    },
+  });
+
+  await newContainer.start();
+  return newContainer.id;
+}
+
 export async function getContainerLogs(slug: string, tail = 50): Promise<string[]> {
   const name = `tiger-claw-${slug}`;
   const container = docker.getContainer(name);
