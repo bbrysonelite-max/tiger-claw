@@ -133,6 +133,18 @@ These cannot be changed. Do not propose changes. Do not work around them. If you
 - Database: PostgreSQL (platform ops) + SQLite (per-tenant data)
 - Cache: Redis
 
+**Key environment variables (per-container):**
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Active provider API key (set by `entrypoint.sh` from four-layer resolution) |
+| `OPENCLAW_GATEWAY_TOKEN` | Auth token for OpenClaw gateway RPC calls (used by `tiger_keys.ts` for `secrets.reload`) |
+| `OPENCLAW_PORT` | Gateway listen port (default 18789) |
+| `PLATFORM_ONBOARDING_KEY` | Layer 1 key (platform-provided) |
+| `TENANT_PRIMARY_KEY` / `TENANT_FALLBACK_KEY` | Layer 2/3 initial keys (overridden by `key_state.json` at runtime) |
+| `PLATFORM_EMERGENCY_KEY` | Layer 4 key (platform-provided, last resort) |
+| `PLATFORM_CHEAP_MODEL` | Cheapest model for Layer 1/4 (default `anthropic/claude-haiku-4-5-20251001`) |
+
 ---
 
 ## Code Quality Rules
