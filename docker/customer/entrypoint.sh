@@ -80,8 +80,8 @@ else if (activeKey.startsWith('sk-')) provider = 'openai';
 // Platform keys (layers 1+4) are always Anthropic
 
 // Select model: layers 1+4 use cheapest model; layers 2+3 use tenant's configured model
-const cheapModel = process.env.PLATFORM_CHEAP_MODEL || 'claude-haiku-4-5-20251001';
-const primaryModel = process.env.AI_MODEL || (provider === 'openai' ? 'gpt-4o-mini' : cheapModel);
+const cheapModel = process.env.PLATFORM_CHEAP_MODEL || 'anthropic/claude-haiku-4-5-20251001';
+const primaryModel = process.env.AI_MODEL || (provider === 'openai' ? 'openai/gpt-4o-mini' : cheapModel);
 const model = (activeLayer === 1 || activeLayer === 4) ? cheapModel : primaryModel;
 
 process.stdout.write(JSON.stringify({ activeLayer, activeKey, provider, model }));
@@ -242,7 +242,7 @@ cat > /root/.openclaw/openclaw.json << EOF
           "TENANT_PRIMARY_KEY": "${TENANT_PRIMARY_KEY:-}",
           "TENANT_FALLBACK_KEY": "${TENANT_FALLBACK_KEY:-}",
           "PLATFORM_EMERGENCY_KEY": "${PLATFORM_EMERGENCY_KEY:-}",
-          "PLATFORM_CHEAP_MODEL": "${PLATFORM_CHEAP_MODEL:-claude-haiku-4-5-20251001}"
+          "PLATFORM_CHEAP_MODEL": "${PLATFORM_CHEAP_MODEL:-anthropic/claude-haiku-4-5-20251001}"
         }
       }
     }

@@ -31,8 +31,8 @@ Both settings were implemented during P0-5/P0-5b:
 - `agents.defaults.thinkingDefault: "low"` (ADR-0010)
 
 **Remaining work:**
-- [ ] Use fully-qualified model format in `entrypoint.sh` (e.g., `anthropic/claude-haiku-4-5-20251001` instead of bare `claude-haiku-4-5-20251001`)
-- [ ] Verify the model format fix doesn't break key_state.json resolution logic
+- [x] Use fully-qualified model format in `entrypoint.sh` (e.g., `anthropic/claude-haiku-4-5-20251001` instead of bare `claude-haiku-4-5-20251001`)
+- [x] Verify the model format fix doesn't break key_state.json resolution logic — confirmed: key_state.json stores keys/provider, not model names; model is derived at runtime
 
 ---
 
