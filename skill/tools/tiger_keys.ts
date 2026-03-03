@@ -574,10 +574,10 @@ async function rotateViaSecretRef(
     return;
   }
 
-  // Layer 1/4: env-var-sourced keys — write-only, no reload trigger
-  if (layer === 1 || layer === 4) return;
+  // Layer 1: never rotated at runtime — write-only best-effort
+  if (layer === 1) return;
 
-  // Layer 2/3: full reload + readyz confirmation
+  // Layer 2/3/4: full reload + readyz confirmation
   const reloaded = await triggerSecretsReload();
   if (!reloaded) {
     logger.error("tiger_keys: secrets.reload RPC failed — gateway keeps last-known-good key");
