@@ -60,7 +60,7 @@ Implemented during P0-4:
 - [x] Read https://docs.openclaw.ai/gateway/secrets to understand the SecretRef mechanism
 - [x] Document findings: how does SecretRef interact with env vars? Is it a file-based secrets store, a runtime API, or something else?
 - [x] Determine if SecretRef can rotate `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` at runtime without restarting the gateway
-- [ ] Update ADR-0007 with the confirmed SecretRef mechanism
+- [x] Update ADR-0007 with the confirmed SecretRef mechanism
 
 **Implementation:**
 - [ ] Modify `tiger_keys.ts` to use SecretRef for Layer 2/3 key storage and rotation
