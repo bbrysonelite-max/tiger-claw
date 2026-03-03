@@ -1,6 +1,6 @@
 # Phase 0 — Build Unblocked
 
-**Status:** ACTIVE — this is the current work phase
+**Status:** COMPLETE
 **Prerequisite for:** Everything else. No Phase 1, 2, 3 work until Phase 0 is verified complete.
 **Completion signal:** A working Docker container starts, OpenClaw gateway initializes, `/readyz` returns 200.
 
