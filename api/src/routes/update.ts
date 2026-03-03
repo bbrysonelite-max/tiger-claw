@@ -16,46 +16,25 @@
 import { Router, type Request, type Response } from "express";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import * as fs from "fs";
 import * as path from "path";
+import {
+  readDeploymentState,
+  writeDeploymentState,
+  type DeploymentState,
+} from "../services/deploymentState.js";
 
 const execFileAsync = promisify(execFile);
 
 const router = Router();
 
 const REPO_ROOT = process.env["REPO_ROOT"] ?? path.resolve(import.meta.dirname, "../../../..");
-const DEPLOYMENT_STATE_FILE = process.env["DEPLOYMENT_STATE_FILE"] ?? path.join(REPO_ROOT, "deployment_state.json");
 const BUILD_SCRIPT = path.join(REPO_ROOT, "ops", "build.sh");
 const UPDATE_SCRIPT = path.join(REPO_ROOT, "ops", "update.sh");
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-interface DeploymentState {
-  tigerClaw?: { current?: string; previous?: string };
-  openClaw?: { current?: string; previous?: string };
-  imageTag?: string;
-  builds?: Array<{ tcVersion?: string; ocVersion?: string; imageTag?: string; builtAt?: string }>;
-  canary?: { group?: string[]; startedAt?: string | null; stage?: string };
-  rollout?: { stage?: string; percentage?: number; startedAt?: string | null };
-  tenants?: Record<string, unknown>;
-}
-
-function readState(): DeploymentState {
-  try {
-    return JSON.parse(fs.readFileSync(DEPLOYMENT_STATE_FILE, "utf8")) as DeploymentState;
-  } catch {
-    return {};
-  }
-}
-
-function writeState(state: DeploymentState): void {
-  fs.writeFileSync(DEPLOYMENT_STATE_FILE, JSON.stringify(state, null, 2), "utf8");
-}
 
 // ── GET /status ──────────────────────────────────────────────────────────────
 
 router.get("/status", (_req: Request, res: Response) => {
-  const state = readState();
+  const state = readDeploymentState();
   const lastBuild = state.builds?.[0];
 
   res.json({
@@ -73,7 +52,7 @@ router.get("/status", (_req: Request, res: Response) => {
 router.post("/build", async (req: Request, res: Response) => {
   const { ocVersion } = req.body as { ocVersion?: string };
 
-  const state = readState();
+  const state = readDeploymentState();
   const resolvedOcVersion = ocVersion ?? state.openClaw?.current;
   if (!resolvedOcVersion) {
     return res.status(400).json({ error: "ocVersion is required (no current version in state)." });
@@ -97,7 +76,7 @@ router.post("/build", async (req: Request, res: Response) => {
       "--oc-version", resolvedOcVersion,
     ], { timeout: 600_000 });
 
-    const updatedState = readState();
+    const updatedState = readDeploymentState();
     return res.json({
       ok: true,
       tcVersion,
@@ -115,7 +94,7 @@ router.post("/build", async (req: Request, res: Response) => {
 // ── POST /canary/start ───────────────────────────────────────────────────────
 
 router.post("/canary/start", async (_req: Request, res: Response) => {
-  const state = readState();
+  const state = readDeploymentState();
   const imageTag = state.imageTag;
   if (!imageTag) {
     return res.status(400).json({ error: "No image tag in deployment state. Run /update build first." });
@@ -149,7 +128,7 @@ router.post("/canary/start", async (_req: Request, res: Response) => {
     stage: "canary",
   };
   state.rollout = { stage: "canary", percentage: 0, startedAt: now };
-  writeState(state);
+  writeDeploymentState(state);
 
   return res.json({
     ok: true,
@@ -171,7 +150,7 @@ const ROLLOUT_STAGES: Array<{ name: string; percentage: number; soakHours: numbe
 ];
 
 router.post("/canary/advance", async (_req: Request, res: Response) => {
-  const state = readState();
+  const state = readDeploymentState();
   const currentStage = state.rollout?.stage ?? "none";
   const stageIdx = ROLLOUT_STAGES.findIndex((s) => s.name === currentStage);
 
@@ -206,7 +185,7 @@ router.post("/canary/advance", async (_req: Request, res: Response) => {
     percentage: nextStage.percentage,
     startedAt: new Date().toISOString(),
   };
-  writeState(state);
+  writeDeploymentState(state);
 
   return res.json({
     ok: true,
@@ -220,7 +199,7 @@ router.post("/canary/advance", async (_req: Request, res: Response) => {
 // ── POST /fleet ──────────────────────────────────────────────────────────────
 
 router.post("/fleet", async (_req: Request, res: Response) => {
-  const state = readState();
+  const state = readDeploymentState();
   if (!state.imageTag) {
     return res.status(400).json({ error: "No image tag in deployment state." });
   }
@@ -231,7 +210,7 @@ router.post("/fleet", async (_req: Request, res: Response) => {
     percentage: 100,
     startedAt: new Date().toISOString(),
   };
-  writeState(state);
+  writeDeploymentState(state);
 
   return res.json({
     ok: true,
@@ -245,7 +224,7 @@ router.post("/fleet", async (_req: Request, res: Response) => {
 // ── POST /rollback ───────────────────────────────────────────────────────────
 
 router.post("/rollback", async (_req: Request, res: Response) => {
-  const state = readState();
+  const state = readDeploymentState();
   const previousBuilds = (state.builds ?? []).slice(1);
   if (previousBuilds.length === 0) {
     return res.status(400).json({ error: "No previous build to roll back to." });
@@ -287,7 +266,7 @@ router.post("/rollback", async (_req: Request, res: Response) => {
   };
   state.rollout = { stage: "none", percentage: 0, startedAt: null };
   state.canary = { ...state.canary, stage: "none", startedAt: null };
-  writeState(state);
+  writeDeploymentState(state);
 
   return res.json({
     ok: true,
@@ -305,12 +284,12 @@ router.post("/canary/set", (req: Request, res: Response) => {
     return res.status(400).json({ error: "Exactly 5 slugs required." });
   }
 
-  const state = readState();
+  const state = readDeploymentState();
   state.canary = {
     ...state.canary,
     group: slugs,
   };
-  writeState(state);
+  writeDeploymentState(state);
 
   return res.json({ ok: true, canaryGroup: slugs });
 });

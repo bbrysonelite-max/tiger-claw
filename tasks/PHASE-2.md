@@ -73,13 +73,15 @@
 
 **Context:** Central state file tracking both Tiger Claw and OpenClaw versions, the active image tag, canary group membership, rollout stage, and failure counts. Read by `ops/update.sh`, admin bot, and provisioner.
 
-- [ ] Define schema matching Blueprint B4.3: `tigerClaw.current/previous`, `openClaw.current/previous`, `imageTag`, `canary.group/startedAt/stage`, `rollout.stage/percentage/startedAt`
-- [ ] Add `failures` tracking: per-container failure count, consecutive failure counter for auto-rollback
-- [ ] Add `rollback` state: `rolledBackAt`, `rolledBackFrom`, `rolledBackTo`
-- [ ] `ops/build.sh` updates `deployment_state.json` after successful build
-- [ ] `ops/update.sh` updates `deployment_state.json` after each container replace (success or failure)
-- [ ] File location: server-level (not per-container) — e.g., `/app/data/deployment_state.json`
-- [ ] Add read/write helpers with file locking to prevent concurrent update races
+- [x] Full TypeScript interface in `api/src/services/deploymentState.ts`: `VersionPair`, `BuildRecord`, `CanaryState`, `RolloutState`, `TenantUpdateRecord`, `RollbackRecord`, `DeploymentState`
+- [x] Per-tenant failure tracking: `successCount`, `failureCount`, `consecutiveFailures`, `lastFailedAt` in `tenants.{slug}`
+- [x] Rollback state: `rollback: { rolledBackAt, rolledBackFrom, rolledBackTo } | null`
+- [x] `ops/build.sh` updates `tigerClaw`, `openClaw`, `imageTag`, `builds` (already done in P2-1)
+- [x] `ops/update.sh` updates `tenants.{slug}` with success/failure counts (already done in P2-2)
+- [x] File location: `{REPO_ROOT}/deployment_state.json` (server-level, configurable via `DEPLOYMENT_STATE_FILE` env var)
+- [x] Locked read/write helpers: `readDeploymentState()`, `writeDeploymentState()`, `updateTenantRecord()` with `.lock` sidecar file (30s stale reclaim)
+- [x] Schema documented in `specs/tiger-claw/DEPLOYMENT-STATE-SCHEMA.md`
+- [x] `api/src/routes/update.ts` refactored to import from `deploymentState.ts` (removed inline duplicates)
 
 ---
 
