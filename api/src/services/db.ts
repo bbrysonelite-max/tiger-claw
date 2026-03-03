@@ -71,10 +71,12 @@ export async function initSchema(): Promise<void> {
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
-      -- Add canary_group column to existing deployments (idempotent)
+      -- Add columns to existing deployments (idempotent)
       DO $$ BEGIN
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS canary_group BOOLEAN NOT NULL DEFAULT FALSE;
       END $$;
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS line_token TEXT;
 
       CREATE TABLE IF NOT EXISTS hive_patterns (
         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -109,7 +111,7 @@ export async function initSchema(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS bot_pool (
         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        bot_token       TEXT NOT NULL,
+        bot_token       TEXT NOT NULL UNIQUE,
         bot_username    TEXT NOT NULL,
         telegram_bot_id TEXT NOT NULL UNIQUE,
         status          TEXT NOT NULL DEFAULT 'available',
@@ -119,12 +121,18 @@ export async function initSchema(): Promise<void> {
         tenant_id       UUID REFERENCES tenants(id) ON DELETE SET NULL
       );
 
+      -- Idempotent constraint for existing deployments that created the table without UNIQUE on bot_token
+      DO $$ BEGIN
+        ALTER TABLE bot_pool ADD CONSTRAINT bot_pool_token_unique UNIQUE (bot_token);
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+
       CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
       CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
       CREATE INDEX IF NOT EXISTS idx_hive_flavor_region ON hive_patterns(flavor, region);
       CREATE INDEX IF NOT EXISTS idx_hive_category ON hive_patterns(category);
       CREATE INDEX IF NOT EXISTS idx_bot_pool_status ON bot_pool(status);
-      CREATE INDEX IF NOT EXISTS idx_bot_pool_tenant ON bot_pool(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_bot_pool_tenant_id ON bot_pool(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_bot_pool_assignment ON bot_pool(tenant_id, created_at);
     `);
   });
@@ -160,6 +168,8 @@ export interface Tenant {
   containerName?: string;
   onboardingKeyUsed: number;
   canaryGroup: boolean;
+  whatsappEnabled: boolean;
+  lineToken?: string;
   lastActivityAt?: Date;
   suspendedAt?: Date;
   suspendedReason?: string;
@@ -184,6 +194,8 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     containerName: row["container_name"] as string | undefined,
     onboardingKeyUsed: row["onboarding_key_used"] as number,
     canaryGroup: (row["canary_group"] as boolean) ?? false,
+    whatsappEnabled: (row["whatsapp_enabled"] as boolean) ?? false,
+    lineToken: row["line_token"] as string | undefined,
     lastActivityAt: row["last_activity_at"] ? new Date(row["last_activity_at"] as string) : undefined,
     suspendedAt: row["suspended_at"] ? new Date(row["suspended_at"] as string) : undefined,
     suspendedReason: row["suspended_reason"] as string | undefined,
@@ -555,6 +567,40 @@ export async function getTenantBotToken(tenantId: string): Promise<string | null
     [tenantId],
   );
   return result.rows[0] ? (result.rows[0]["bot_token"] as string) : null;
+}
+
+/** Return the bot username assigned to a tenant, or null. */
+export async function getTenantBotUsername(tenantId: string): Promise<string | null> {
+  const result = await getPool().query(
+    "SELECT bot_username FROM bot_pool WHERE tenant_id = $1 AND status = 'assigned' LIMIT 1",
+    [tenantId],
+  );
+  return result.rows[0] ? (result.rows[0]["bot_username"] as string) : null;
+}
+
+/** Update a tenant's channel config (whatsapp_enabled, line_token). */
+export async function updateTenantChannelConfig(
+  id: string,
+  config: { whatsappEnabled?: boolean; lineToken?: string | null },
+): Promise<void> {
+  const sets: string[] = ["updated_at = NOW()"];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (config.whatsappEnabled !== undefined) {
+    sets.push(`whatsapp_enabled = $${idx++}`);
+    values.push(config.whatsappEnabled);
+  }
+  if (config.lineToken !== undefined) {
+    sets.push(`line_token = $${idx++}`);
+    values.push(config.lineToken);
+  }
+
+  values.push(id);
+  await getPool().query(
+    `UPDATE tenants SET ${sets.join(", ")} WHERE id = $${idx}`,
+    values,
+  );
 }
 
 /** Pool stats: total, assigned, unassigned counts. */
