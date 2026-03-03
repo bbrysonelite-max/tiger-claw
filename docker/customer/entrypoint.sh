@@ -264,6 +264,9 @@ cat > /root/.openclaw/openclaw.json << EOF
     "providers": {
       "anthropic": {
         "apiKey": { "source": "file", "provider": "filemain", "id": "/active/apiKey" }
+      },
+      "openai": {
+        "apiKey": { "source": "file", "provider": "filemain", "id": "/active/apiKey" }
       }
     }
   },
