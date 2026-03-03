@@ -185,7 +185,25 @@ export async function getContainerLogs(slug: string, tail = 50): Promise<string[
 }
 
 // ---------------------------------------------------------------------------
-// Per-container health check via OpenClaw /health
+// Container readiness check via OpenClaw /readyz (ADR-0008)
+// Used by provisioner only — returns true when gateway is fully initialized.
+// ---------------------------------------------------------------------------
+
+export async function getContainerReady(slug: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { hostname: "localhost", port, path: "/readyz", timeout: 5000 },
+      (res) => {
+        resolve(res.statusCode === 200);
+      }
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Per-container health check via OpenClaw /health (fleet liveness monitor)
 // ---------------------------------------------------------------------------
 
 export interface ContainerHealth {

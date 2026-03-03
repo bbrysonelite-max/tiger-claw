@@ -5,7 +5,7 @@
 // Pipeline steps:
 //  1. Create tenant record in PostgreSQL (status: pending)
 //  2. Spin up Docker container with correct env vars
-//  3. Health check: /health responds within 30s
+//  3. Readiness check: /readyz responds within 60s (ADR-0008)
 //  4. Update status → onboarding
 //  5. Bot sends first greeting message via Telegram
 //  6. Onboarding interview begins (tiger_onboard skill inside container)
@@ -28,7 +28,7 @@ import {
   stopContainer,
   startExistingContainer,
   removeContainer,
-  getContainerHealth,
+  getContainerReady,
 } from "./docker.js";
 import { getNextAvailable, assignToTenant, releaseBot } from "./pool.js";
 
@@ -187,8 +187,8 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
     };
   }
 
-  // 6. Health check: wait up to 30 seconds for container to respond
-  const healthy = await waitForHealth(input.slug, port, 30);
+  // 6. Readiness check: wait up to 60s for /readyz (ADR-0008)
+  const healthy = await waitForReady(input.slug, port, 60);
   if (!healthy) {
     await updateTenantStatus(tenant.id, "suspended", {
       suspendedReason: "Health check timed out (30s)",
@@ -310,11 +310,10 @@ export async function deprovisionTenant(tenant: Tenant): Promise<{ steps: string
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function waitForHealth(slug: string, port: number, timeoutSeconds: number): Promise<boolean> {
+async function waitForReady(slug: string, port: number, timeoutSeconds: number): Promise<boolean> {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
-    const h = await getContainerHealth(slug, port);
-    if (h.httpReachable) return true;
+    if (await getContainerReady(slug, port)) return true;
     await sleep(2000);
   }
   return false;
