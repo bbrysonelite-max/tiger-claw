@@ -68,19 +68,20 @@ Read these in order for the component you are building:
 
 ---
 
-## Current Phase: PHASE 0 (Build Unblocked)
+## Current Phase: PHASE 1 (OpenClaw Integration Hardening)
 
-**See `tasks/PHASE-0.md` for the exact task list.**
+**See `tasks/PHASE-1.md` for the exact task list.**
 
-Phase 0 must be completed before any other work. The Docker container cannot be built until the OpenClaw install command is verified and corrected. Every other task depends on a working container.
+Phase 0 is complete — container builds, gateway starts, `/readyz` returns 200. Phase 1 hardens the OpenClaw integration before moving to the update pipeline (Phase 2).
 
-**Phase 0 tasks (summary):**
-1. Verify the correct `npm install` command for OpenClaw from the [OpenClaw GitHub](https://github.com/openclaw/openclaw)
-2. Update `docker/customer/Dockerfile` with the correct install
-3. Build a test container and confirm OpenClaw gateway starts
-4. Confirm `/readyz` returns 200
+**Phase 1 tasks (summary):**
+1. Verify streaming/thinking config and fix model format to fully-qualified provider/model (P1-1 — mostly done in P0)
+2. Confirm `/readyz` provisioning check handles edge cases (P1-2 — mostly done in P0)
+3. Research SecretRef mechanism and migrate Layer 2/3/4 key rotation (P1-3)
+4. Add SecretRef initialization to `entrypoint.sh` (P1-4)
+5. Assess ACP dispatch impact on Tiger Claw tools (P1-5)
 
-**Do not start Phase 1 (OpenClaw hardening) until Phase 0 is complete and a working container is confirmed.**
+**Do not start Phase 2 (Update Pipeline) until Phase 1 is complete.**
 
 ---
 
