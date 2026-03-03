@@ -68,20 +68,20 @@ Read these in order for the component you are building:
 
 ---
 
-## Current Phase: PHASE 2 (Update Pipeline)
+## Current Phase: PHASE 3 (Channel Wizard)
 
-**See `tasks/PHASE-2.md` for the exact task list.**
+**See `tasks/PHASE-3.md` for the exact task list.**
 
-Phase 1 is complete — SecretRef key rotation implemented, provisioner edge cases covered, ACP dispatch assessed (no tool changes needed). Phase 2 builds the OpenClaw update pipeline for managing version upgrades across the tenant fleet.
+Phase 2 is complete — full update pipeline implemented (build, update, canary, fleet rollout, auto-rollback). Phase 3 builds the Channel Wizard for tenant self-service channel configuration.
 
-**Phase 2 tasks (summary):**
-1. Harden `ops/build.sh` — parameterized version tagging, image naming convention (P2-1)
-2. Build `ops/update.sh` — single-tenant container replace with rollback (P2-2)
-3. Admin bot update commands — `/update build`, `/update canary`, `/update rollback` (P2-3)
-4. `deployment_state.json` — dual-version tracking, failure counts, rollback state (P2-4)
-5. Canary group management — 5-tenant canary, 24h soak, auto-advance/rollback (P2-5)
+**Phase 3 tasks (summary):**
+1. Bot token pool infrastructure — `bottoken_pool` table, provisioner assignment, low-pool alerts (P3-0)
+2. Channel Wizard web page — HTML setup guide at `app.tigerclaw.io/wizard/[slug]` (P3-1)
+3. In-chat channel commands — `channels list/add/remove` via `tiger_settings.ts` (P3-2)
+4. WhatsApp Baileys optional channel — conditional `entrypoint.sh` block, QR code delivery (P3-3)
+5. Onboarding wizard link — send wizard URL after onboarding completes (P3-4)
 
-**Do not start Phase 3 (Channel Wizard) until Phase 2 is complete.**
+**Do not start Phase 4 until Phase 3 is complete.**
 
 ---
 
