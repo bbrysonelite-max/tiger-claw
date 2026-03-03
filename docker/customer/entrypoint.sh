@@ -102,11 +102,16 @@ if [ -z "$ACTIVE_KEY" ]; then
   echo "              Bot will start but LLM calls will fail until a key is provided."
 fi
 
-# Build the provider-specific JSON block for openclaw.json "providers" section
+# Export the active API key as the env var OpenClaw expects for the provider.
+# Source: https://docs.openclaw.ai/help/environment — OpenClaw reads API keys
+# from process env vars, NOT from openclaw.json. The env vars are:
+#   ANTHROPIC_API_KEY, OPENAI_API_KEY
+# Auth profile resolution: env vars → auth-profiles.json → models.providers
+# Source: https://docs.openclaw.ai/concepts/model-failover
 if [ "$ACTIVE_PROVIDER" = "openai" ]; then
-  PROVIDERS_BLOCK='"openai": { "apiKey": "'"$ACTIVE_KEY"'" }'
+  export OPENAI_API_KEY="$ACTIVE_KEY"
 else
-  PROVIDERS_BLOCK='"anthropic": { "apiKey": "'"$ACTIVE_KEY"'" }'
+  export ANTHROPIC_API_KEY="$ACTIVE_KEY"
 fi
 
 # ── Timezone-aware cron schedule computation ─────────────────────────────────
@@ -172,8 +177,23 @@ if [ -n "${LINE_CHANNEL_SECRET:-}" ] && [ -n "${LINE_CHANNEL_ACCESS_TOKEN:-}" ];
 fi
 
 # ── Generate openclaw.json ───────────────────────────────────────────────────
-# Config structure matches OpenClaw v2026.3.2 schema (OPENCLAW-TYPES.md §8)
-# LOCKED overrides: streaming "off" (ADR-0009), think "low" (ADR-0010)
+# Config validated against OpenClaw v2026.3.2 strict schema.
+#
+# Field name sources (from docs.openclaw.ai):
+#   agents.defaults.thinkingDefault — https://docs.openclaw.ai/gateway/configuration-reference
+#     (NOT "think" — that is a display alias only, not a config key)
+#   channels.telegram.botToken — https://docs.openclaw.ai/channels/telegram
+#     (NOT "token" — rejected by schema validator)
+#   channels.telegram.streaming — https://docs.openclaw.ai/gateway/configuration
+#     (v2026.3.2 defaults to "partial"; we override to "off" per ADR-0009)
+#   API keys — set via env vars (ANTHROPIC_API_KEY / OPENAI_API_KEY), NOT in config
+#     Source: https://docs.openclaw.ai/help/environment
+#   cron — openclaw.json only accepts global cron settings (enabled, maxConcurrentRuns).
+#     Individual jobs are registered via "openclaw cron add" CLI or cron.add tool call
+#     and stored in ~/.openclaw/cron/jobs.json, NOT in openclaw.json.
+#     Source: https://docs.openclaw.ai/automation/cron-jobs
+#
+# LOCKED overrides: streaming "off" (ADR-0009), thinkingDefault "low" (ADR-0010)
 cat > /root/.openclaw/openclaw.json << EOF
 {
   "gateway": {
@@ -186,17 +206,16 @@ cat > /root/.openclaw/openclaw.json << EOF
   "agents": {
     "defaults": {
       "model": "${ACTIVE_MODEL}",
-      "think": "low"
+      "thinkingDefault": "low"
     }
-  },
-  "providers": {
-    ${PROVIDERS_BLOCK}
   },
   "channels": {
     "telegram": {
       "enabled": ${TELEGRAM_ENABLED},
-      "token": "${TELEGRAM_BOT_TOKEN:-}",
-      "streaming": "off"
+      "botToken": "${TELEGRAM_BOT_TOKEN:-}",
+      "streaming": "off",
+      "dmPolicy": "open",
+      "allowFrom": ["*"]
     },
     "line": {
       "enabled": ${LINE_ENABLED},
@@ -227,33 +246,80 @@ cat > /root/.openclaw/openclaw.json << EOF
     }
   },
   "cron": {
-    "daily-scout": {
-      "schedule": "${SCOUT_CRON}",
-      "tool": "tiger_scout"
-    },
-    "daily-report": {
-      "schedule": "${REPORT_CRON}",
-      "tool": "tiger_briefing",
-      "args": { "action": "generate" }
-    },
-    "nurture-check": {
-      "schedule": "0 * * * *",
-      "tool": "tiger_nurture",
-      "args": { "action": "check" }
-    },
-    "contact-check": {
-      "schedule": "30 * * * *",
-      "tool": "tiger_contact",
-      "args": { "action": "check" }
-    },
-    "aftercare-check": {
-      "schedule": "${AFTERCARE_CRON}",
-      "tool": "tiger_aftercare",
-      "args": { "action": "daily" }
-    }
+    "enabled": true
   }
 }
 EOF
+
+# ── Register cron jobs via CLI ────────────────────────────────────────────────
+# OpenClaw stores individual jobs in ~/.openclaw/cron/jobs.json, not in the
+# config file. We write directly to jobs.json before gateway startup.
+# Source: https://docs.openclaw.ai/automation/cron-jobs
+mkdir -p /root/.openclaw/cron
+cat > /root/.openclaw/cron/jobs.json << CRONEOF
+[
+  {
+    "jobId": "daily-scout",
+    "name": "Daily Scout",
+    "enabled": true,
+    "schedule": { "kind": "cron", "expr": "${SCOUT_CRON}", "tz": "UTC" },
+    "sessionTarget": "isolated",
+    "wakeMode": "now",
+    "payload": { "kind": "agentTurn", "message": "Run tiger_scout with action: hunt. Find new prospects matching the ICP." },
+    "delivery": { "mode": "none" },
+    "deleteAfterRun": false,
+    "runCount": 0
+  },
+  {
+    "jobId": "daily-report",
+    "name": "Daily Report",
+    "enabled": true,
+    "schedule": { "kind": "cron", "expr": "${REPORT_CRON}", "tz": "UTC" },
+    "sessionTarget": "isolated",
+    "wakeMode": "now",
+    "payload": { "kind": "agentTurn", "message": "Run tiger_briefing with action: generate. Deliver the daily briefing." },
+    "delivery": { "mode": "announce", "channel": "telegram" },
+    "deleteAfterRun": false,
+    "runCount": 0
+  },
+  {
+    "jobId": "nurture-check",
+    "name": "Nurture Check",
+    "enabled": true,
+    "schedule": { "kind": "cron", "expr": "0 * * * *", "tz": "UTC" },
+    "sessionTarget": "isolated",
+    "wakeMode": "now",
+    "payload": { "kind": "agentTurn", "message": "Run tiger_nurture with action: check. Process any due nurture touches." },
+    "delivery": { "mode": "none" },
+    "deleteAfterRun": false,
+    "runCount": 0
+  },
+  {
+    "jobId": "contact-check",
+    "name": "Contact Check",
+    "enabled": true,
+    "schedule": { "kind": "cron", "expr": "30 * * * *", "tz": "UTC" },
+    "sessionTarget": "isolated",
+    "wakeMode": "now",
+    "payload": { "kind": "agentTurn", "message": "Run tiger_contact with action: check. Send any scheduled first contacts." },
+    "delivery": { "mode": "none" },
+    "deleteAfterRun": false,
+    "runCount": 0
+  },
+  {
+    "jobId": "aftercare-check",
+    "name": "Aftercare Check",
+    "enabled": true,
+    "schedule": { "kind": "cron", "expr": "${AFTERCARE_CRON}", "tz": "UTC" },
+    "sessionTarget": "isolated",
+    "wakeMode": "now",
+    "payload": { "kind": "agentTurn", "message": "Run tiger_aftercare with action: daily. Process aftercare touches." },
+    "delivery": { "mode": "none" },
+    "deleteAfterRun": false,
+    "runCount": 0
+  }
+]
+CRONEOF
 
 echo "   Config written to /root/.openclaw/openclaw.json"
 echo "🐯 Starting OpenClaw gateway on port ${OPENCLAW_PORT:-18789}..."
