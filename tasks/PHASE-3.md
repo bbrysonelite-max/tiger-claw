@@ -20,16 +20,12 @@
 
 **Context:** Each tenant needs a unique Telegram bot token. Currently tokens are manually assigned during provisioning. This task formalizes the pool so the provisioner and Channel Wizard can reference assigned tokens.
 
-- [ ] Create `bottoken_pool` table in PostgreSQL:
-  - `id` (UUID, primary key)
-  - `bot_token` (text, unique, not null)
-  - `bot_username` (text, unique, not null)
-  - `assigned_to_tenant` (UUID nullable, FK to tenants.id)
-  - `assigned_at` (timestamp nullable)
-  - `created_at` (timestamp, default now)
-- [ ] Add pool assignment to provisioner: when provisioning a new tenant, pull next unassigned token (`assigned_to_tenant IS NULL`) ordered by `created_at ASC`
-- [ ] Low-pool alert: send admin Telegram alert when unassigned tokens drop below 50
-- [ ] Script placeholder: `ops/botpool/create_bots.ts` (stub only — manual bot creation process to be documented separately)
+- [x] Bot pool table exists (`bot_pool` in PostgreSQL with matching schema — `id`, `bot_token`, `bot_username`, `tenant_id` FK, `assigned_at`, `created_at`). Added indexes on `tenant_id` and `(tenant_id, created_at)`.
+- [x] Add pool assignment to provisioner: atomic `assignBotToken()` with `SELECT FOR UPDATE SKIP LOCKED` prevents race conditions under concurrent provisioning
+- [x] Low-pool alert: sends admin Telegram alert when unassigned tokens drop below 50 (checked after every assignment)
+- [x] Script placeholder: `ops/botpool/create_bots.ts` with working `addTokensFromFile()` and stubbed MTProto automation
+- [x] Pool management API: `GET /admin/pool/status` (stats), `POST /admin/pool/add` (simple insert)
+- [x] DB helpers: `assignBotToken()`, `getTenantBotToken()`, `getPoolStats()`, `addTokenToPool()`
 
 ---
 

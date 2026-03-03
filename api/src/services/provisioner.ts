@@ -21,6 +21,9 @@ import {
   getNextAvailablePort,
   logAdminEvent,
   listBotPool,
+  assignBotToken,
+  getPoolStats,
+  getPool,
   type Tenant,
 } from "./db.js";
 import {
@@ -30,7 +33,8 @@ import {
   removeContainer,
   getContainerReady,
 } from "./docker.js";
-import { getNextAvailable, assignToTenant, releaseBot } from "./pool.js";
+import { getNextAvailable, assignToTenant, releaseBot, decryptToken } from "./pool.js";
+import { sendAdminAlert } from "../routes/admin.js";
 
 // ---------------------------------------------------------------------------
 // Provision input
@@ -74,19 +78,21 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
     return { success: false, error: `Slug '${input.slug}' already in use.`, steps };
   }
 
-  // 2. Resolve bot token: explicit override → pool → waitlist
+  // 2. Resolve bot token: explicit override → pool (atomic) → waitlist
   // Bot assigned at payment time, NEVER at onboarding (Block 5.3 Decision 3)
   let resolvedBotToken = input.botToken;
-  let assignedBotId: string | undefined;
 
   if (!resolvedBotToken) {
-    const poolBot = await getNextAvailable();
-    if (!poolBot) {
+    // Atomic assignment: SELECT FOR UPDATE SKIP LOCKED prevents race conditions
+    // under concurrent provisioning. We need the tenant record first for the FK,
+    // so we create it below and assign the bot token afterward.
+    // For now, just check if pool has tokens — actual assignment after tenant creation.
+    const stats = await getPoolStats();
+    if (stats.unassigned === 0) {
       // Pool empty — put tenant on waitlist, do NOT fail payment
       // Block 5.3 Decision 7: Pool empty = waitlist mode, not failed payment
       steps.push("Pool empty — tenant added to waitlist");
 
-      // Create a minimal tenant record in waitlist status
       let waitlistTenant: Tenant;
       try {
         const wPort = input.port ?? await getNextAvailablePort();
@@ -106,6 +112,7 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
         return { success: false, error: `DB error: ${err instanceof Error ? err.message : String(err)}`, steps };
       }
 
+      await sendAdminAlert("Bot token pool is empty. Add tokens via ops/botpool/create_bots.ts before provisioning.");
       await logAdminEvent("waitlist", waitlistTenant.id, { reason: "pool_empty", slug: input.slug });
       return {
         success: true,
@@ -115,12 +122,6 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
         error: undefined,
       };
     }
-
-    // Decrypt pool bot token for container use
-    const { decryptToken } = await import("./pool.js");
-    resolvedBotToken = decryptToken(poolBot.botToken);
-    assignedBotId = poolBot.id;
-    steps.push(`Bot assigned from pool: @${poolBot.botUsername}`);
   } else {
     steps.push("Bot token provided directly (admin override)");
   }
@@ -148,10 +149,24 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
     return { success: false, error: `DB error: ${err instanceof Error ? err.message : String(err)}`, steps };
   }
 
-  // Mark the pool bot as assigned (after tenant record exists for FK)
-  if (assignedBotId) {
-    await assignToTenant(assignedBotId, tenant.id);
-    steps.push(`Pool bot marked assigned (pool_id: ${assignedBotId})`);
+  // Assign bot token from pool (atomic SELECT FOR UPDATE SKIP LOCKED)
+  if (!input.botToken) {
+    const assigned = await assignBotToken(tenant.id);
+    if (!assigned) {
+      await updateTenantStatus(tenant.id, "pending");
+      await sendAdminAlert("Bot token pool is empty. Add tokens via ops/botpool/create_bots.ts before provisioning.");
+      return { success: true, waitlisted: true, tenant, steps: [...steps, "Pool emptied during assignment — waitlisted"], error: undefined };
+    }
+    resolvedBotToken = decryptToken(assigned.botToken);
+    // Update tenant record with the assigned bot token
+    await getPool().query("UPDATE tenants SET bot_token = $1, updated_at = NOW() WHERE id = $2", [resolvedBotToken, tenant.id]);
+    steps.push(`Bot assigned from pool: @${assigned.botUsername}`);
+
+    // Low-pool alert: warn admin when unassigned tokens drop below 50
+    const postStats = await getPoolStats();
+    if (postStats.unassigned < 50) {
+      await sendAdminAlert(`Bot token pool low: ${postStats.unassigned} tokens remaining. Add more via ops/botpool.`);
+    }
   }
 
   // 5. Start Docker container

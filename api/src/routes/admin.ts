@@ -24,6 +24,8 @@ import {
   listCanaryTenants,
   listBotPool,
   getRecentAdminEvents,
+  getPoolStats,
+  addTokenToPool,
   type Tenant,
 } from "../services/db.js";
 import {
@@ -384,7 +386,31 @@ async function triggerContainerWebhook(
 // Bot pool management — Block 5.3
 // ---------------------------------------------------------------------------
 
-// GET /admin/pool — pool status counts
+// GET /admin/pool/status — pool stats (total, assigned, unassigned)
+router.get("/pool/status", async (_req: Request, res: Response) => {
+  const stats = await getPoolStats();
+  return res.json(stats);
+});
+
+// POST /admin/pool/add — simple token insert (no Telegram validation)
+router.post("/pool/add", async (req: Request, res: Response) => {
+  const { botToken, botUsername } = req.body as { botToken?: string; botUsername?: string };
+  if (!botToken || !botUsername) {
+    return res.status(400).json({ error: "botToken and botUsername are required." });
+  }
+  try {
+    await addTokenToPool(botToken, botUsername);
+    return res.json({ ok: true, botUsername });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("unique") || msg.includes("duplicate")) {
+      return res.status(409).json({ error: `Bot @${botUsername} already in pool.` });
+    }
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// GET /admin/pool — full pool listing with details
 router.get("/pool", async (_req: Request, res: Response) => {
   const counts = await getPoolStatus();
   const all = await listBotPool();
