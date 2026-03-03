@@ -124,6 +124,8 @@ export async function initSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_hive_flavor_region ON hive_patterns(flavor, region);
       CREATE INDEX IF NOT EXISTS idx_hive_category ON hive_patterns(category);
       CREATE INDEX IF NOT EXISTS idx_bot_pool_status ON bot_pool(status);
+      CREATE INDEX IF NOT EXISTS idx_bot_pool_tenant ON bot_pool(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_bot_pool_assignment ON bot_pool(tenant_id, created_at);
     `);
   });
   console.log("[db] Schema ready.");
@@ -501,4 +503,83 @@ export async function listBotPool(status?: BotPoolStatus): Promise<BotPoolEntry[
     ? await getPool().query("SELECT * FROM bot_pool WHERE status=$1 ORDER BY created_at ASC", [status])
     : await getPool().query("SELECT * FROM bot_pool ORDER BY created_at ASC");
   return result.rows.map(rowToBotPoolEntry);
+}
+
+/**
+ * Atomically assign the oldest available bot token to a tenant.
+ * Uses SELECT FOR UPDATE SKIP LOCKED to prevent race conditions
+ * under concurrent provisioning.
+ */
+export async function assignBotToken(
+  tenantId: string,
+): Promise<{ botToken: string; botUsername: string } | null> {
+  return withClient(async (client) => {
+    await client.query("BEGIN");
+    try {
+      const result = await client.query(
+        `SELECT * FROM bot_pool
+         WHERE status = 'available'
+         ORDER BY created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED`,
+      );
+
+      if (result.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      const row = result.rows[0];
+      await client.query(
+        `UPDATE bot_pool SET status = 'assigned', tenant_id = $1, assigned_at = NOW()
+         WHERE id = $2`,
+        [tenantId, row["id"]],
+      );
+      await client.query("COMMIT");
+
+      return {
+        botToken: row["bot_token"] as string,
+        botUsername: row["bot_username"] as string,
+      };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    }
+  });
+}
+
+/** Return the bot_token assigned to a tenant, or null. */
+export async function getTenantBotToken(tenantId: string): Promise<string | null> {
+  const result = await getPool().query(
+    "SELECT bot_token FROM bot_pool WHERE tenant_id = $1 AND status = 'assigned' LIMIT 1",
+    [tenantId],
+  );
+  return result.rows[0] ? (result.rows[0]["bot_token"] as string) : null;
+}
+
+/** Pool stats: total, assigned, unassigned counts. */
+export async function getPoolStats(): Promise<{ total: number; assigned: number; unassigned: number }> {
+  const result = await getPool().query(`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status = 'assigned')::int AS assigned,
+      COUNT(*) FILTER (WHERE status = 'available')::int AS unassigned
+    FROM bot_pool
+    WHERE status != 'retired'
+  `);
+  const row = result.rows[0];
+  return {
+    total: (row["total"] as number) ?? 0,
+    assigned: (row["assigned"] as number) ?? 0,
+    unassigned: (row["unassigned"] as number) ?? 0,
+  };
+}
+
+/** Simple insert into pool (no Telegram validation — use importToken for validated inserts). */
+export async function addTokenToPool(botToken: string, botUsername: string): Promise<void> {
+  await getPool().query(
+    `INSERT INTO bot_pool (bot_token, bot_username, telegram_bot_id, status)
+     VALUES ($1, $2, $2, 'available')`,
+    [botToken, botUsername],
+  );
 }
