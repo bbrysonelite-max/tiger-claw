@@ -39,6 +39,7 @@ import webhooksRouter from "./routes/webhooks.js";
 import adminRouter from "./routes/admin.js";
 import hiveRouter from "./routes/hive.js";
 import tenantsRouter from "./routes/tenants.js";
+import updateRouter from "./routes/update.js";
 
 const app = express();
 const PORT = Number(process.env["PORT"] ?? 4000);
@@ -60,6 +61,7 @@ app.use(express.json());
 app.use("/health", healthRouter);
 app.use("/webhooks", webhooksRouter);
 app.use("/admin", adminRouter);
+app.use("/admin/update", updateRouter);
 app.use("/hive", hiveRouter);
 app.use("/tenants", tenantsRouter);
 

@@ -54,15 +54,16 @@
 
 **Context:** Admin Telegram bot commands for managing the update pipeline. All commands execute via the provisioner API — the bot does not run ops scripts directly.
 
-- [ ] `/update status` — Show current TC version, OC version, image tag, canary status, rollout stage
-- [ ] `/update build [oc-version]` — Trigger `ops/build.sh` on server, report result
-- [ ] `/update canary start` — Deploy new image to canary group (5 tenants), start 24h monitoring window
-- [ ] `/update canary advance` — Advance to next rollout stage (10% → 25% → 50% → 100%) with confirmation
-- [ ] `/update fleet` — Advance rollout to 100% immediately (requires confirmation)
-- [ ] `/update rollback` — Roll back to previous image tag at current rollout stage
-- [ ] `/update canary set [slug,slug,slug,slug,slug]` — Set the 5 tenants in the canary group
-- [ ] Wire all commands through provisioner API endpoints (not direct script execution)
-- [ ] Command handler file: `ops/admin-bot/commands/update.ts`
+- [x] `/update status` — reads `deployment_state.json`, returns TC/OC version, image tag, canary/rollout state
+- [x] `/update build [oc-version]` — calls POST `/admin/update/build`, auto-generates TC version, execs `ops/build.sh`
+- [x] `/update canary start` — calls POST `/admin/update/canary/start`, deploys to canary group via `ops/update.sh`
+- [x] `/update canary advance` — calls POST `/admin/update/canary/advance`, enforces soak time, advances stage
+- [x] `/update fleet` — calls POST `/admin/update/fleet`, requires confirmation (60s timeout)
+- [x] `/update rollback` — calls POST `/admin/update/rollback`, rolls back canary group to previous image
+- [x] `/update canary set [slug,slug,slug,slug,slug]` — calls POST `/admin/update/canary/set`, validates 5 slugs
+- [x] All commands wired through provisioner API endpoints via `fetch()` (not direct script execution)
+- [x] Command handler: `ops/admin-bot/commands/update.ts`
+- [x] API routes: `api/src/routes/update.ts` (mounted at `/admin/update/*`), uses `execFile` (no shell injection)
 
 ---
 
