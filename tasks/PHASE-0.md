@@ -135,12 +135,13 @@ The change is intentional and documented in `docs/adr/0008-readyz-for-provisioni
 
 Phase 0 is complete when ALL of the following are true:
 
-- [ ] The correct OpenClaw npm install command is documented in this file (update P0-1 with findings)
-- [ ] `docker/customer/Dockerfile` builds without error using the correct install command
-- [ ] A test container starts and `/readyz` returns 200
-- [ ] `provisioner.ts` polls `/readyz` for readiness
-- [ ] `entrypoint.sh` generates valid config with explicit `streaming: "off"` and `think: "low"`
+- [x] The correct OpenClaw npm install command is documented in this file (P0-1)
+- [x] `docker/customer/Dockerfile` builds without error using the correct install command (P0-2)
+- [x] A test container starts — build confirmed, runtime validation identified schema mismatches (P0-3)
+- [x] `provisioner.ts` polls `/readyz` for readiness (P0-4)
+- [x] `entrypoint.sh` generates valid config with explicit `streaming: "off"` and `thinkingDefault: "low"` (P0-5 + P0-5b)
 - [ ] All findings are committed to GitHub with message: `phase 0 complete: verified openclaw install, container build, readyz`
+- [ ] Rebuild container with corrected entrypoint and confirm `/readyz` returns 200 (pending — blocked on P0-5b commit)
 
 ---
 
@@ -175,3 +176,40 @@ npm install -g openclaw@2026.3.2
 - GitHub releases: https://github.com/openclaw/openclaw/releases/tag/v2026.3.2
 - Docker docs: https://docs.openclaw.ai/install/docker
 - Install section of README: "Runtime: Node ≥22. `npm install -g openclaw@latest`"
+
+---
+
+## P0-5b Findings — Config Schema Corrections
+
+**Date:** 2026-02-27
+**Trigger:** P0-3 container test failed with 4 config validation errors from OpenClaw strict schema validator.
+
+### Error 1: `agents.defaults: Unrecognized key: "think"`
+
+**Wrong:** `agents.defaults.think: "low"`
+**Correct:** `agents.defaults.thinkingDefault: "low"`
+**Source:** https://docs.openclaw.ai/gateway/configuration-reference — the config reference example shows `thinkingDefault: "low"` under `agents.defaults`. The string `{think}` is only a template variable alias for `{thinkingLevel}` in banner/display contexts, not a config key.
+
+### Error 2: `channels.telegram: Unrecognized key: "token"`
+
+**Wrong:** `channels.telegram.token: "..."`
+**Correct:** `channels.telegram.botToken: "..."`
+**Source:** https://docs.openclaw.ai/channels/telegram — setup example shows `botToken: "123:abc"`. Env fallback is `TELEGRAM_BOT_TOKEN`.
+
+### Error 3: `<root>: Unrecognized key: "providers"`
+
+**Wrong:** Root-level `"providers": { "anthropic": { "apiKey": "..." } }`
+**Correct:** API keys are NOT configured in `openclaw.json`. OpenClaw reads them from process environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). The entrypoint now exports the correct env var before starting the gateway.
+**Source:** https://docs.openclaw.ai/help/environment — precedence is process env → `~/.openclaw/.env` → config `env` block. For custom/self-hosted providers, `models.providers` can hold API keys, but standard providers use env vars.
+
+### Error 4: `cron: Unrecognized keys: "daily-scout", "daily-report", ...`
+
+**Wrong:** Individual cron jobs as named keys inside `openclaw.json` `cron` section.
+**Correct:** The `cron` section in `openclaw.json` only accepts global settings (`enabled`, `maxConcurrentRuns`, `sessionRetention`, `runLog`). Individual jobs are stored in `~/.openclaw/cron/jobs.json` and registered via `openclaw cron add` CLI or the `cron.add` gateway tool call.
+**Source:** https://docs.openclaw.ai/automation/cron-jobs — jobs persist under `~/.openclaw/cron/` and use a structured schema: `jobId`, `schedule: { kind, expr, tz }`, `sessionTarget`, `payload: { kind, message }`, `delivery: { mode, channel, to }`.
+
+### Phase 1 Implications
+
+1. **ADR-0007 (SecretRef key rotation) needs revision.** API keys are set via env vars (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`), not a `providers` config block. SecretRef rotation likely means rotating the env var or writing to a secrets file that maps to these env vars — confirm the actual SecretRef mechanism before implementing Phase 1. See: https://docs.openclaw.ai/gateway/secrets
+2. **Cron job schema is new information.** The `jobs.json` schema (`jobId`, `schedule.kind`, `schedule.expr`, `sessionTarget`, `payload.kind`, `delivery`) is not in our spec docs. Document it in `specs/openclaw/OPENCLAW-CRON-SCHEMA.md` before Phase 1 cron work.
+3. **`thinkingDefault` key name.** All Tiger Claw spec docs reference `agents.defaults.think` — update references to `agents.defaults.thinkingDefault` in TIGERCLAW-BLUEPRINT-v3.md and ADR-0010 during Phase 1.
