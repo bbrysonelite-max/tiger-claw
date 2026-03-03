@@ -64,13 +64,16 @@ Each entry in `jobs.json` is a single job object:
 | `schedule.kind` | `"cron"` \| `"interval"` | yes | Cron expression or fixed interval. |
 | `schedule.expr` | string | yes | Cron expression (5-field) or interval string (e.g. `"30m"`). |
 | `schedule.tz` | string | no | IANA timezone. Defaults to UTC. |
-| `sessionTarget` | `"isolated"` \| `"reuse"` | yes | `isolated` = new session per run. `reuse` = continue last session. |
-| `wakeMode` | `"now"` \| `"lazy"` | no | `now` = start immediately on trigger. `lazy` = wait for next user message. |
+| `sessionTarget` | `"isolated"` \| `"main"` | yes | `isolated` = new session per run. `main` = enqueue into the main session. |
+| `wakeMode` | `"now"` \| `"next-heartbeat"` | no | `now` = immediate heartbeat. `next-heartbeat` = wait for next scheduled heartbeat. Default `"now"`. |
 | `payload.kind` | `"agentTurn"` | yes | Currently only `agentTurn` is supported. |
 | `payload.message` | string | yes | The message sent to the agent when the job fires. |
-| `delivery.mode` | `"none"` \| `"channel"` | yes | `none` = result stays in session. `channel` = push to a channel. |
-| `delivery.channel` | string | if mode=channel | Channel name (e.g. `"telegram"`). |
-| `delivery.to` | string | if mode=channel | Recipient identifier. |
+| `payload.model` | string | no | Model override for this run (e.g. `"opus"`). Recommended only for isolated jobs. |
+| `payload.thinking` | string | no | Thinking level override (`"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`). |
+| `delivery.mode` | `"none"` \| `"announce"` \| `"webhook"` | no | `none` = internal only. `announce` = deliver to channel + post main-session summary. `webhook` = HTTP POST to URL. If omitted for isolated jobs, defaults to `"announce"`. |
+| `delivery.channel` | string | if mode=announce | Channel name: `"telegram"`, `"whatsapp"`, `"slack"`, `"discord"`, etc. Or `"last"` for last-used route. |
+| `delivery.to` | string | if mode=announce/webhook | Channel-specific recipient (announce) or webhook URL (webhook). |
+| `delivery.bestEffort` | boolean | no | If true, delivery failure does not fail the job. Default false. |
 | `deleteAfterRun` | boolean | no | If true, job is deleted after first execution. Default false. |
 | `runCount` | number | no | Tracks how many times the job has run. Starts at 0. |
 

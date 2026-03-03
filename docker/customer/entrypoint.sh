@@ -197,7 +197,9 @@ fi
 cat > /root/.openclaw/openclaw.json << EOF
 {
   "gateway": {
+    "mode": "local",
     "port": ${OPENCLAW_PORT:-18789},
+    "bind": "lan",
     "auth": {
       "mode": "token",
       "token": "${OPENCLAW_GATEWAY_TOKEN:-dev-token}"
