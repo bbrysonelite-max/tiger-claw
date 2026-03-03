@@ -144,15 +144,34 @@ Phase 0 is complete when ALL of the following are true:
 
 ---
 
-## P0-1 Findings (fill in when complete)
+## P0-1 Findings
 
 **Verified install command:**
 ```
-# FILL IN AFTER P0-1
+npm install -g openclaw@2026.3.2
 ```
 
-**Package name:** _______________
-**Version format on npm:** _______________
-**System dependencies required:** _______________
-**Node version minimum:** _______________
-**Notes:** _______________
+**Package name:** `openclaw` (NOT `@openclaw/openclaw` — the scoped package does not exist)
+
+**Version format on npm:** `2026.3.2` (no `v` prefix). Git tags use `v2026.3.2` but npm uses `2026.3.2`. The `latest` dist-tag points to `2026.3.2` as of 2026-03-03.
+
+**System dependencies required:**
+- At least 2 GB RAM during `npm install` (OpenClaw docs warn that `pnpm install` may be OOM-killed on 1 GB hosts with exit 137 — same applies to npm)
+- OpenClaw's own Docker image uses `node:22-bookworm` (full Debian), not `node:22-slim`. This matters because some native modules may need build tools. Our current Dockerfile uses `node:22-slim` — may need to switch to `node:22-bookworm` or add `build-essential` if the install fails.
+
+**Node version minimum:** Node >= 22 (stated in both the npm README "Install" section and the "Quick start" section)
+
+**Notes:**
+- The existing Dockerfile line `RUN npm install -g @openclaw/openclaw@0.1.0` has TWO errors: wrong package name (`@openclaw/openclaw` should be `openclaw`) and wrong version (`0.1.0` should be `2026.3.2`).
+- OpenClaw's default gateway port is `18789`, which matches our `TC_PORT` and `CLAUDE.md`.
+- IMPORTANT for P0-5: In v2026.3.2, `channels.telegram.streaming` now defaults to `partial` (changed from `off`). Our LOCKED decision #11 requires `streaming: "off"`, so the explicit override in `entrypoint.sh` is critical — without it, new installs would get live streaming enabled.
+- Pre-built Docker images are available at `ghcr.io/openclaw/openclaw:2026.3.2` if we ever want to base our container on the official image instead of installing from npm. Current architecture (install from npm into our own image) is fine.
+- Alternative install methods: `pnpm add -g openclaw@2026.3.2` also works. `bun` is supported too.
+- OpenClaw uses Telegram via grammY library (confirmed in docs).
+- SecretRef support was significantly expanded in v2026.3.2 (64 targets total) — relevant for our LOCKED decision #13 about using SecretRef for key rotation.
+
+**Sources:**
+- npm: https://www.npmjs.com/package/openclaw (version `2026.3.2`, 1.5M weekly downloads)
+- GitHub releases: https://github.com/openclaw/openclaw/releases/tag/v2026.3.2
+- Docker docs: https://docs.openclaw.ai/install/docker
+- Install section of README: "Runtime: Node ≥22. `npm install -g openclaw@latest`"
