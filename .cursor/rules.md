@@ -2,10 +2,20 @@
 
 ## MANDATORY: Read Before Any Code
 
-Before writing ANY code in this repository, you MUST read:
+**Start here:** Read `CLAUDE.md` at the repository root. It is the master briefing.
 
-1. `specs/tiger-claw/TIGERCLAW-MASTER-SPEC-v2.md` — the canonical specification (127 locked decisions)
-2. The relevant OpenClaw doc in `specs/openclaw/` for whatever component you're building
+Then read in order:
+1. `specs/tiger-claw/TIGERCLAW-MASTER-SPEC-v2.md` — 127 locked architectural decisions
+2. `specs/tiger-claw/TIGERCLAW-BLUEPRINT-v3.md` — v3 changes (UPDATE PIPELINE, CHANNEL WIZARD, OPENCLAW HARDENING)
+3. `specs/tiger-claw/TIGERCLAW-PRD-v3.md` — v3 requirements and acceptance criteria
+4. The relevant OpenClaw doc in `specs/openclaw/` for the component you're building
+5. `tasks/PHASE-0.md` — current active task list
+
+**Blueprint v3 overrides Master Spec v2 where they conflict.**
+
+## Current Phase: PHASE 0
+
+See `tasks/PHASE-0.md` for the exact task list. Do not start Phase 1 until Phase 0 is verified complete (working Docker container confirmed).
 
 ## Architecture Rules
 
@@ -15,6 +25,10 @@ Before writing ANY code in this repository, you MUST read:
 - Per-tenant SQLite for tenant data. Shared PostgreSQL ONLY for platform ops.
 - Four-layer API key management. NEVER use a single shared key.
 - Scoring threshold is 80. Not 70. Not configurable.
+- `channels.telegram.streaming` MUST be explicitly set to `"off"`. Never rely on default.
+- `agents.defaults.think` MUST be explicitly set to `"low"`. Never rely on default.
+- Layer 2/3/4 API keys use SecretRef. NEVER hot-write `openclaw.json` for key rotation.
+- Container readiness: poll `/readyz`. Container liveness: poll `/healthz`.
 
 ## Code Quality Rules
 
@@ -26,13 +40,17 @@ Before writing ANY code in this repository, you MUST read:
 
 ## What NOT To Do
 
-- Do NOT simplify or skip requirements marked LOCKED in the spec.
+- Do NOT simplify or skip requirements marked LOCKED in any spec.
 - Do NOT make architectural decisions not covered by the spec. Flag them instead.
 - Do NOT use BullMQ or any external job queue. OpenClaw cron handles scheduling.
 - Do NOT put tenant data in the shared PostgreSQL.
 - Do NOT use a single shared API key for all tenants.
 - Do NOT set scoring threshold to anything other than 80.
+- Do NOT rely on OpenClaw default values for streaming or thinking level. Always set explicitly.
+- Do NOT modify `openclaw.json` at runtime for key rotation. Use `openclaw secrets reload`.
 
 ## When In Doubt
 
-If you encounter a decision point not covered by the spec, STOP and ask. Do not guess.
+If you encounter a decision point not covered by the spec, STOP and flag it:
+"DECISION REQUIRED: [description]"
+Do not guess. Do not pick the reasonable option. Wait for instruction.
