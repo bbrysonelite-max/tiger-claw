@@ -429,7 +429,8 @@ interface ChannelsParams {
   action: "channels";
   subAction: ChannelSubAction;
   channel?: ChannelName;
-  lineToken?: string;
+  lineChannelSecret?: string;
+  lineChannelAccessToken?: string;
 }
 
 async function handleChannels(
@@ -446,16 +447,16 @@ async function handleChannels(
 
   switch (params.subAction) {
     case "list": {
-      // Telegram is always active; read WhatsApp/LINE from settings.json for local state
-      const settings = loadSettings(_workdir);
+      const waEnabled = process.env["WHATSAPP_ENABLED"] === "true";
+      const lineConfigured = !!(process.env["LINE_CHANNEL_SECRET"] && process.env["LINE_CHANNEL_ACCESS_TOKEN"]);
       const lines = [
         "Channel status:",
         "",
-        "  Telegram   ACTIVE   (primary — always on)",
-        `  WhatsApp   ${settings.preferredChannel === "whatsapp" || process.env["WHATSAPP_ENABLED"] === "true" ? "ENABLED" : "DISABLED"}`,
-        `  LINE       ${settings.preferredChannel === "line" ? "CONFIGURED" : "NOT CONFIGURED"}`,
+        "  Telegram   ACTIVE         (primary — always on)",
+        `  WhatsApp   ${waEnabled ? "ENABLED" : "DISABLED"}`,
+        `  LINE       ${lineConfigured ? "CONFIGURED" : "NOT CONFIGURED"}`,
         "",
-        "To add/remove: tiger_settings channels add whatsapp, channels remove line, etc.",
+        "To add/remove: channels add whatsapp, channels add line [secret] [token], channels remove line, etc.",
       ];
       return { ok: true, output: lines.join("\n") };
     }
@@ -476,10 +477,16 @@ async function handleChannels(
       }
 
       if (params.channel === "line") {
-        if (!params.lineToken || params.lineToken.length > 200) {
-          return { ok: false, error: "lineToken is required (max 200 characters)." };
+        if (!params.lineChannelSecret || !params.lineChannelAccessToken) {
+          return { ok: false, error: "Both lineChannelSecret and lineChannelAccessToken are required. Usage: channels add line [secret] [token]" };
         }
-        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/line`, { token: params.lineToken });
+        if (params.lineChannelSecret.length > 200 || params.lineChannelAccessToken.length > 200) {
+          return { ok: false, error: "LINE credentials must be 200 characters or fewer each." };
+        }
+        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/line`, {
+          channelSecret: params.lineChannelSecret,
+          channelAccessToken: params.lineChannelAccessToken,
+        });
         if (!resp.ok) return { ok: false, error: resp.error ?? "Failed to configure LINE." };
         logger.info("tiger_settings: channels add line");
         return { ok: true, output: "LINE channel configured." };
@@ -501,7 +508,10 @@ async function handleChannels(
       }
 
       if (params.channel === "line") {
-        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/line`, { token: null });
+        const resp = await apiPost(`${apiBase}/tenants/${slug}/channels/line`, {
+          channelSecret: null,
+          channelAccessToken: null,
+        });
         if (!resp.ok) return { ok: false, error: resp.error ?? "Failed to remove LINE." };
         logger.info("tiger_settings: channels remove line");
         return { ok: true, output: "LINE channel removed." };
@@ -607,9 +617,13 @@ export const tiger_settings = {
         enum: ["whatsapp", "line"],
         description: "Channel to add or remove. Required for channels add/remove.",
       },
-      lineToken: {
+      lineChannelSecret: {
         type: "string",
-        description: "LINE Messaging API channel token. Required for channels add line.",
+        description: "LINE channel secret. Required for channels add line.",
+      },
+      lineChannelAccessToken: {
+        type: "string",
+        description: "LINE channel access token. Required for channels add line.",
       },
     },
     required: ["action"],
