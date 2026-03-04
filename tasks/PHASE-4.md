@@ -49,7 +49,7 @@ Checklist:
 - [ ] Document pass/fail for each step in `docs/testing/SECRETREF-E2E-TEST.md`
 - [ ] If any step fails, file a bug and fix before proceeding to P4-4
 
-**DECISION REQUIRED:** Which Anthropic API key to use for the test. Options: (a) operator's dev key, (b) a dedicated test key with spend limits. Must not use a production tenant key.
+**DECIDED:** Use the operator's dev Anthropic API key for the SecretRef E2E test.
 
 ---
 
@@ -80,11 +80,11 @@ Checklist:
 - [x] Write the test procedure as a step-by-step checklist in `docs/testing/WHATSAPP-E2E-TEST.md`
 - [ ] Answer Blueprint §9 Q2: does `openclaw channels login --channel whatsapp` display a QR code in Telegram? Document the actual output.
 - [ ] Answer Blueprint §9 Q3: what happens when the Baileys session expires? Document the observed behavior and design a re-auth notification flow (or document it as a Phase 5 item).
-- [ ] Execute the test on a local Docker container with a real WhatsApp number (dedicated test number, NOT a personal number)
+- [ ] Execute the test on a local Docker container with the operator's personal WhatsApp number (see decision below)
 - [ ] Document pass/fail for each step in `docs/testing/WHATSAPP-E2E-TEST.md`
 - [ ] If any step fails, file a bug, identify the code gap, and fix or defer with a clear reason
 
-**DECISION REQUIRED:** Which WhatsApp number to use for the test. Must be a dedicated number — never a personal number (ADR-0005 ToS risk).
+**DECIDED:** Use the operator's personal WhatsApp number for the E2E test. ADR-0005 ToS risk acknowledged — limit testing to functional QR scan + single test message only. Do NOT run the flywheel against this number during testing.
 
 ---
 
@@ -110,13 +110,12 @@ Checklist:
 Checklist:
 
 - [x] Write the test procedure as a step-by-step checklist in `docs/testing/LINE-E2E-TEST.md`
-- [ ] Answer Blueprint §9 Q4: is LINE self-serve (tenant creates their own Official Account) or platform-managed? Document the answer and update ADR if needed.
+- [x] Answer Blueprint §9 Q4: is LINE self-serve (tenant creates their own Official Account) or platform-managed? **DECIDED: Self-serve.** Tenants create and manage their own LINE Official Account at https://developers.line.biz/. Tiger Claw does not manage LINE accounts.
+- [ ] Update Channel Wizard LINE section (`api/src/routes/wizard.ts`) to include step-by-step instructions for creating a LINE Official Account (link to LINE Developer Console, explain channel secret vs. channel access token)
 - [ ] Execute the test on a local Docker container with a real LINE Official Account
 - [ ] Document pass/fail for each step in `docs/testing/LINE-E2E-TEST.md`
 - [ ] If any step fails, file a bug, identify the code gap, and fix or defer with a clear reason
 - [ ] If LINE integration requires additional `entrypoint.sh` changes (e.g., `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` env var wiring that isn't present), document the gap
-
-**DECISION REQUIRED:** Does Tiger Claw manage LINE Official Accounts for tenants, or is it self-serve? This determines onboarding UX and documentation.
 
 ---
 
@@ -132,7 +131,7 @@ Checklist:
 - [ ] Bot token pool has at least 10 tokens loaded (5 for canary + 5 reserve)
 - [ ] `deployment_state.json` exists and is initialized (run `ops/build.sh` to create initial entry)
 - [ ] GHCR authentication works: `docker login ghcr.io` with `GITHUB_TOKEN`
-- [ ] Canary group is set: 5 slugs designated via `/update canary set [slug1,...,slug5]`
+- [ ] Canary group is set via `/update canary set [operator,debbie-cameron,john-emmeron,toon-pontoon,tiger-test-canary-5]`
 - [ ] SecretRef E2E test (P4-1) passed
 - [ ] All 5 canary tenants are in "active" status and healthy (`/readyz` 200)
 
@@ -148,6 +147,7 @@ Checklist:
 
 Checklist:
 
+- [ ] Provision `tiger-test-canary-5` dedicated test tenant before starting the canary
 - [ ] Pre-flight checklist fully passes
 - [ ] Build succeeds and image is in GHCR
 - [ ] Canary start succeeds (all 5 containers updated and healthy)
@@ -155,7 +155,7 @@ Checklist:
 - [ ] Fleet rollout to 100% completes (or document why it was stopped)
 - [ ] Document the full deployment timeline and any issues in `docs/testing/FIRST-CANARY-REPORT.md`
 
-**DECISION REQUIRED:** Which 5 tenants form the canary group. Options: (a) 5 test/dev tenants, (b) 5 low-activity production tenants, (c) operator's own tenants. Recommendation: start with test tenants.
+**DECIDED:** Canary group is: operator's own tenant + Debbie Cameron (Spain) + John Emmeron (Thailand) + Toon Pontoon (Los Angeles) + one dedicated test tenant (`tiger-test-canary-5`, to be provisioned before canary start).
 
 ---
 
