@@ -77,6 +77,8 @@ export async function initSchema(): Promise<void> {
       END $$;
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE tenants ADD COLUMN IF NOT EXISTS line_token TEXT;
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS line_channel_secret TEXT;
+      ALTER TABLE tenants ADD COLUMN IF NOT EXISTS line_channel_access_token TEXT;
 
       CREATE TABLE IF NOT EXISTS hive_patterns (
         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -170,6 +172,8 @@ export interface Tenant {
   canaryGroup: boolean;
   whatsappEnabled: boolean;
   lineToken?: string;
+  lineChannelSecret?: string;
+  lineChannelAccessToken?: string;
   lastActivityAt?: Date;
   suspendedAt?: Date;
   suspendedReason?: string;
@@ -196,6 +200,8 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     canaryGroup: (row["canary_group"] as boolean) ?? false,
     whatsappEnabled: (row["whatsapp_enabled"] as boolean) ?? false,
     lineToken: row["line_token"] as string | undefined,
+    lineChannelSecret: row["line_channel_secret"] as string | undefined,
+    lineChannelAccessToken: row["line_channel_access_token"] as string | undefined,
     lastActivityAt: row["last_activity_at"] ? new Date(row["last_activity_at"] as string) : undefined,
     suspendedAt: row["suspended_at"] ? new Date(row["suspended_at"] as string) : undefined,
     suspendedReason: row["suspended_reason"] as string | undefined,
@@ -578,10 +584,15 @@ export async function getTenantBotUsername(tenantId: string): Promise<string | n
   return result.rows[0] ? (result.rows[0]["bot_username"] as string) : null;
 }
 
-/** Update a tenant's channel config (whatsapp_enabled, line_token). */
+/** Update a tenant's channel config (whatsapp, LINE fields). */
 export async function updateTenantChannelConfig(
   id: string,
-  config: { whatsappEnabled?: boolean; lineToken?: string | null },
+  config: {
+    whatsappEnabled?: boolean;
+    lineToken?: string | null;
+    lineChannelSecret?: string | null;
+    lineChannelAccessToken?: string | null;
+  },
 ): Promise<void> {
   const sets: string[] = ["updated_at = NOW()"];
   const values: unknown[] = [];
@@ -594,6 +605,14 @@ export async function updateTenantChannelConfig(
   if (config.lineToken !== undefined) {
     sets.push(`line_token = $${idx++}`);
     values.push(config.lineToken);
+  }
+  if (config.lineChannelSecret !== undefined) {
+    sets.push(`line_channel_secret = $${idx++}`);
+    values.push(config.lineChannelSecret);
+  }
+  if (config.lineChannelAccessToken !== undefined) {
+    sets.push(`line_channel_access_token = $${idx++}`);
+    values.push(config.lineChannelAccessToken);
   }
 
   values.push(id);
