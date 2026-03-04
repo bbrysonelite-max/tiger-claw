@@ -215,6 +215,34 @@ if [ -n "${LINE_CHANNEL_SECRET:-}" ] && [ -n "${LINE_CHANNEL_ACCESS_TOKEN:-}" ];
   LINE_ENABLED="true"
 fi
 
+# WhatsApp (Baileys) — optional outreach channel (ADR-0005, Blueprint §5.2)
+# Only enabled when WHATSAPP_ENABLED=true is explicitly set on the container.
+# TENANT_WHATSAPP_NUMBER is set after QR pairing confirms the number;
+# until then, allowFrom falls back to ["*"] so pairing can complete.
+WHATSAPP_CHANNEL_JSON=""
+if [ "${WHATSAPP_ENABLED:-}" = "true" ]; then
+  WHATSAPP_ALLOW_FROM='"*"'
+  if [ -n "${TENANT_WHATSAPP_NUMBER:-}" ]; then
+    WHATSAPP_ALLOW_FROM="\"${TENANT_WHATSAPP_NUMBER}\""
+  fi
+  WHATSAPP_CHANNEL_JSON=",
+    \"whatsapp\": {
+      \"enabled\": true,
+      \"dmPolicy\": \"allowlist\",
+      \"allowFrom\": [${WHATSAPP_ALLOW_FROM}],
+      \"streaming\": \"off\"
+    }"
+
+  # VOLUME REQUIRED: mount /root/.openclaw/whatsapp as a Docker named volume
+  # on container create/recreate to persist Baileys session across restarts.
+  # Without this volume, the tenant must re-scan the QR code after every restart.
+  mkdir -p /root/.openclaw/whatsapp
+
+  echo "   WhatsApp: enabled (number: ${TENANT_WHATSAPP_NUMBER:-not set})"
+else
+  echo "   WhatsApp: disabled"
+fi
+
 # ── Generate openclaw.json ───────────────────────────────────────────────────
 # Config validated against OpenClaw v2026.3.2 strict schema.
 #
@@ -282,7 +310,7 @@ cat > /root/.openclaw/openclaw.json << EOF
       "enabled": ${LINE_ENABLED},
       "channelSecret": "${LINE_CHANNEL_SECRET:-}",
       "channelAccessToken": "${LINE_CHANNEL_ACCESS_TOKEN:-}"
-    }
+    }${WHATSAPP_CHANNEL_JSON}
   },
   "skills": {
     "entries": {
@@ -301,7 +329,10 @@ cat > /root/.openclaw/openclaw.json << EOF
           "TENANT_PRIMARY_KEY": "${TENANT_PRIMARY_KEY:-}",
           "TENANT_FALLBACK_KEY": "${TENANT_FALLBACK_KEY:-}",
           "PLATFORM_EMERGENCY_KEY": "${PLATFORM_EMERGENCY_KEY:-}",
-          "PLATFORM_CHEAP_MODEL": "${PLATFORM_CHEAP_MODEL:-anthropic/claude-haiku-4-5-20251001}"
+          "PLATFORM_CHEAP_MODEL": "${PLATFORM_CHEAP_MODEL:-anthropic/claude-haiku-4-5-20251001}",
+          "WHATSAPP_ENABLED": "${WHATSAPP_ENABLED:-}",
+          "TENANT_WHATSAPP_NUMBER": "${TENANT_WHATSAPP_NUMBER:-}",
+          "TENANT_SLUG": "${TENANT_SLUG:-}"
         }
       }
     }

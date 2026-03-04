@@ -70,12 +70,14 @@
 
 **Context:** WhatsApp via Baileys is an optional outreach channel. Disabled by default. Tenant must explicitly enable it and complete QR code pairing.
 
-- [ ] Add WhatsApp Baileys conditional block to `docker/customer/entrypoint.sh`
-- [ ] Only enabled if `WHATSAPP_ENABLED=true` env var is set
-- [ ] Session persistence: mount `/root/.openclaw/whatsapp/` as a Docker volume
-- [ ] QR code delivery: first-time setup sends QR code image via Telegram to tenant
-- [ ] Session recovery: on container restart, resume existing Baileys session from volume
-- [ ] Graceful disable: if `WHATSAPP_ENABLED` is unset or `false`, skip Baileys initialization entirely
+- [x] Add WhatsApp Baileys conditional block to `docker/customer/entrypoint.sh` (channels section + openclaw.json heredoc)
+- [x] Only enabled if `WHATSAPP_ENABLED=true` env var is set; any other value or unset = skip entirely
+- [x] Session persistence: `mkdir -p /root/.openclaw/whatsapp` with volume mount comment; tenant must mount as Docker named volume
+- [x] QR code delivery: handled at runtime by skill layer (`tiger_settings.ts channels add whatsapp` → `openclaw channels login`); entrypoint only configures channel and creates directory
+- [x] Session recovery: Baileys session resides in `/root/.openclaw/whatsapp/` volume; survives container restarts when volume is mounted
+- [x] Graceful disable: `WHATSAPP_CHANNEL_JSON` is empty string when disabled; no whatsapp key appears in `openclaw.json` at all
+- [x] `allowFrom` falls back to `["*"]` when `TENANT_WHATSAPP_NUMBER` is not set (initial pairing); narrows to specific number after pairing confirms
+- [x] `WHATSAPP_ENABLED`, `TENANT_WHATSAPP_NUMBER`, `TENANT_SLUG` added to `skills.entries.tiger-claw.env` block
 
 ---
 
