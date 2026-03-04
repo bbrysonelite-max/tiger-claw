@@ -68,20 +68,19 @@ Read these in order for the component you are building:
 
 ---
 
-## Current Phase: PHASE 3 (Channel Wizard)
+## Current Phase: PHASE 4 (WhatsApp + LINE E2E Verification)
 
-**See `tasks/PHASE-3.md` for the exact task list.**
+**See `tasks/PHASE-4.md` for the exact task list (to be created at Phase 4 start).**
 
-Phase 2 is complete — full update pipeline implemented (build, update, canary, fleet rollout, auto-rollback). Phase 3 builds the Channel Wizard for tenant self-service channel configuration.
+Phase 3 is complete — Channel Wizard web page, in-chat channel commands, WhatsApp Baileys conditional block, bot token pool, and onboarding wizard link are all implemented. Phase 4 validates the full end-to-end flow with live channels.
 
-**Phase 3 tasks (summary):**
-1. Bot token pool infrastructure — `bottoken_pool` table, provisioner assignment, low-pool alerts (P3-0)
-2. Channel Wizard web page — HTML setup guide at `app.tigerclaw.io/wizard/[slug]` (P3-1)
-3. In-chat channel commands — `channels list/add/remove` via `tiger_settings.ts` (P3-2)
-4. WhatsApp Baileys optional channel — conditional `entrypoint.sh` block, QR code delivery (P3-3)
-5. Onboarding wizard link — send wizard URL after onboarding completes (P3-4)
+**Phase 4 scope (from TIGERCLAW-BLUEPRINT-v3.md §7):**
+1. End-to-end WhatsApp (Baileys) outreach test — Telegram onboarding → wizard → WhatsApp QR scan → prospect message
+2. Verify LINE channel formalization — token input via wizard and in-chat, prospect messaging
+3. SecretRef end-to-end validation with live API keys (carry-forward from Phase 1/2)
+4. First live canary deployment with real tenants
 
-**Do not start Phase 4 until Phase 3 is complete.**
+**Do not start Phase 5 until Phase 4 is complete.**
 
 ---
 

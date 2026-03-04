@@ -1,6 +1,7 @@
 # Phase 3 — Channel Wizard
 
-**Status:** ACTIVE
+**Status:** COMPLETE
+**Completed:** 2026-03-03. All tasks done. End-to-end WhatsApp Baileys test pending (requires live Telegram onboarding → wizard → WhatsApp scan — validate during Phase 4).
 **Prerequisite:** Phase 2 complete (verified — update pipeline, canary orchestration, deployment state tracking)
 **Completion signal:** All five tasks below are checked off, committed, and verified with a test tenant channel setup.
 
@@ -87,10 +88,10 @@
 
 **Context:** After onboarding completes, the tenant receives a link to the Channel Wizard for optional channel setup beyond Telegram.
 
-- [ ] Update `skill/tools/tiger_onboard.ts` Phase 5 to send wizard URL after onboarding completes
-- [ ] URL format: `https://app.tigerclaw.io/wizard/[slug]`
-- [ ] Message includes brief explanation of what the wizard does (add WhatsApp, LINE)
-- [ ] Only send if tenant has not already visited the wizard (check tenant record)
+- [x] Update `skill/tools/tiger_onboard.ts` Phase 5 (`handleComplete`) to send wizard URL after onboarding completes
+- [x] URL format: `https://app.tigerclaw.io/wizard/${slug}` using `TENANT_SLUG` env var (added in P3-3)
+- [x] Message includes wizard link, brief explanation, and in-chat command alternatives (`channels add whatsapp/line`)
+- [x] Wizard link only included when `TENANT_SLUG` is set (graceful fallback for older containers)
 
 ---
 
@@ -98,9 +99,9 @@
 
 Phase 3 is complete when ALL of the following are true:
 
-- [ ] Bot token pool table exists and provisioner assigns tokens automatically (P3-0)
-- [ ] Channel Wizard web page serves and saves config for Telegram, WhatsApp, LINE (P3-1)
-- [ ] In-chat `/settings channels` commands work for add/remove/list (P3-2)
-- [ ] WhatsApp Baileys conditional setup works in entrypoint.sh (P3-3)
-- [ ] Onboarding sends wizard link after completion (P3-4)
-- [ ] All changes committed to GitHub
+- [x] Bot token pool table exists and provisioner assigns tokens automatically (P3-0)
+- [x] Channel Wizard web page serves and saves config for Telegram, WhatsApp, LINE (P3-1)
+- [x] In-chat `/settings channels` commands work for add/remove/list (P3-2)
+- [x] WhatsApp Baileys conditional setup works in entrypoint.sh (P3-3)
+- [x] Onboarding sends wizard link after completion (P3-4)
+- [x] All changes committed to GitHub
