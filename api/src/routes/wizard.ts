@@ -33,7 +33,8 @@ router.get("/:slug", async (req: Request, res: Response) => {
     name: tenant.name,
     botUsername,
     whatsappEnabled: tenant.whatsappEnabled,
-    lineToken: tenant.lineToken,
+    lineChannelSecret: tenant.lineChannelSecret,
+    lineChannelAccessToken: tenant.lineChannelAccessToken,
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -49,21 +50,27 @@ router.post("/:slug/save", async (req: Request, res: Response) => {
     return res.status(404).json({ error: "Tenant not found." });
   }
 
-  const { whatsappEnabled, lineToken } = req.body as {
+  const { whatsappEnabled, lineChannelSecret, lineChannelAccessToken } = req.body as {
     whatsappEnabled?: boolean;
-    lineToken?: string;
+    lineChannelSecret?: string;
+    lineChannelAccessToken?: string;
   };
 
-  // Validate lineToken
-  if (lineToken !== undefined && lineToken !== null && lineToken !== "") {
-    if (typeof lineToken !== "string" || lineToken.length > 200) {
-      return res.status(400).json({ error: "LINE token must be a string of 200 characters or fewer." });
+  if (lineChannelSecret !== undefined && lineChannelSecret !== "") {
+    if (typeof lineChannelSecret !== "string" || lineChannelSecret.length > 200) {
+      return res.status(400).json({ error: "LINE channel secret must be 200 characters or fewer." });
+    }
+  }
+  if (lineChannelAccessToken !== undefined && lineChannelAccessToken !== "") {
+    if (typeof lineChannelAccessToken !== "string" || lineChannelAccessToken.length > 200) {
+      return res.status(400).json({ error: "LINE channel access token must be 200 characters or fewer." });
     }
   }
 
   await updateTenantChannelConfig(tenant.id, {
     whatsappEnabled: whatsappEnabled ?? undefined,
-    lineToken: lineToken === "" ? null : lineToken,
+    lineChannelSecret: lineChannelSecret === "" ? null : lineChannelSecret,
+    lineChannelAccessToken: lineChannelAccessToken === "" ? null : lineChannelAccessToken,
   });
 
   return res.json({ ok: true });
@@ -76,7 +83,8 @@ interface WizardData {
   name: string;
   botUsername: string | null;
   whatsappEnabled: boolean;
-  lineToken?: string;
+  lineChannelSecret?: string;
+  lineChannelAccessToken?: string;
 }
 
 function renderWizardPage(data: WizardData): string {
@@ -89,7 +97,9 @@ function renderWizardPage(data: WizardData): string {
     ? `<span class="status active">Enabled</span>`
     : `<span class="status off">Disabled</span>`;
 
-  const lineVal = esc(data.lineToken ?? "");
+  const lineSecretVal = esc(data.lineChannelSecret ?? "");
+  const lineAccessVal = esc(data.lineChannelAccessToken ?? "");
+  const lineConfigured = data.lineChannelSecret || data.lineChannelAccessToken;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -124,6 +134,10 @@ function renderWizardPage(data: WizardData): string {
   .toggle input:checked + .slider::before { transform: translateX(20px); }
   .details { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
   .details.open { max-height: 200px; }
+  details summary { list-style: none; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: "\\25B6 "; font-size: 0.7rem; }
+  details[open] summary::before { content: "\\25BC "; }
   .btn { display: inline-block; padding: 0.5rem 1.25rem; background: #238636; color: #fff; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s; }
   .btn:hover { background: #2ea043; }
   .btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
@@ -164,9 +178,22 @@ function renderWizardPage(data: WizardData): string {
   <!-- LINE -->
   <div class="card">
     <h2><span class="icon">🟢</span> LINE</h2>
-    <p>Optional outreach channel. Provide your LINE Messaging API channel token.</p>
-    <label for="line-token">Channel Token</label>
-    <input type="text" id="line-token" placeholder="Enter your LINE channel token" value="${lineVal}" maxlength="200">
+    <p>Optional outreach channel. ${lineConfigured ? '<span class="status active">Configured</span>' : '<span class="status off">Not configured</span>'}</p>
+    <p>LINE requires a free <a href="https://developers.line.biz/" target="_blank">LINE Official Account</a>. You create and manage your own account.</p>
+    <details>
+      <summary style="cursor:pointer;color:#58a6ff;font-size:0.875rem;margin-bottom:0.75rem;">Setup guide</summary>
+      <ol style="color:#8b949e;font-size:0.85rem;padding-left:1.25rem;margin-bottom:0.75rem;line-height:1.8;">
+        <li>Go to <a href="https://developers.line.biz/" target="_blank">developers.line.biz</a> and sign in with a LINE account</li>
+        <li>Create a new <strong>Provider</strong>, then create a <strong>Messaging API</strong> channel</li>
+        <li>Under channel settings &rarr; <strong>Basic settings</strong> tab &rarr; copy the <strong>Channel secret</strong></li>
+        <li>Under the <strong>Messaging API</strong> tab &rarr; scroll to <strong>Channel access token</strong> &rarr; issue and copy it</li>
+        <li>Paste both values below</li>
+      </ol>
+    </details>
+    <label for="line-secret">Channel Secret</label>
+    <input type="text" id="line-secret" placeholder="Paste your LINE channel secret" value="${lineSecretVal}" maxlength="200" style="margin-bottom:0.75rem;">
+    <label for="line-access-token">Channel Access Token</label>
+    <input type="text" id="line-access-token" placeholder="Paste your LINE channel access token" value="${lineAccessVal}" maxlength="200">
   </div>
 
   <button class="btn" id="save-btn" onclick="saveConfig()">Save Changes</button>
@@ -192,7 +219,8 @@ function renderWizardPage(data: WizardData): string {
 
     var body = {
       whatsappEnabled: waToggle.checked,
-      lineToken: document.getElementById("line-token").value.trim()
+      lineChannelSecret: document.getElementById("line-secret").value.trim(),
+      lineChannelAccessToken: document.getElementById("line-access-token").value.trim()
     };
 
     fetch("/wizard/${esc(data.slug)}/save", {
