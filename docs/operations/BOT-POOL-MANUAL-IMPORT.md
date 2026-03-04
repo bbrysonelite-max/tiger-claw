@@ -145,22 +145,97 @@ curl -s http://localhost:4000/admin/pool/status | python3 -m json.tool
 
 ---
 
-## Long-Term: MTProto Automation
+## Automated Creation (MTProto)
 
-The `ops/botpool/create_bots.ts` stub includes a placeholder for MTProto automation via GramJS. This would:
+`create_bots.ts --mtproto` automates BotFather conversations via GramJS MTProto. It rotates across multiple Telegram accounts with configurable delay and flood-wait handling.
 
-1. Log in to a Telegram user account via MTProto
-2. Programmatically message @BotFather
-3. Parse the `/newbot` conversation flow
-4. Extract tokens and load them into the pool automatically
+### Prerequisites
 
-**Status:** Shelved. Target: Phase 5 or later.
+1. **Telegram API credentials:** Get `api_id` and `api_hash` from https://my.telegram.org/apps
+2. **One or more dedicated Telegram accounts** (NOT personal accounts). Each account needs a phone number that can receive SMS.
+3. **Install dependencies:** `cd ops/botpool && npm install`
 
-**Requirements for implementation:**
-- GramJS dependency (`npm install telegram`)
-- A dedicated Telegram user account with phone number (NOT the admin's personal account)
-- `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` from https://my.telegram.org
-- Session persistence for the MTProto connection
-- Rate limiting to avoid Telegram's anti-flood (max ~20 bots per session)
+### Step 1 — Generate session strings
 
-**For now:** Manual creation via @BotFather is sufficient for pools up to ~100 tokens. Budget ~2 minutes per token.
+For each Telegram account, run the auth helper once to generate a session string:
+
+```bash
+npx tsx ops/botpool/auth_session.ts --api-id 12345 --api-hash abc123def456
+```
+
+The script will prompt for the phone number, verification code, and 2FA password (if enabled). On success it prints a session string. Copy it.
+
+### Step 2 — Create sessions.json
+
+Create a `sessions.json` file with all account session strings:
+
+```json
+[
+  { "accountLabel": "sim-001", "sessionString": "1BVtsOKABu..." },
+  { "accountLabel": "sim-002", "sessionString": "1BVtsOKABu..." }
+]
+```
+
+Each `accountLabel` is a human-readable name for logging. The `sessionString` is the full string from `auth_session.ts`.
+
+### Step 3 — Run automated creation
+
+```bash
+npx tsx ops/botpool/create_bots.ts \
+  --mtproto \
+  --sessions ./sessions.json \
+  --count 50 \
+  --delay 480 \
+  --api-id 12345 \
+  --api-hash abc123def456
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--sessions <path>` | (required) | Path to sessions.json |
+| `--count <n>` | 10 | Number of bots to create |
+| `--delay <seconds>` | 480 (8 min) | Minimum seconds between reuses of the same account |
+| `--api-id <id>` | `TELEGRAM_API_ID` env | Telegram API ID |
+| `--api-hash <hash>` | `TELEGRAM_API_HASH` env | Telegram API hash |
+
+**How it works:**
+
+1. Picks the account with the longest idle time
+2. Waits if the delay hasn't elapsed since its last use
+3. Connects via GramJS, sends `/newbot` to @BotFather
+4. Sends a random display name (`Tiger Agent a7x3k2`) and username (`tc_b9m2f4q1_bot`)
+5. Parses the bot token from BotFather's reply
+6. Disconnects (preserves session), POSTs token to `/admin/pool/add`
+7. Logs progress: `[3/50] @tc_b9m2f4q1_bot created (sim-001, next: sim-002 in 6m)`
+
+**Error handling:**
+
+- **Username taken:** Retries with a new random name after 30s
+- **Flood wait:** Marks the account as blocked until the flood clears, uses the next available account
+- **Single account failure:** Logged and skipped — the run continues with other accounts
+
+### Throughput estimates
+
+| Accounts | Delay | Throughput |
+|----------|-------|------------|
+| 1 | 8 min | ~7.5 bots/hour |
+| 2 | 8 min | ~15 bots/hour |
+| 3 | 8 min | ~22 bots/hour |
+| 5 | 8 min | ~37 bots/hour |
+
+### Step 4 — Verify
+
+```bash
+curl -s http://localhost:4000/admin/pool/status | python3 -m json.tool
+```
+
+### Troubleshooting
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `SESSION_REVOKED` | Telegram revoked the session | Re-run `auth_session.ts` for that account |
+| All accounts flood-blocked | Too many bots created too fast | Wait for flood to clear, or add more accounts |
+| `No token in BotFather reply` | BotFather conversation in unexpected state | Script auto-sends `/cancel` and retries |
+| `Connection failed` | Network issue or Telegram DC unreachable | Script retries with 60s cooldown |

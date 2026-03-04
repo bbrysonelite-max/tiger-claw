@@ -164,7 +164,7 @@ Checklist:
 
 **Blueprint ref:** TIGERCLAW-BLUEPRINT-v3.md §5 (P3-0 notes), `ops/botpool/create_bots.ts`
 
-**Context:** The MTProto automation stub (`ops/botpool/create_bots.ts`) is shelved — it requires GramJS and separate Telegram account credentials, which is out of scope for Phase 4. For the first canary deployment, tokens must be loaded manually. This task documents the manual process and determines the minimum count.
+**Context:** The MTProto automation (`ops/botpool/create_bots.ts --mtproto`) is now built — it uses GramJS with multi-account rotation, configurable delays, and flood-wait handling. Session strings are generated via `ops/botpool/auth_session.ts`. For the first canary deployment, tokens can be loaded manually or via the automated path once session strings are prepared.
 
 Checklist:
 
@@ -177,6 +177,9 @@ Checklist:
 - [ ] Create 10 bot tokens manually via @BotFather and load them into the pool for P4-4
 - [ ] Verify pool stats via `GET /admin/pool/status` — confirm `unassigned >= 10`
 - [x] Document the long-term plan for MTProto automation (target Phase 5 or later)
+- [x] Build MTProto bot creation automation: `create_bots.ts --mtproto` with account rotation, flood-wait handling, random names (`tc_{8-char}_bot`), and configurable delay
+- [x] Build `auth_session.ts` helper for generating GramJS session strings via interactive login
+- [x] Update `BOT-POOL-MANUAL-IMPORT.md` with "Automated Creation (MTProto)" section
 
 ---
 
