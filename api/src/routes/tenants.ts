@@ -222,9 +222,9 @@ router.post("/:slug/channels/whatsapp", async (req: Request, res: Response) => {
 
 // ---------------------------------------------------------------------------
 // POST /tenants/:slug/channels/line
-// Body: { token: string | null }
+// Body: { channelSecret: string | null, channelAccessToken: string | null }
 // Called by tiger_settings channels action to configure/remove LINE.
-// Saves config — no container restart needed (LINE token read at runtime).
+// Saves config and recreates the container with LINE env vars.
 // ---------------------------------------------------------------------------
 
 router.post("/:slug/channels/line", async (req: Request, res: Response) => {
@@ -234,24 +234,49 @@ router.post("/:slug/channels/line", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Tenant not found" });
     }
 
-    const { token } = req.body as { token?: string | null };
-    if (token !== null && token !== undefined) {
-      if (typeof token !== "string" || token.length > 200) {
-        return res.status(400).json({ error: "LINE token must be a string of 200 characters or fewer." });
+    const { channelSecret, channelAccessToken } = req.body as {
+      channelSecret?: string | null;
+      channelAccessToken?: string | null;
+    };
+
+    if (channelSecret !== null && channelSecret !== undefined) {
+      if (typeof channelSecret !== "string" || channelSecret.length > 200) {
+        return res.status(400).json({ error: "LINE channel secret must be 200 characters or fewer." });
+      }
+    }
+    if (channelAccessToken !== null && channelAccessToken !== undefined) {
+      if (typeof channelAccessToken !== "string" || channelAccessToken.length > 200) {
+        return res.status(400).json({ error: "LINE channel access token must be 200 characters or fewer." });
       }
     }
 
     await updateTenantChannelConfig(tenant.id, {
-      lineToken: token === null ? null : (token ?? undefined),
+      lineChannelSecret: channelSecret === null ? null : (channelSecret ?? undefined),
+      lineChannelAccessToken: channelAccessToken === null ? null : (channelAccessToken ?? undefined),
     });
+
+    const adding = channelSecret && channelAccessToken;
+
+    if (tenant.port) {
+      try {
+        const envUpdates: Record<string, string | undefined> = adding
+          ? { LINE_CHANNEL_SECRET: channelSecret!, LINE_CHANNEL_ACCESS_TOKEN: channelAccessToken! }
+          : { LINE_CHANNEL_SECRET: undefined, LINE_CHANNEL_ACCESS_TOKEN: undefined };
+        await recreateContainerWithEnv(tenant.slug, envUpdates);
+        await waitForReady(tenant.slug, tenant.port, 60);
+      } catch (err) {
+        console.error(`[tenants] LINE container restart failed for ${tenant.slug}:`, err);
+        return res.status(500).json({ error: "Channel config saved but container restart failed." });
+      }
+    }
 
     await logAdminEvent({
       tenantId: tenant.id,
-      action: token ? "channel_line_add" : "channel_line_remove",
+      action: adding ? "channel_line_add" : "channel_line_remove",
       details: { source: "channels_api" },
     });
 
-    return res.json({ ok: true, lineConfigured: !!token });
+    return res.json({ ok: true, lineConfigured: !!adding });
   } catch (err) {
     console.error("[tenants] POST channels/line error:", err);
     return res.status(500).json({ error: "Internal server error" });

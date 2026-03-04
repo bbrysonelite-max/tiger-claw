@@ -112,6 +112,7 @@ Checklist:
 - [x] Write the test procedure as a step-by-step checklist in `docs/testing/LINE-E2E-TEST.md`
 - [x] Answer Blueprint §9 Q4: is LINE self-serve (tenant creates their own Official Account) or platform-managed? **DECIDED: Self-serve.** Tenants create and manage their own LINE Official Account at https://developers.line.biz/. Tiger Claw does not manage LINE accounts.
 - [x] Update Channel Wizard LINE section (`api/src/routes/wizard.ts`) to include step-by-step instructions for creating a LINE Official Account (link to LINE Developer Console, explain channel secret vs. channel access token). Split single `lineToken` input into two fields: Channel Secret and Channel Access Token. Added `line_channel_secret` and `line_channel_access_token` columns to tenants table.
+- [x] **Gap found and fixed:** LINE channel activation required container restart to inject `LINE_CHANNEL_SECRET` and `LINE_CHANNEL_ACCESS_TOKEN` env vars. Updated `POST /tenants/:slug/channels/line` to accept `{ channelSecret, channelAccessToken }`, call `recreateContainerWithEnv()` + `waitForReady()`. Updated `tiger_settings.ts` channels add/remove/list line to use two credentials and match the new API contract.
 - [ ] Execute the test on a local Docker container with a real LINE Official Account
 - [ ] Document pass/fail for each step in `docs/testing/LINE-E2E-TEST.md`
 - [ ] If any step fails, file a bug, identify the code gap, and fix or defer with a clear reason
