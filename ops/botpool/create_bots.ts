@@ -1,18 +1,24 @@
 #!/usr/bin/env npx tsx
 // Tiger Claw — Bot Pool Token Loader
 //
-// Two paths for populating the bot token pool:
+// Three paths for populating the bot token pool:
 //
 // 1. --file ./tokens.json
 //    Reads a JSON file of pre-created { botToken, botUsername } pairs
 //    and inserts them via the API. For manual batch imports.
 //
-// 2. --mtproto --sessions ./sessions.json --count 50
+// 2. --tokens-file ./tokens.txt
+//    Reads a plain-text file with one raw bot token per line.
+//    Fetches the bot username automatically via Telegram's getMe API.
+//    No manual JSON formatting required.
+//
+// 3. --mtproto --sessions ./sessions.json --count 50
 //    Automated BotFather creation via GramJS MTProto.
 //    Rotates across multiple Telegram accounts with flood-wait handling.
 //
 // Usage:
 //   npx tsx ops/botpool/create_bots.ts --file ./tokens.json
+//   npx tsx ops/botpool/create_bots.ts --tokens-file ./tokens.txt
 //   npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50
 //   npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50 --delay 480
 //
@@ -165,7 +171,72 @@ async function addTokensFromFile(filePath: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Path 2: MTProto automated creation
+// Path 2: Plain-text token file import (auto-resolves usernames via getMe)
+// ---------------------------------------------------------------------------
+
+async function addTokensFromTextFile(filePath: string): Promise<void> {
+  const fs = await import("fs");
+  const path = await import("path");
+
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) {
+    console.error(`File not found: ${resolved}`);
+    process.exit(1);
+  }
+
+  const lines = fs.readFileSync(resolved, "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+
+  if (lines.length === 0) {
+    console.error("No tokens found in file (blank lines and # comments are ignored).");
+    process.exit(1);
+  }
+
+  console.log(`Found ${lines.length} token(s) in ${resolved}\n`);
+
+  let success = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const token = lines[i]!;
+
+    let username: string;
+    try {
+      const resp = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      if (!resp.ok) {
+        console.error(`  SKIP [${i + 1}/${lines.length}]: getMe returned ${resp.status} — token may be invalid`);
+        skipped++;
+        continue;
+      }
+      const data = (await resp.json()) as { ok: boolean; result?: { username?: string } };
+      if (!data.ok || !data.result?.username) {
+        console.error(`  SKIP [${i + 1}/${lines.length}]: getMe response missing username`);
+        skipped++;
+        continue;
+      }
+      username = data.result.username;
+    } catch (err) {
+      console.error(`  SKIP [${i + 1}/${lines.length}]: getMe failed — ${err instanceof Error ? err.message : err}`);
+      skipped++;
+      continue;
+    }
+
+    const ok = await postToPool(token, username);
+    if (ok) {
+      console.log(`  OK [${i + 1}/${lines.length}]: @${username}`);
+      success++;
+    } else {
+      skipped++;
+    }
+  }
+
+  console.log(`\nDone: ${success} imported, ${skipped} skipped.`);
+}
+
+// ---------------------------------------------------------------------------
+// Path 3: MTProto automated creation
 // ---------------------------------------------------------------------------
 
 async function createBotsViaMTProto(
@@ -435,6 +506,7 @@ function looksLikeNamePrompt(text: string): boolean {
 // ---------------------------------------------------------------------------
 
 const fileIdx = args.indexOf("--file");
+const tokensFileIdx = args.indexOf("--tokens-file");
 
 if (hasFlag("--mtproto")) {
   const sessionsPath = flag("--sessions", "");
@@ -460,6 +532,11 @@ if (hasFlag("--mtproto")) {
     console.error("Fatal:", err);
     process.exit(1);
   });
+} else if (tokensFileIdx >= 0 && args[tokensFileIdx + 1]) {
+  addTokensFromTextFile(args[tokensFileIdx + 1]!).catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
 } else if (fileIdx >= 0 && args[fileIdx + 1]) {
   addTokensFromFile(args[fileIdx + 1]!).catch((err) => {
     console.error("Fatal:", err);
@@ -468,13 +545,17 @@ if (hasFlag("--mtproto")) {
 } else {
   console.log("Usage:");
   console.log("");
-  console.log("  Manual import:");
+  console.log("  Plain-text import (auto-resolves usernames):");
+  console.log("    npx tsx ops/botpool/create_bots.ts --tokens-file ./tokens.txt");
+  console.log("");
+  console.log("  JSON import:");
   console.log("    npx tsx ops/botpool/create_bots.ts --file ./tokens.json");
   console.log("");
   console.log("  MTProto automation:");
   console.log("    npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50");
   console.log("");
   console.log("  Options:");
+  console.log("    --tokens-file <path> Plain-text file, one bot token per line (# comments OK)");
   console.log("    --file <path>       JSON file of { botToken, botUsername } pairs");
   console.log("    --mtproto           Use MTProto automated creation");
   console.log("    --sessions <path>   Session strings JSON file (required for --mtproto)");
