@@ -1011,6 +1011,21 @@ async function handleComplete(state: OnboardState): Promise<ToolResult> {
     triggerFirstScout(state.tenantId),
   ]);
 
+  const slug = process.env["TENANT_SLUG"] ?? "";
+  const wizardBlock = slug
+    ? [
+        ``,
+        `Your Tiger Claw is ready on Telegram! 🎉`,
+        ``,
+        `To add WhatsApp or LINE for prospect outreach, complete your channel setup here:`,
+        `https://app.tigerclaw.io/wizard/${slug}`,
+        ``,
+        `This link is always available. You can also add channels any time by sending:`,
+        `  channels add whatsapp`,
+        `  channels add line [your-token]`,
+      ]
+    : [];
+
   return {
     ok: true,
     output: [
@@ -1023,6 +1038,7 @@ async function handleComplete(state: OnboardState): Promise<ToolResult> {
       `• Every morning at 7 AM, I send you a briefing with leads, status updates, and actions`,
       `• I'll contact qualified prospects automatically and run 30-day nurture sequences`,
       `• When someone scores high enough, I'll set up your three-way close`,
+      ...wizardBlock,
       ``,
       `You're live. Let's get to work.`,
     ].join("\n"),
