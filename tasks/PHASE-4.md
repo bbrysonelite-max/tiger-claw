@@ -44,7 +44,7 @@
 
 Checklist:
 
-- [ ] Write the test procedure above as a runnable script or step-by-step checklist in `docs/testing/SECRETREF-E2E-TEST.md`
+- [x] Write the test procedure above as a runnable script or step-by-step checklist in `docs/testing/SECRETREF-E2E-TEST.md`
 - [ ] Execute the test on a local Docker container with a real Anthropic API key
 - [ ] Document pass/fail for each step in `docs/testing/SECRETREF-E2E-TEST.md`
 - [ ] If any step fails, file a bug and fix before proceeding to P4-4
@@ -77,7 +77,7 @@ Checklist:
 
 Checklist:
 
-- [ ] Write the test procedure as a step-by-step checklist in `docs/testing/WHATSAPP-E2E-TEST.md`
+- [x] Write the test procedure as a step-by-step checklist in `docs/testing/WHATSAPP-E2E-TEST.md`
 - [ ] Answer Blueprint §9 Q2: does `openclaw channels login --channel whatsapp` display a QR code in Telegram? Document the actual output.
 - [ ] Answer Blueprint §9 Q3: what happens when the Baileys session expires? Document the observed behavior and design a re-auth notification flow (or document it as a Phase 5 item).
 - [ ] Execute the test on a local Docker container with a real WhatsApp number (dedicated test number, NOT a personal number)
@@ -109,7 +109,7 @@ Checklist:
 
 Checklist:
 
-- [ ] Write the test procedure as a step-by-step checklist in `docs/testing/LINE-E2E-TEST.md`
+- [x] Write the test procedure as a step-by-step checklist in `docs/testing/LINE-E2E-TEST.md`
 - [ ] Answer Blueprint §9 Q4: is LINE self-serve (tenant creates their own Official Account) or platform-managed? Document the answer and update ADR if needed.
 - [ ] Execute the test on a local Docker container with a real LINE Official Account
 - [ ] Document pass/fail for each step in `docs/testing/LINE-E2E-TEST.md`
@@ -167,15 +167,15 @@ Checklist:
 
 Checklist:
 
-- [ ] Document the manual bot creation process in `docs/operations/BOT-POOL-MANUAL-IMPORT.md`:
+- [x] Document the manual bot creation process in `docs/operations/BOT-POOL-MANUAL-IMPORT.md`:
   - Step-by-step: open @BotFather → `/newbot` → name → username → copy token
   - How to format the JSON file for `addTokensFromFile()`: `[{ "botToken": "...", "botUsername": "..." }, ...]`
-  - How to load: `npx ts-node ops/botpool/create_bots.ts --file tokens.json` or `curl -X POST /admin/pool/add`
-- [ ] Determine minimum token count for first canary: 5 canary tenants + N reserve tokens
-- [ ] Determine minimum token count for first fleet rollout: total expected tenants + 20% buffer
+  - How to load: `npx tsx ops/botpool/create_bots.ts --file tokens.json` or `curl -X POST /admin/pool/add`
+- [x] Determine minimum token count for first canary: 5 canary tenants + 5 reserve = **10 minimum**
+- [x] Determine minimum token count for first fleet rollout: total expected tenants + 20% buffer
 - [ ] Create 10 bot tokens manually via @BotFather and load them into the pool for P4-4
 - [ ] Verify pool stats via `GET /admin/pool/status` — confirm `unassigned >= 10`
-- [ ] Document the long-term plan for MTProto automation (target Phase 5 or later)
+- [x] Document the long-term plan for MTProto automation (target Phase 5 or later)
 
 ---
 
