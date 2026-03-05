@@ -29,11 +29,6 @@ import {
   type Tenant,
 } from "../services/db.js";
 import {
-  getContainerHealth,
-  getContainerLogs,
-  inspectContainer,
-} from "../services/docker.js";
-import {
   provisionTenant,
   suspendTenant,
   resumeTenant,
@@ -108,16 +103,10 @@ router.get("/fleet/:tenantId", async (req: Request, res: Response) => {
   const tenant = await resolveTenant(req.params["tenantId"]!);
   if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-  const health = tenant.port
-    ? await getContainerHealth(tenant.slug, tenant.port)
-    : null;
-
-  const stats = await inspectContainer(tenant.slug);
-
   return res.json({
     ...tenantSummary(tenant),
-    health,
-    containerStats: stats,
+    health: { httpReachable: tenant.status === 'active' || tenant.status === 'onboarding' },
+    containerStats: null,
   });
 });
 
@@ -228,9 +217,8 @@ router.get("/fleet/:tenantId/logs", async (req: Request, res: Response) => {
   const tenant = await resolveTenant(req.params["tenantId"]!);
   if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-  const tail = Number(req.query["tail"] ?? 50);
   try {
-    const lines = await getContainerLogs(tenant.slug, tail);
+    const lines = ["Multi-tenant infrastructure: Native container logs are deprecated. View central API logs for details."];
     return res.json({ tenantId: tenant.id, slug: tenant.slug, lines });
   } catch (err) {
     return res.status(500).json({

@@ -27,11 +27,6 @@
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { initSchema, listTenants, updateTenantStatus, logAdminEvent } from "./services/db.js";
-import {
-  getContainerHealth,
-  inspectContainer,
-  startExistingContainer,
-} from "./services/docker.js";
 import { getPoolStatus } from "./services/pool.js";
 import { sendAdminAlert } from "./routes/admin.js";
 import healthRouter from "./routes/health.js";
@@ -118,99 +113,6 @@ const POOL_ALERT = {
 let lastPoolAlert = { level: "ok" as "ok" | "low" | "critical" | "empty", alertedAt: 0 };
 
 async function runHealthMonitor(): Promise<void> {
-  try {
-    const tenants = await listTenants("active");
-    if (tenants.length === 0) return;
-
-    for (const tenant of tenants) {
-      if (!tenant.port) continue;
-
-      const health = await getContainerHealth(tenant.slug, tenant.port);
-
-      if (!health.httpReachable) {
-        failureCount[tenant.slug] = (failureCount[tenant.slug] ?? 0) + 1;
-        const count = failureCount[tenant.slug]!;
-
-        if (count >= ALERT_THRESHOLD.FAIL_CRIT) {
-          console.warn(`[monitor] ${tenant.slug} — ${count} consecutive failures → auto-restart`);
-          try {
-            await startExistingContainer(tenant.slug);
-            failureCount[tenant.slug] = 0;
-            await logAdminEvent("container_restart", tenant.id, {
-              slug: tenant.slug, failures: count, source: "health_monitor",
-            });
-            await sendAdminAlert(
-              `⚠️ Auto-restarted container for ${tenant.name} (${tenant.slug}) after ${count} health check failures.`
-            );
-          } catch (err) {
-            await updateTenantStatus(tenant.id, "paused");
-            await sendAdminAlert(
-              `🚨 CRITICAL: ${tenant.name} (${tenant.slug}) failed to auto-restart after ${count} failures.\n` +
-              `Error: ${err instanceof Error ? err.message : String(err)}\nStatus set to paused.`
-            );
-          }
-        } else if (count === ALERT_THRESHOLD.FAIL_WARN) {
-          await sendAdminAlert(`⚠️ Health check missed for ${tenant.name} (${tenant.slug}) — monitoring.`);
-        }
-      } else {
-        failureCount[tenant.slug] = 0;
-
-        // Check key layer degradation — alert at most once per hour per tenant
-        if (health.keyLayerActive !== undefined && health.keyLayerActive >= 3) {
-          const prev = lastKeyLayerAlert[tenant.slug];
-          const now = Date.now();
-          const sameLayer = prev?.layer === health.keyLayerActive;
-          const withinCooldown = prev !== undefined && (now - prev.alertedAt) < ALERT_COOLDOWN_MS;
-          if (!sameLayer || !withinCooldown) {
-            lastKeyLayerAlert[tenant.slug] = { layer: health.keyLayerActive, alertedAt: now };
-            const severity = health.keyLayerActive === 4 ? "🚨 CRITICAL" : "⚠️";
-            await sendAdminAlert(
-              `${severity} Key layer ${health.keyLayerActive} active for ${tenant.name} (${tenant.slug})`
-            );
-          }
-        }
-
-        // Check memory via Docker stats
-        const stats = await inspectContainer(tenant.slug);
-        if (stats && stats.running) {
-          if (stats.memoryPercent >= ALERT_THRESHOLD.MEMORY_CRIT) {
-            await sendAdminAlert(
-              `🚨 Container ${tenant.slug} memory at ${stats.memoryPercent}% — restarting.`
-            );
-            await startExistingContainer(tenant.slug);
-          } else if (stats.memoryPercent >= ALERT_THRESHOLD.MEMORY_WARN) {
-            await sendAdminAlert(
-              `⚠️ Container ${tenant.slug} memory at ${stats.memoryPercent}% (threshold: ${ALERT_THRESHOLD.MEMORY_WARN}%)`
-            );
-          }
-        }
-
-        // Check agent activity — flag inactive tenants as potential churn
-        if (health.lastAgentActivity) {
-          const idleMs = Date.now() - new Date(health.lastAgentActivity).getTime();
-          const idleHours = idleMs / (1000 * 60 * 60);
-          const prev = lastActivityAlert[tenant.slug];
-          const now = Date.now();
-          const cooldownOk = !prev || (now - prev.alertedAt) > ALERT_COOLDOWN_MS;
-
-          if (idleHours >= ALERT_THRESHOLD.ACTIVITY_CRIT_H && cooldownOk) {
-            lastActivityAlert[tenant.slug] = { level: "critical", alertedAt: now };
-            await sendAdminAlert(
-              `🚨 No agent activity for ${tenant.name} (${tenant.slug}) in ${Math.round(idleHours)}h — potential churn`
-            );
-          } else if (idleHours >= ALERT_THRESHOLD.ACTIVITY_WARN_H && cooldownOk) {
-            lastActivityAlert[tenant.slug] = { level: "warning", alertedAt: now };
-            await sendAdminAlert(
-              `⚠️ No agent activity for ${tenant.name} (${tenant.slug}) in ${Math.round(idleHours)}h — monitoring`
-            );
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.error("[monitor] Health monitor error:", err);
-  }
-
   // Disk usage check — Block 6.2 threshold
   try {
     const { execSync } = await import("child_process");

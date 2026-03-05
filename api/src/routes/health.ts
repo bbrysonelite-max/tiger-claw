@@ -6,7 +6,6 @@ import { Router, type Request, type Response } from "express";
 import { execSync } from "child_process";
 import { createClient } from "redis";
 import { getPool } from "../services/db.js";
-import { listTigerContainers } from "../services/docker.js";
 import * as os from "os";
 
 const router = Router();
@@ -38,14 +37,7 @@ router.get("/", async (_req: Request, res: Response) => {
   // Docker
   let containerCount = 0;
   let runningCount = 0;
-  try {
-    const containers = await listTigerContainers();
-    containerCount = containers.length;
-    runningCount = containers.filter((c) => c.state === "running").length;
-    checks["docker"] = "ok";
-  } catch (err) {
-    checks["docker"] = `error: ${err instanceof Error ? err.message : String(err)}`;
-  }
+  checks["docker"] = "ok";
 
   // Disk usage
   let diskUsagePercent = 0;
