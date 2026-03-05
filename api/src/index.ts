@@ -43,6 +43,7 @@ import updateRouter from "./routes/update.js";
 import wizardRouter from "./routes/wizard.js";
 import keysRouter from "./routes/keys.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
+import "./services/queue.js"; // Initialize BullMQ Background Workers
 
 const app = express();
 const PORT = Number(process.env["PORT"] ?? 4000);

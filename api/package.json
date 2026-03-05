@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.4.0",
+    "bullmq": "^5.70.2",
     "dockerode": "^4.0.2",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
+    "ioredis": "^5.10.0",
     "node-telegram-bot-api": "^0.66.0",
     "pg": "^8.11.3",
     "redis": "^5.11.0",
