@@ -1,24 +1,11 @@
-// Tiger Claw API — Provisioner Service
-// Implements the full 8-step payment → live bot pipeline
+// Tiger Claw API — Multi-Tenant Provisioner Service
 // TIGERCLAW-MASTER-SPEC-v2.md Block 5.1 "60 seconds from payment to bot sending first message"
-//
-// Pipeline steps:
-//  1. Create tenant record in PostgreSQL (status: pending)
-//  2. Spin up Docker container with correct env vars
-//  3. Readiness check: /readyz responds within 60s (ADR-0008)
-//  4. Update status → onboarding
-//  5. Bot sends first greeting message via Telegram
-//  6. Onboarding interview begins (tiger_onboard skill inside container)
-//
-// For suspend/resume:
-//   stopContainer  → update status: suspended
-//   startContainer → update status: active (or onboarding if incomplete)
+// RE-ARCHITECTED FOR MULTI-TENANCY: No container spinning. Just DB inserts and instant activation.
 
 import {
   createTenant,
   getTenantBySlug,
   updateTenantStatus,
-  getNextAvailablePort,
   logAdminEvent,
   listBotPool,
   assignBotToken,
@@ -26,13 +13,6 @@ import {
   getPool,
   type Tenant,
 } from "./db.js";
-import {
-  startContainer,
-  stopContainer,
-  startExistingContainer,
-  removeContainer,
-  getContainerReady,
-} from "./docker.js";
 import { getNextAvailable, assignToTenant, releaseBot, decryptToken } from "./pool.js";
 import { sendAdminAlert } from "../routes/admin.js";
 
@@ -48,19 +28,14 @@ export interface ProvisionInput {
   region: string;
   language: string;
   preferredChannel: string;
-  // botToken is no longer required from Stripe metadata — sourced from pool.
-  // Admin manual provisioning can still pass one explicitly to bypass pool.
   botToken?: string;
   timezone?: string;
-  port?: number;          // if omitted, auto-assigned
-  tenantId?: string;      // if omitted, generated
 }
 
 export interface ProvisionResult {
   success: boolean;
-  waitlisted?: boolean;   // true when pool was empty — tenant queued, not failed
+  waitlisted?: boolean;
   tenant?: Tenant;
-  port?: number;
   error?: string;
   steps: string[];
 }
@@ -78,24 +53,16 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
     return { success: false, error: `Slug '${input.slug}' already in use.`, steps };
   }
 
-  // 2. Resolve bot token: explicit override → pool (atomic) → waitlist
-  // Bot assigned at payment time, NEVER at onboarding (Block 5.3 Decision 3)
   let resolvedBotToken = input.botToken;
 
   if (!resolvedBotToken) {
-    // Atomic assignment: SELECT FOR UPDATE SKIP LOCKED prevents race conditions
-    // under concurrent provisioning. We need the tenant record first for the FK,
-    // so we create it below and assign the bot token afterward.
-    // For now, just check if pool has tokens — actual assignment after tenant creation.
     const stats = await getPoolStats();
     if (stats.unassigned === 0) {
       // Pool empty — put tenant on waitlist, do NOT fail payment
-      // Block 5.3 Decision 7: Pool empty = waitlist mode, not failed payment
       steps.push("Pool empty — tenant added to waitlist");
 
       let waitlistTenant: Tenant;
       try {
-        const wPort = input.port ?? await getNextAvailablePort();
         waitlistTenant = await createTenant({
           slug: input.slug,
           name: input.name,
@@ -105,7 +72,7 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
           language: input.language,
           preferredChannel: input.preferredChannel,
           botToken: undefined,
-          port: wPort,
+          port: 0, // Port is deprecated in Multi-Tenancy
         });
         await updateTenantStatus(waitlistTenant.id, "pending");
       } catch (err) {
@@ -126,11 +93,8 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
     steps.push("Bot token provided directly (admin override)");
   }
 
-  // 3. Auto-assign port if not provided
-  const port = input.port ?? await getNextAvailablePort();
-  steps.push(`Port assigned: ${port}`);
 
-  // 4. Create tenant record (status: pending)
+  // 2. Create tenant record (status: pending)
   let tenant: Tenant;
   try {
     tenant = await createTenant({
@@ -142,14 +106,14 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
       language: input.language,
       preferredChannel: input.preferredChannel,
       botToken: resolvedBotToken,
-      port,
+      port: 0, // Port deprecated
     });
     steps.push(`Tenant record created: ${tenant.id}`);
   } catch (err) {
     return { success: false, error: `DB error: ${err instanceof Error ? err.message : String(err)}`, steps };
   }
 
-  // Assign bot token from pool (atomic SELECT FOR UPDATE SKIP LOCKED)
+  // Assign bot token from pool 
   if (!input.botToken) {
     const assigned = await assignBotToken(tenant.id);
     if (!assigned) {
@@ -158,93 +122,73 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
       return { success: true, waitlisted: true, tenant, steps: [...steps, "Pool emptied during assignment — waitlisted"], error: undefined };
     }
     resolvedBotToken = decryptToken(assigned.botToken);
+
     // Update tenant record with the assigned bot token
     await getPool().query("UPDATE tenants SET bot_token = $1, updated_at = NOW() WHERE id = $2", [resolvedBotToken, tenant.id]);
     steps.push(`Bot assigned from pool: @${assigned.botUsername}`);
 
-    // Low-pool alert: warn admin when unassigned tokens drop below 50
+    // Low-pool alert
     const postStats = await getPoolStats();
     if (postStats.unassigned < 50) {
       await sendAdminAlert(`Bot token pool low: ${postStats.unassigned} tokens remaining. Add more via ops/botpool.`);
     }
   }
 
-  // 5. Start Docker container
+  // 3. Multi-Tenant Activation! No Docker containers to spin up. 
+  // We simply register an active Webhook with Telegram for the newly assigned token bridging directly to this API cluster.
+
   try {
-    const containerId = await startContainer({
-      slug: input.slug,
-      tenantId: tenant.id,
-      name: input.name,
-      port,
-      language: input.language,
-      flavor: input.flavor,
-      region: input.region,
-      botToken: resolvedBotToken,
-      timezone: input.timezone,
-      platformOnboardingKey: process.env["PLATFORM_ONBOARDING_KEY"],
-      platformEmergencyKey: process.env["PLATFORM_EMERGENCY_KEY"],
-      tigerClawApiUrl: process.env["TIGER_CLAW_API_URL"] ?? `http://host.docker.internal:4000`,
-      databaseUrl: process.env["DATABASE_URL"],
-      redisUrl: process.env["REDIS_URL"],
-      encryptionKey: process.env["ENCRYPTION_KEY"],
-    });
-    await updateTenantStatus(tenant.id, "pending", { containerId });
-    steps.push(`Container started: ${containerId.slice(0, 12)}`);
+    const webhookUrl = `${process.env["TIGER_CLAW_API_URL"] ?? 'https://api.tigerclaw.io'}/webhooks/telegram/${tenant.id}`;
+
+    // Call Telegram API to set the webhook
+    const tgResponse = await fetch(`https://api.telegram.org/bot${resolvedBotToken}/setWebhook?url=${webhookUrl}`);
+    const tgData = await tgResponse.json();
+
+    if (!tgData.ok) {
+      throw new Error(`Telegram Webhook failed: ${tgData.description}`);
+    }
+
+    steps.push(`Telegram webhook attached to Master API router successfully.`);
   } catch (err) {
     await updateTenantStatus(tenant.id, "suspended", {
-      suspendedReason: `Container start failed: ${err instanceof Error ? err.message : String(err)}`,
+      suspendedReason: `Webhook attachment failed: ${err instanceof Error ? err.message : String(err)}`,
     });
     return {
       success: false,
-      error: `Docker start failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Webhook attach failed: ${err instanceof Error ? err.message : String(err)}`,
       steps,
       tenant,
     };
   }
 
-  // 6. Readiness check: wait up to 60s for /readyz (ADR-0008)
-  const healthy = await waitForReady(input.slug, port, 60);
-  if (!healthy) {
-    await updateTenantStatus(tenant.id, "suspended", {
-      suspendedReason: "Readiness check timed out (60s)",
-    });
-    return {
-      success: false,
-      error: `Container ${input.slug} did not pass /readyz within 60 seconds.`,
-      steps: [...steps, "Readiness check FAILED (60s timeout)"],
-      tenant,
-    };
-  }
-  steps.push("Readiness check PASSED (/readyz → 200)");
-
-  // 7. Status → onboarding
+  // 4. Status → onboarding (Bot is instantly LIVE and listening on the master router)
   await updateTenantStatus(tenant.id, "onboarding");
   steps.push("Status: onboarding");
 
-  // 7. Bot is live. tiger_onboard.ts will send the first greeting when the
-  //    tenant's first inbound message arrives — no proactive send here because
-  //    a brand-new bot has no chat_id until the tenant initiates contact.
+  // Bot is live. Waiting for tenant to trigger it via Telegram.
   steps.push("Bot ready — awaiting tenant's first inbound message to start onboarding");
 
   await logAdminEvent("provision", tenant.id, {
     slug: input.slug,
-    port,
     flavor: input.flavor,
     region: input.region,
   });
 
-  return { success: true, tenant, port, steps };
+  return { success: true, tenant, steps };
 }
 
 // ---------------------------------------------------------------------------
-// Suspend a tenant (stop container, update DB)
+// Suspend a tenant 
 // ---------------------------------------------------------------------------
 
 export async function suspendTenant(
   tenant: Tenant,
   reason = "Admin action"
 ): Promise<void> {
-  await stopContainer(tenant.slug);
+  // To suspend a multi-tenant bot, we just drop its webhook so it stops listening
+  if (tenant.botToken) {
+    await fetch(`https://api.telegram.org/bot${tenant.botToken}/deleteWebhook`);
+  }
   await updateTenantStatus(tenant.id, "suspended", { suspendedReason: reason });
   await logAdminEvent("suspend", tenant.id, { reason });
 }
@@ -254,7 +198,10 @@ export async function suspendTenant(
 // ---------------------------------------------------------------------------
 
 export async function resumeTenant(tenant: Tenant): Promise<void> {
-  await startExistingContainer(tenant.slug);
+  if (tenant.botToken) {
+    const webhookUrl = `${process.env["TIGER_CLAW_API_URL"] ?? 'https://api.tigerclaw.io'}/webhooks/telegram/${tenant.id}`;
+    await fetch(`https://api.telegram.org/bot${tenant.botToken}/setWebhook?url=${webhookUrl}`);
+  }
   // Restore to last meaningful status before suspension
   const status = tenant.onboardingKeyUsed > 0 ? "active" : "onboarding";
   await updateTenantStatus(tenant.id, status);
@@ -262,15 +209,12 @@ export async function resumeTenant(tenant: Tenant): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Terminate a tenant (remove container + update DB)
+// Terminate a tenant 
 // ---------------------------------------------------------------------------
 
 export async function terminateTenant(tenant: Tenant): Promise<void> {
-  try {
-    await stopContainer(tenant.slug);
-    await removeContainer(tenant.slug, true);
-  } catch {
-    // Best-effort
+  if (tenant.botToken) {
+    await fetch(`https://api.telegram.org/bot${tenant.botToken}/deleteWebhook`);
   }
   await updateTenantStatus(tenant.id, "terminated");
   await logAdminEvent("terminate", tenant.id, {});
@@ -278,25 +222,14 @@ export async function terminateTenant(tenant: Tenant): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Deprovision a tenant — full cleanup including bot recycling
-// Called after 30-day retention period per Block 5.3 Decision 8.
-// Steps:
-//   1. Stop and remove Docker container
-//   2. Find the assigned pool bot for this tenant and release it
-//   3. Release resets bot identity via Telegram API and returns it to available pool
-//   4. Log the recycling event
 // ---------------------------------------------------------------------------
 
 export async function deprovisionTenant(tenant: Tenant): Promise<{ steps: string[] }> {
   const steps: string[] = [];
 
-  // 1. Stop and remove container
-  try {
-    await stopContainer(tenant.slug);
-    steps.push("Container stopped");
-    await removeContainer(tenant.slug, true);
-    steps.push("Container removed");
-  } catch (err) {
-    steps.push(`Container cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
+  if (tenant.botToken) {
+    await fetch(`https://api.telegram.org/bot${tenant.botToken}/deleteWebhook`);
+    steps.push("Telegram webhook deleted for Bot Token");
   }
 
   // 2. Find assigned pool bot for this tenant and release it
@@ -320,28 +253,3 @@ export async function deprovisionTenant(tenant: Tenant): Promise<{ steps: string
   await logAdminEvent("deprovision", tenant.id, { slug: tenant.slug, steps });
   return { steps };
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-export async function waitForReady(slug: string, port: number, timeoutSeconds: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutSeconds * 1000;
-  let attempt = 0;
-  while (Date.now() < deadline) {
-    attempt++;
-    if (await getContainerReady(slug, port)) {
-      console.log(`[provisioner] ${slug}: /readyz passed on attempt ${attempt}`);
-      return true;
-    }
-    console.log(`[provisioner] ${slug}: /readyz attempt ${attempt} failed, retrying in 2s`);
-    await sleep(2000);
-  }
-  console.error(`[provisioner] ${slug}: /readyz failed after ${attempt} attempts (${timeoutSeconds}s timeout)`);
-  return false;
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-

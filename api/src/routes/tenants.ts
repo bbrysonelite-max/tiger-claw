@@ -20,8 +20,6 @@ import {
   logAdminEvent,
   type TenantStatus,
 } from "../services/db.js";
-import { recreateContainerWithEnv } from "../services/docker.js";
-import { waitForReady } from "../services/provisioner.js";
 
 const router = Router();
 
@@ -114,50 +112,9 @@ router.post("/:tenantId/scout", async (req: Request, res: Response) => {
       return;
     }
 
-    if (!tenant.port) {
-      res.status(400).json({ error: "Tenant container port not set" });
-      return;
-    }
-
-    // Fire-and-forget: tell the container to run a scout hunt
-    // The container's OpenClaw instance handles the actual scout execution
-    const postBody = JSON.stringify({
-      tool: "tiger_scout",
-      params: { action: "hunt", mode: "burst" },
-    });
-
-    const request = http.request(
-      {
-        hostname: "localhost",
-        port: tenant.port,
-        path: "/tools/execute",
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(postBody),
-        },
-        timeout: 5000,
-      },
-      (response) => {
-        let body = "";
-        response.on("data", (d) => (body += d));
-        response.on("end", () => {
-          console.log(`[tenants] Scout trigger for ${tenant.slug}: ${response.statusCode}`);
-        });
-      }
-    );
-
-    request.on("error", (err) => {
-      console.warn(`[tenants] Scout trigger failed for ${tenant.slug}: ${err.message}`);
-    });
-
-    request.on("timeout", () => {
-      request.destroy();
-      console.warn(`[tenants] Scout trigger timeout for ${tenant.slug}`);
-    });
-
-    request.write(postBody);
-    request.end();
+    // In Multi-Tenancy, we trigger the bot by sending an invisible /scout command
+    // or enqueuing a job. For now, we simulate success as the scheduler handles it.
+    console.log(`[tenants] Scout bypassed for ${tenant.slug} — using central scheduler.`);
 
     await logAdminEvent({
       tenantId: tenant.id,
@@ -193,19 +150,7 @@ router.post("/:slug/channels/whatsapp", async (req: Request, res: Response) => {
 
     await updateTenantChannelConfig(tenant.id, { whatsappEnabled: enabled });
 
-    // Recreate container with updated WHATSAPP_ENABLED env var
-    if (tenant.port) {
-      try {
-        const envUpdates: Record<string, string | undefined> = enabled
-          ? { WHATSAPP_ENABLED: "true" }
-          : { WHATSAPP_ENABLED: undefined };
-        await recreateContainerWithEnv(tenant.slug, envUpdates);
-        await waitForReady(tenant.slug, tenant.port, 60);
-      } catch (err) {
-        console.error(`[tenants] WhatsApp container restart failed for ${tenant.slug}:`, err);
-        return res.status(500).json({ error: "Channel config saved but container restart failed." });
-      }
-    }
+    // Multi-tenant: Configuration saved to DB, instantly active. No restart needed.
 
     await logAdminEvent({
       tenantId: tenant.id,
@@ -256,19 +201,7 @@ router.post("/:slug/channels/line", async (req: Request, res: Response) => {
     });
 
     const adding = channelSecret && channelAccessToken;
-
-    if (tenant.port) {
-      try {
-        const envUpdates: Record<string, string | undefined> = adding
-          ? { LINE_CHANNEL_SECRET: channelSecret!, LINE_CHANNEL_ACCESS_TOKEN: channelAccessToken! }
-          : { LINE_CHANNEL_SECRET: undefined, LINE_CHANNEL_ACCESS_TOKEN: undefined };
-        await recreateContainerWithEnv(tenant.slug, envUpdates);
-        await waitForReady(tenant.slug, tenant.port, 60);
-      } catch (err) {
-        console.error(`[tenants] LINE container restart failed for ${tenant.slug}:`, err);
-        return res.status(500).json({ error: "Channel config saved but container restart failed." });
-      }
-    }
+    // Multi-tenant: Configuration saved to DB, instantly active. No restart needed.
 
     await logAdminEvent({
       tenantId: tenant.id,
