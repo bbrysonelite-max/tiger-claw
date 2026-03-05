@@ -1,0 +1,28 @@
+{
+    "id": "doctor",
+    "name": "Healthcare Practice Agent",
+    "professionLabel": "healthcare and patient wellness",
+    "defaultKeywords": [
+        "need a new doctor",
+        "specialist near me",
+        "second opinion",
+        "chronic pain doctor",
+        "concierge medicine",
+        "medical advice",
+        "doctor accepting patients"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hi {{name}},\n\nI'm {{botName}}, assisting the clinic of {{tenantName}}.\n\nI noticed you were asking about health resources. Quick tip: The biggest mistake people make in modern healthcare is treating symptoms instead of root causes. Finding a practitioner who listens for more than 7 minutes can completely change your long-term prognosis.\n\nNo pitch, just wanted to share that perspective.\n\n— {{botName}}",
+        "testimonial": "Hi {{name}},\n\nQuick story — {{tenantName}} just reviewed some labs for a patient who had been told for years that their fatigue was \"normal.\"\n\nTurns out, it wasn't. They adjusted one specific biomarker based on our protocol, and the patient feels a decade younger.\n\nThe right diagnostic approach matters.\n\n— {{botName}}",
+        "authority_transfer": "Hi {{name}},\n\nI want to properly introduce you to {{tenantName}}.\n\nThey have been practicing in {{profession}} for {{years}}. Their biggest recent advance: {{biggestWin}}. What makes their clinic different: {{differentiator}}.\n\nWe don't operate like a typical high-volume facility. We focus intensely on {{icp}}.\n\nIf you fall into that category, an initial consultation is incredibly valuable.\n\n— {{botName}}",
+        "personal_checkin": "Hi {{name}},\n\nJust checking in — how are you feeling lately?\n\nNo agenda here. {{tenantName}} just likes to ensure we keep a pulse on the people reaching out to our clinic.\n\nAnything improved on your end?\n\n— {{botName}}",
+        "one_to_ten_part1": "Hi {{name}},\n\nQuick question regarding your health.\n\nOn a scale of 1-10, how prioritized is addressing your current concern right now? (1 = I can live with it, 10 = I need to see a specialist immediately).\n\nJust reply with a number.\n\n— {{botName}}",
+        "one_to_ten_part2": "Thank you for sharing that.\n\nWhat would it take to be a 10? Are you waiting on insurance, trying home remedies first, or just anxious about what the diagnosis might be?\n\nI just want to make sure we're providing the best guidance.\n\n— {{botName}}",
+        "gap_closing": "I completely understand — {{answer}}.\n\nThat's very valid, and {{tenantName}} actively accounts for that in the patient onboarding process. It's exactly why we emphasize our {{biggestWin}} approach.\n\nDoes knowing we have a specific pathway to address that change your 1-10 urgency?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hi {{name}},\n\nI'll be straightforward — {{tenantName}} strictly limits new patient intake to maintain high-quality care for our existing roster.\n\nIf you're wanting to get on the schedule, let me know. If you've decided to hold off, that's okay too! I just want to manage our availability.\n\n— {{botName}}",
+        "pattern_interrupt": "Hi {{name}},\n\nBefore I close your file, think about this.\n\nWe service our cars every 5,000 miles, but often ignore our bodies until the check-engine light is physically smoking. \n\nPreventative care is always cheaper and less painful than reactive care. \n\nIf you're ready to actually take look under the hood with {{tenantName}}, just say \"Book me.\"\n\n— {{botName}}",
+        "final_takeaway": "Hi {{name}},\n\nThis will be my final message. I'm removing you from my active patient follow-up.\n\n{{tenantName}} is focused on patients currently under their care. We wish you the absolute best in health!\n\n— {{botName}}",
+        "slow_drip_value": "Hi {{name}},\n\nChecking in — just passing along some wellness info.\n\n{{tenantName}} has been seeing great results focusing on {{differentiator}}. \n\nHope you are staying healthy. Reach out if you ever need us!\n\n— {{botName}}",
+        "default_fallback": "Hi {{name}}, just checking in. — {{botName}}"
+    }
+}

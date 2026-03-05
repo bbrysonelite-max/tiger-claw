@@ -83,7 +83,7 @@ const EMPTY_STATE: DeploymentState = {
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-const REPO_ROOT = process.env["REPO_ROOT"] ?? path.resolve(import.meta.dirname, "../../../..");
+const REPO_ROOT = process.env["REPO_ROOT"] ?? path.resolve(__dirname, "../../../..");
 const STATE_FILE = process.env["DEPLOYMENT_STATE_FILE"] ?? path.join(REPO_ROOT, "deployment_state.json");
 const LOCK_FILE = `${STATE_FILE}.lock`;
 const LOCK_STALE_MS = 30_000;

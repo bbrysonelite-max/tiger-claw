@@ -76,6 +76,7 @@ interface NurtureRecord {
   lastOneToTenScore?: number;
   lastGapAnswer?: string;
   oneToTenRound: number;
+  [key: string]: unknown;
 }
 
 interface LeadRecord {
@@ -94,6 +95,7 @@ interface LeadRecord {
   intentSignalHistory: Array<{ type: string; excerpt?: string }>;
   converted?: boolean;
   convertedAt?: string;
+  [key: string]: unknown;
 }
 
 interface OnboardState {
@@ -549,14 +551,14 @@ function handleInitiate(
       status: "pending_delivery",
       ...(oar === "builder"
         ? {
-            tenantBriefText: record.tenantBriefText,
-            prospectEdificationText: record.prospectEdificationText,
-            connectionText: record.connectionText,
-          }
+          tenantBriefText: record.tenantBriefText,
+          prospectEdificationText: record.prospectEdificationText,
+          connectionText: record.connectionText,
+        }
         : {
-            autonomousCloseText: record.autonomousCloseText,
-            tenantNotificationText: record.tenantNotificationText,
-          }),
+          autonomousCloseText: record.autonomousCloseText,
+          tenantNotificationText: record.tenantNotificationText,
+        }),
     },
   };
 }

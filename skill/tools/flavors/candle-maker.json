@@ -1,0 +1,28 @@
+{
+    "id": "candle-maker",
+    "name": "Artisan Crafter Agent",
+    "professionLabel": "handcrafted goods",
+    "defaultKeywords": [
+        "soy candles",
+        "custom candles gifts",
+        "boutique candles",
+        "wholesale candles",
+        "artisan craft fair",
+        "scented candles",
+        "buying handmade candles"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hi {{name}},\n\nI'm {{botName}}, representing {{tenantName}}.\n\nI saw you were interested in candles/crafts. A quick piece of insight: most big-box candles use paraffin wax and synthetic fragrances that actually pollute indoor air. Artisan soy or beeswax with essential oils burns cleaner and lasts twice as long.\n\nQuality materials really do make a difference!\n\n— {{botName}}",
+        "testimonial": "Hi {{name}},\n\nQuick thought — {{tenantName}} recently poured a custom batch for a client creating corporate gifts.\n\nThey wanted something that didn't feel cheap. The feedback they got from their partners was incredible because the scent throw filled the room without giving anyone a headache.\n\nHand-poured makes all the difference.\n\n— {{botName}}",
+        "authority_transfer": "Hi {{name}},\n\nI want to properly introduce {{tenantName}}.\n\nThey have spent {{years}} mastering {{profession}}. Their proudest recent launch: {{biggestWin}}. What makes our studio different: {{differentiator}}.\n\nWe don't manufacture; we hand-craft for {{icp}}.\n\nIf you appreciate real craftsmanship, you'll love our studio.\n\n— {{botName}}",
+        "personal_checkin": "Hi {{name}},\n\nJust checking in — did you find the gifts/products you were looking for?\n\n{{tenantName}} asked me to follow up. We love connecting with people who appreciate artisan goods.\n\n— {{botName}}",
+        "one_to_ten_part1": "Hi {{name}},\n\nQuick question.\n\nOn a scale of 1-10, how ready are you to place an order or coordinate a custom batch? (1 = Just browsing the aesthetic, 10 = I want to buy right now).\n\nJust reply with a number.\n\n— {{botName}}",
+        "one_to_ten_part2": "Got it, totally fair.\n\nWhat's keeping you from being a 10? Are you looking for a specific scent we don't carry, comparing prices, or just not needing it right this moment?\n\nLet me know so I don't send you irrelevant info.\n\n— {{botName}}",
+        "gap_closing": "I see — {{answer}}.\n\nActually, a lot of our first-time buyers have that exact thought. {{tenantName}} specifically designed our collections to address that, which led to {{biggestWin}}.\n\nDoes knowing we have a curated solution for that change your readiness (1-10)?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hi {{name}},\n\nI'll be direct — {{tenantName}} pours in small batches so quality stays high. Our next pour is almost fully allocated.\n\nIf you want in on this batch, let me know. If you're just window shopping, I completely respect that and will let you browse in peace!\n\n— {{botName}}",
+        "pattern_interrupt": "Hi {{name}},\n\nBefore I stop following up, consider this.\n\nYour environment dictates your mood. A cheap candle smells like a cheap candle. A beautifully crafted scent elevates an entire room.\n\nIf you're ready to actually elevate your space, simply reply \"Let's ship it.\"\n\n— {{botName}}",
+        "final_takeaway": "Hi {{name}},\n\nThis is my final message. I'm taking you off our active outreach list.\n\n{{tenantName}} is back in the studio pouring! If you ever need artisan goods, our site is always open.\n\n— {{botName}}",
+        "slow_drip_value": "Hi {{name}},\n\nChecking in — just passing along some studio news.\n\nWe just dropped a new collection focused on {{differentiator}}. \n\nHope your space is smelling amazing!\n\n— {{botName}}",
+        "default_fallback": "Hi {{name}}, just checking in. — {{botName}}"
+    }
+}

@@ -434,7 +434,7 @@ function handleRespond(
   };
 
   let nextMessage = "";
-  let newStatus = session.status;
+  let newStatus: SessionStatus = session.status;
   let outcome: SessionOutcome = "in_progress";
 
   switch (session.status) {

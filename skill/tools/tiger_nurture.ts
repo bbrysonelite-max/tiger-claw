@@ -36,6 +36,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { classifyBucket, getBucketResponse, fillTemplate } from "./tiger_objection.js";
+import { loadFlavorConfig, fillTemplate as fillFlavorTemplate } from "./flavorConfig.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -156,6 +157,7 @@ interface LeadRecord {
   optedOut: boolean;
   intentSignalHistory: Array<{ type: string; excerpt?: string }>;
   involvementLevel?: number;
+  [key: string]: unknown;
 }
 
 interface ToolContext {
@@ -263,16 +265,9 @@ function touchTypeForNumber(touchNumber: number, record: NurtureRecord): TouchTy
 }
 
 // ---------------------------------------------------------------------------
-// Message generation — all touch types
-// ---------------------------------------------------------------------------
-
 function professionLabel(flavor: string): string {
-  const labels: Record<string, string> = {
-    "network-marketer": "network marketing",
-    "real-estate": "real estate",
-    "health-wellness": "health & wellness",
-  };
-  return labels[flavor] ?? "their field";
+  const config = loadFlavorConfig(flavor);
+  return config.professionLabel;
 }
 
 function buildTouchMessage(
@@ -281,184 +276,27 @@ function buildTouchMessage(
   onboard: OnboardState,
   gapAnswer?: string
 ): string {
-  const botName = onboard.botName ?? "your assistant";
-  const tenantName = onboard.identity.name ?? "my operator";
-  const biggestWin = onboard.identity.biggestWin ?? "built something impressive";
-  const differentiator = onboard.identity.differentiator ?? "takes a different approach";
-  const profession = professionLabel(onboard.flavor);
-  const product = onboard.identity.productOrOpportunity ?? "the opportunity";
-  const years = onboard.identity.yearsInProfession ?? "several years";
+  const config = loadFlavorConfig(onboard.flavor);
 
-  const icp =
-    onboard.flavor === "network-marketer"
+  const variables: Record<string, string | undefined> = {
+    botName: onboard.botName ?? "your assistant",
+    tenantName: onboard.identity.name ?? "my operator",
+    biggestWin: onboard.identity.biggestWin ?? "built something impressive",
+    differentiator: onboard.identity.differentiator ?? "takes a different approach",
+    profession: config.professionLabel,
+    product: onboard.identity.productOrOpportunity ?? "the opportunity",
+    years: onboard.identity.yearsInProfession ?? "several years",
+    icp: onboard.flavor === "network-marketer"
       ? (record.oar === "builder"
-          ? onboard.icpBuilder?.idealPerson
-          : onboard.icpCustomer?.idealPerson)
-      : onboard.icpSingle?.idealPerson;
+        ? onboard.icpBuilder?.idealPerson
+        : onboard.icpCustomer?.idealPerson)
+      : (onboard.icpSingle?.idealPerson ?? "someone serious about results"),
+    name: record.leadDisplayName,
+    answer: gapAnswer ?? "what you mentioned"
+  };
 
-  const name = record.leadDisplayName;
-
-  switch (touchType) {
-    case "value_drop":
-      return [
-        `Hey ${name},`,
-        ``,
-        `I'm ${botName}, working with ${tenantName}.`,
-        ``,
-        `I wanted to share something relevant — no pitch, just something I thought you'd find useful.`,
-        ``,
-        `The conversation around AI and work is shifting fast. The middle layer of jobs — management, coordination, routine knowledge work — is compressing. People who own their income stream are going to be in a very different position in 5 years than people who don't.`,
-        ``,
-        `Not pushing anything. Just something worth thinking about.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "testimonial":
-      return [
-        `Hey ${name},`,
-        ``,
-        `Quick one — I was talking with ${tenantName} earlier and they mentioned someone who started exactly where you are now.`,
-        ``,
-        `Same hesitations. Same "I'm not sure this is for me" energy. Six months later — different story entirely.`,
-        ``,
-        `${tenantName} doesn't work with everyone. They're selective. Which is probably why results like that happen.`,
-        ``,
-        `Anyway, just thought of you. No pressure.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "authority_transfer":
-      return [
-        `Hey ${name},`,
-        ``,
-        `I realized I haven't properly introduced you to ${tenantName} — I just told you they were good. Let me be more specific.`,
-        ``,
-        `${tenantName} has been in ${profession} for ${years}. ${biggestWin}. What makes them different: ${differentiator}.`,
-        ``,
-        `They're not trying to be everything to everyone. They work with a specific kind of person: ${icp ?? "someone serious about results"}.`,
-        ``,
-        `If that's you — even a little — it's worth one conversation.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "personal_checkin":
-      return [
-        `Hey ${name},`,
-        ``,
-        `Just checking in — how are things going?`,
-        ``,
-        `No agenda. ${tenantName} asked me to stay in touch with people they've been introduced to. They actually care how you're doing.`,
-        ``,
-        `Anything new on your end?`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "one_to_ten_part1":
-      return [
-        `Hey ${name},`,
-        ``,
-        `Quick question — and I want an honest answer.`,
-        ``,
-        `On a scale of 1-10, where are you with ${product}? 1 = not interested at all. 10 = let's do this right now.`,
-        ``,
-        `Just give me a number. No judgment either way.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "one_to_ten_part2":
-      return [
-        `Okay, I appreciate the honesty.`,
-        ``,
-        `Here's what I want to know: what would you need to know — or see — to move that to a 10?`,
-        ``,
-        `Not trying to talk you into anything. I genuinely want to know what's in the gap. Whatever it is, I can either answer it or tell you I can't — and either is fine.`,
-        ``,
-        `What's the thing?`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "gap_closing": {
-      const answer = gapAnswer ?? "what you mentioned";
-      return [
-        `Got it — ${answer}.`,
-        ``,
-        `That's a fair question and ${tenantName} gets it a lot. Here's the honest answer:`,
-        ``,
-        `${tenantName} has been exactly where you are. They know what it looks like when something's a fit and when it isn't. Their experience with ${biggestWin} came from deciding to take that question seriously rather than letting it stop them.`,
-        ``,
-        `With that in mind — where are you now on the 1-10 scale?`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-    }
-
-    case "scarcity_takeaway":
-      return [
-        `Hey ${name},`,
-        ``,
-        `I'm going to be straight with you — ${tenantName} is selective about who they spend time with, and I've been reaching out to a few people on their behalf.`,
-        ``,
-        `Some of those conversations are moving forward. I can't keep everyone in the loop indefinitely.`,
-        ``,
-        `If you're curious — even a little — now is the time to say so. If not, no hard feelings at all.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "pattern_interrupt":
-      return [
-        `Hey ${name},`,
-        ``,
-        `Let me ask you something before I let you go.`,
-        ``,
-        `If someone offered you a million dollars to jump out of an airplane without a parachute, would you do it?`,
-        ``,
-        `Most people say no immediately. But here's the thing — nobody said the airplane was in the air. It's sitting on the runway.`,
-        ``,
-        `The lesson: don't say no before you have all the information.`,
-        ``,
-        `I think you might be doing that with ${product}. And that's fine — if you've thought it through. But if the no is coming from an incomplete picture, it's worth 10 minutes to complete it.`,
-        ``,
-        `I'll leave it there. If you want that conversation, just say yes.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "final_takeaway":
-      return [
-        `Hey ${name},`,
-        ``,
-        `I've enjoyed being in touch. I'm going to step back now — this is the last message I'll send for a while.`,
-        ``,
-        `${tenantName} is doing well and moving forward. If the timing ever changes for you, I'm easy to reach.`,
-        ``,
-        `Take care.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    case "slow_drip_value":
-      return [
-        `Hey ${name},`,
-        ``,
-        `Checking in — it's been a bit. Just wanted to share something I thought was worth passing along.`,
-        ``,
-        `${tenantName} has been focused on ${differentiator}. Things are moving. No pitch — just wanted to stay in touch.`,
-        ``,
-        `If anything's changed on your end, I'm always here.`,
-        ``,
-        `— ${botName}`,
-      ].join("\n");
-
-    default:
-      return `Hey ${name}, just checking in. — ${botName}`;
-  }
+  const template = (config.nurtureTemplates as Record<string, string>)[touchType] ?? config.nurtureTemplates.default_fallback;
+  return fillFlavorTemplate(template, variables);
 }
 
 // ---------------------------------------------------------------------------
@@ -1066,7 +904,7 @@ function advanceToNextTouch(
 
   if (nextTouchNumber > TOTAL_TOUCHES) {
     // Sequence complete — final takeaway + slow drip
-    transitionToSlowDrip(record, store, workdir, onboard, { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} });
+    transitionToSlowDrip(record, store, workdir, onboard, { info: () => { }, warn: () => { }, debug: () => { }, error: () => { } });
     return {
       ok: true,
       output: [

@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tiger-claw-botpool-generator
+  namespace: default
+spec:
+  # Run every 6 hours
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: botpool-worker
+            image: ghcr.io/bbrysonelite-max/tiger-claw-tools:latest
+            command:
+            - "npx"
+            - "tsx"
+            - "ops/botpool/create_bots.ts"
+            - "--mtproto"
+            - "--sessions"
+            - "/mnt/secrets/botpool-sessions.json"
+            - "--count"
+            - "5" 
+            env:
+            - name: TELEGRAM_API_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tiger-claw-secrets
+                  key: telegram-api-id
+            - name: TELEGRAM_API_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: tiger-claw-secrets
+                  key: telegram-api-hash
+            - name: TIGER_CLAW_API_URL
+              value: "http://tiger-claw-api.default.svc.cluster.local:4000"
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: tiger-claw-secrets
+                  key: admin-token
+            volumeMounts:
+            - name: botpool-sessions
+              mountPath: "/mnt/secrets"
+              readOnly: true
+          restartPolicy: OnFailure
+          volumes:
+          - name: botpool-sessions
+            secret:
+              secretName: tiger-claw-botpool-sessions

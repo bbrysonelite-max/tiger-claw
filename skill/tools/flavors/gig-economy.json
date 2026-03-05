@@ -1,0 +1,29 @@
+{
+    "id": "gig-economy",
+    "name": "Gig Economy Agent",
+    "professionLabel": "gig and freelance work",
+    "defaultKeywords": [
+        "need an uber driver",
+        "doordash alternative",
+        "freelance gig",
+        "taskrabbit",
+        "need help moving",
+        "side hustle app",
+        "instacart shopper",
+        "hire a freelancer"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hi {{name}},\n\nI'm {{botName}}, assisting {{tenantName}}.\n\nI noticed you were looking into gig work or freelance assistance. Quick tip: A lot of platforms keep 30-40% of the transaction fee. Connecting directly with vetted independents usually results in higher quality work and better pay for the worker.\n\nJust a thought as you explore options!\n\n— {{botName}}",
+        "testimonial": "Hi {{name}},\n\nBrief story — {{tenantName}} recently helped a client who was frustrated with unreliable app-based workers.\n\nWe connected them with a dedicated independent who handled the task in half the time, completely stress-free. \n\nDirect, vetted connections are just a better model.\n\n— {{botName}}",
+        "authority_transfer": "Hi {{name}},\n\nI want to properly introduce you to {{tenantName}}.\n\nThey have been operating in the {{profession}} space for {{years}}. Their biggest recent win: {{biggestWin}}. What makes their network different: {{differentiator}}.\n\nThey don't just assign random bodies; they work specifically with {{icp}}.\n\nIf that's what you need, it's worth connecting.\n\n— {{botName}}",
+        "personal_checkin": "Hi {{name}},\n\nJust checking in — did you get that task/project sorted out?\n\n{{tenantName}} asked me to follow up. We hate seeing people get stuck on projects that go unfinished.\n\n— {{botName}}",
+        "one_to_ten_part1": "Hi {{name}},\n\nQuick question.\n\nOn a scale of 1-10, how urgent is it to get this gig filled? (1 = Just exploring, 10 = I need someone there today).\n\nJust reply with a number.\n\n— {{botName}}",
+        "one_to_ten_part2": "Understood, that helps.\n\nWhat's the main obstacle keeping you from a 10? Are you worried about cost, the quality of the worker, or just figuring out exactly what you need done?\n\nI want to make sure I don't waste your time.\n\n— {{botName}}",
+        "gap_closing": "I totally get that — {{answer}}.\n\nThat happens constantly in this space. Actually, {{tenantName}} structured their network specifically to bypass that, which is how we hit {{biggestWin}}.\n\nDoes knowing we have a vetted solution change your urgency to get it done?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hi {{name}},\n\nI'll be direct — {{tenantName}}'s network of quality freelancers stays booked up quickly.\n\nI have a highly-rated worker available this week, but if you don't need them, I need to open the slot for someone else.\n\nLet me know where you stand!\n\n— {{botName}}",
+        "pattern_interrupt": "Hi {{name}},\n\nBefore I pull your request from the active board, think about this.\n\nYour time is worth money. Spending 3 hours a week doing a task you could outsource for $50 is a massive net loss in productivity.\n\nIf you're ready to buy your time back, just reply \"Let's do it.\"\n\n— {{botName}}",
+        "final_takeaway": "Hi {{name}},\n\nThis is my final message. I'm removing your project from my active list.\n\n{{tenantName}} is busy dispatching to active jobs. If you ever need reliable help, you know where to find us!\n\n— {{botName}}",
+        "slow_drip_value": "Hi {{name}},\n\nChecking in — just passing along a quick update on the freelance network.\n\n{{tenantName}} has been seeing great success focusing on {{differentiator}}. \n\nHope your projects are running smoothly!\n\n— {{botName}}",
+        "default_fallback": "Hi {{name}}, just checking in. — {{botName}}"
+    }
+}

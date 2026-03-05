@@ -89,6 +89,7 @@ interface LeadRecord {
   optedOut: boolean;
   intentSignalHistory: Array<{ type: string; excerpt?: string; source?: string }>;
   postExcerpt?: string;
+  [key: string]: unknown;
 }
 
 interface OnboardState {
@@ -515,17 +516,17 @@ function handleQueue(
   const scheduledDate = new Date(scheduledFor);
   const output = manualApproval
     ? [
-        `Contact queued for approval: ${lead.displayName} (${strategy} strategy)`,
-        `Message ready. Awaiting your approval before scheduling.`,
-        `Call tiger_contact with action: 'approve' and contactId: '${record.id}' to approve.`,
-      ].join("\n")
+      `Contact queued for approval: ${lead.displayName} (${strategy} strategy)`,
+      `Message ready. Awaiting your approval before scheduling.`,
+      `Call tiger_contact with action: 'approve' and contactId: '${record.id}' to approve.`,
+    ].join("\n")
     : [
-        `Contact scheduled: ${lead.displayName} (${strategy} strategy)`,
-        `Will send at: ${scheduledDate.toUTCString()}`,
-        ``,
-        `--- Message Preview ---`,
-        messageText,
-      ].join("\n");
+      `Contact scheduled: ${lead.displayName} (${strategy} strategy)`,
+      `Will send at: ${scheduledDate.toUTCString()}`,
+      ``,
+      `--- Message Preview ---`,
+      messageText,
+    ].join("\n");
 
   return {
     ok: true,
@@ -960,8 +961,8 @@ function handleList(workdir: string): ToolResult {
         status === "scheduled"
           ? ` → ${new Date(c.scheduledFor).toUTCString()}`
           : status === "follow_up_scheduled"
-          ? ` → follow-up ${new Date(c.followUpScheduledFor!).toUTCString()}`
-          : "";
+            ? ` → follow-up ${new Date(c.followUpScheduledFor!).toUTCString()}`
+            : "";
       lines.push(`  • ${c.leadDisplayName} (${c.platform}, ${c.strategy})${detail}`);
     }
     if (group.length > 10) lines.push(`  ... and ${group.length - 10} more`);

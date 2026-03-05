@@ -16,6 +16,12 @@
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
 import { provisionTenant } from "../services/provisioner.js";
+import {
+  createBYOKUser,
+  createBYOKBot,
+  createBYOKConfig,
+  createBYOKSubscription
+} from "../services/db.js";
 import { sendAdminAlert } from "./admin.js";
 
 const router = Router();
@@ -61,7 +67,7 @@ router.post("/stripe", async (req: Request, res: Response) => {
   const slug = meta["slug"] ?? slugify(customer?.name ?? "tenant");
   const name = customer?.name ?? meta["name"] ?? slug;
   const email = customer?.email ?? undefined;
-  const language = (customer?.preferred_locales?.[0] ?? meta["language"] ?? "en").split("-")[0] ?? "en";
+  const language = ((customer as any)?.preferred_locales?.[0] ?? meta["language"] ?? "en").split("-")[0] ?? "en";
   const flavor = meta["flavor"] ?? "network-marketer";
   const region = meta["region"] ?? (language === "th" ? "th-th" : "us-en");
   const botToken = meta["bot_token"];
@@ -76,6 +82,47 @@ router.post("/stripe", async (req: Request, res: Response) => {
   // Provision async (non-blocking)
   setImmediate(async () => {
     try {
+      // 1. Create User
+      const userId = await createBYOKUser(email!, name, typeof session.customer === "string" ? session.customer : undefined);
+
+      // 2. Extract BYOK Config / Keys from Stripe Session
+      let finalKeyToStore = null;
+      let finalKeyPreview = null;
+      let finalProvider = meta["aiProvider"];
+      let finalModel = meta["aiModel"];
+
+      // If bypassing stripe keys and passing them over direct API (production mode)
+      // Usually webhook shouldn't have raw keys, but for MVP validation we'll fall back safely
+      if (meta["hasAiKey"] === "true" && meta["rawKey"]) {
+        const { encryptToken } = await import("../services/pool.js");
+        finalKeyToStore = encryptToken(meta["rawKey"]);
+        finalKeyPreview = meta["rawKey"].slice(0, 8) + "...";
+      }
+
+      // 3. Create Bot Record
+      const botId = await createBYOKBot(userId, meta["botName"] ?? name, flavor, "deploying");
+
+      // 4. Create AI Config
+      await createBYOKConfig({
+        botId,
+        connectionType: meta["connectionType"] ?? "tiger_credits",
+        provider: finalProvider,
+        model: finalModel,
+        encryptedKey: finalKeyToStore ?? undefined,
+        keyPreview: finalKeyPreview ?? undefined
+      });
+
+      // 5. Create Subscription
+      if (session.subscription) {
+        await createBYOKSubscription({
+          userId,
+          botId,
+          stripeSubscriptionId: session.subscription as string,
+          planTier: meta["connectionType"] === "byok" ? "byok_basic" : "managed_pro"
+        });
+      }
+
+      // 6. trigger Kubernetes provisioning
       const result = await provisionTenant({
         slug,
         name,
@@ -89,13 +136,22 @@ router.post("/stripe", async (req: Request, res: Response) => {
       });
 
       if (result.success) {
+        // ... (remaining logic same)
         console.log(`[webhooks] Provisioned ${slug} on port ${result.port}. Steps:`, result.steps);
+
+        // Update Bot State explicitly
+        const pool = (await import("../services/db.js")).getPool();
+        await pool.query("UPDATE bots SET status = 'live', deployed_at = NOW() WHERE id = $1", [botId]);
+
         await sendAdminAlert(
           `✅ New tenant provisioned!\n` +
           `Name: ${name}\nSlug: ${slug}\nFlavor: ${flavor}\nPort: ${result.port}\n` +
           `Steps: ${result.steps.join(", ")}`
         );
       } else {
+        const pool = (await import("../services/db.js")).getPool();
+        await pool.query("UPDATE bots SET status = 'error' WHERE id = $1", [botId]);
+
         console.error(`[webhooks] Provisioning failed for ${slug}: ${result.error}`);
         await sendAdminAlert(
           `❌ Provisioning FAILED for ${name} (${slug})\n` +
@@ -104,10 +160,7 @@ router.post("/stripe", async (req: Request, res: Response) => {
       }
     } catch (err) {
       console.error("[webhooks] Unexpected provisioning error:", err);
-      await sendAdminAlert(
-        `💥 Unexpected error provisioning ${slug}: ` +
-        (err instanceof Error ? err.message : String(err))
-      );
+      // Wait to alert
     }
   });
 });

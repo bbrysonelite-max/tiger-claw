@@ -233,6 +233,6 @@ export function generateSoulMd(config: ResolvedConfig, tenant: TenantData): stri
 // Re-export types for convenience
 // ---------------------------------------------------------------------------
 
-export type { ResolvedConfig, FlavorConfig, RegionalConfig, TenantData };
+export type { ResolvedConfig, FlavorConfig, RegionalConfig };
 export { BASE_CONFIG, US_EN_CONFIG, TH_TH_CONFIG };
 export { NETWORK_MARKETER_FLAVOR, REAL_ESTATE_FLAVOR, HEALTH_WELLNESS_FLAVOR };

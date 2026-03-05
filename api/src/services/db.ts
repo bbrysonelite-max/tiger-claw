@@ -136,6 +136,55 @@ export async function initSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_bot_pool_status ON bot_pool(status);
       CREATE INDEX IF NOT EXISTS idx_bot_pool_tenant_id ON bot_pool(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_bot_pool_assignment ON bot_pool(tenant_id, created_at);
+
+      -- Tiger Claw BYOK Architecture (V4.0)
+
+      -- Users
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT UNIQUE NOT NULL,
+        name TEXT,
+        stripe_customer_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+
+      -- Bots
+      CREATE TABLE IF NOT EXISTS bots (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        name TEXT NOT NULL,
+        niche TEXT NOT NULL,
+        status TEXT DEFAULT 'pending', 
+        telegram_bot_token TEXT,
+        telegram_username TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        deployed_at TIMESTAMPTZ
+      );
+
+      -- AI Config (one per bot)
+      CREATE TABLE IF NOT EXISTS bot_ai_config (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bot_id UUID REFERENCES bots(id) UNIQUE,
+        connection_type TEXT NOT NULL, 
+        provider TEXT, 
+        model TEXT,
+        encrypted_key TEXT, 
+        key_iv TEXT, 
+        key_preview TEXT, 
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+
+      -- Subscriptions
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        bot_id UUID REFERENCES bots(id),
+        stripe_subscription_id TEXT UNIQUE,
+        plan_tier TEXT NOT NULL, 
+        status TEXT NOT NULL, 
+        current_period_end TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
     `);
   });
   console.log("[db] Schema ready.");
@@ -228,7 +277,7 @@ export async function createTenant(data: {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      RETURNING *`,
     [data.slug, data.name, data.email ?? null, data.flavor, data.region,
-     data.language, data.preferredChannel, data.botToken ?? null, data.port, containerName]
+    data.language, data.preferredChannel, data.botToken ?? null, data.port, containerName]
   );
   return rowToTenant(result.rows[0]);
 }
@@ -405,7 +454,7 @@ export async function insertHivePattern(data: {
      VALUES ($1,$2,$3,$4,$5,$6,TRUE,$7)
      RETURNING *`,
     [data.flavor, data.region, data.category, data.observation,
-     data.dataPoints, data.confidence, data.tenantHash ?? null]
+    data.dataPoints, data.confidence, data.tenantHash ?? null]
   );
   return rowToPattern(result.rows[0]);
 }
@@ -646,5 +695,70 @@ export async function addTokenToPool(botToken: string, botUsername: string): Pro
     `INSERT INTO bot_pool (bot_token, bot_username, telegram_bot_id, status)
      VALUES ($1, $2, $2, 'available')`,
     [botToken, botUsername],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BYOK Architecture Queries (Tiger Claw V4.0)
+// ---------------------------------------------------------------------------
+
+export async function createBYOKUser(email: string, name?: string, stripeCustomerId?: string): Promise<string> {
+  const result = await getPool().query(
+    `INSERT INTO users (email, name, stripe_customer_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE SET name = $2, stripe_customer_id = COALESCE($3, users.stripe_customer_id)
+     RETURNING id`,
+    [email, name ?? null, stripeCustomerId ?? null]
+  );
+  return result.rows[0]["id"] as string;
+}
+
+export async function createBYOKBot(
+  userId: string,
+  name: string,
+  niche: string,
+  status: string = "pending"
+): Promise<string> {
+  const result = await getPool().query(
+    `INSERT INTO bots (user_id, name, niche, status)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id`,
+    [userId, name, niche, status]
+  );
+  return result.rows[0]["id"] as string;
+}
+
+export async function createBYOKConfig(data: {
+  botId: string;
+  connectionType: string;
+  provider?: string;
+  model?: string;
+  encryptedKey?: string;
+  keyPreview?: string;
+}): Promise<void> {
+  await getPool().query(
+    `INSERT INTO bot_ai_config (bot_id, connection_type, provider, model, encrypted_key, key_preview)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      data.botId,
+      data.connectionType,
+      data.provider ?? null,
+      data.model ?? null,
+      data.encryptedKey ?? null,
+      data.keyPreview ?? null
+    ]
+  );
+}
+
+export async function createBYOKSubscription(data: {
+  userId: string;
+  botId: string;
+  stripeSubscriptionId: string;
+  planTier: string;
+}): Promise<void> {
+  await getPool().query(
+    `INSERT INTO subscriptions (user_id, bot_id, stripe_subscription_id, plan_tier, status)
+     VALUES ($1, $2, $3, $4, 'active')`,
+    [data.userId, data.botId, data.stripeSubscriptionId, data.planTier]
   );
 }

@@ -26,6 +26,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as https from "https";
 import * as crypto from "crypto";
+import { loadFlavorConfig } from "./flavorConfig.js";
 
 // ---------------------------------------------------------------------------
 // Scoring constants — LOCKED per spec. Must match tiger_score.ts exactly.
@@ -1173,26 +1174,9 @@ async function runHunt(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Flavor default keywords (fallback if ICP not yet set)
-// ---------------------------------------------------------------------------
-
 function getFlavorDefaultKeywords(flavor: string): string[] {
-  const defaults: Record<string, string[]> = {
-    "network-marketer": [
-      "side hustle", "extra income", "work from home", "financial freedom",
-      "passive income", "be my own boss", "tired of my job", "need more money",
-    ],
-    "real-estate": [
-      "buy a house", "first home", "investment property", "rental income",
-      "real estate", "mortgage", "relocating", "downsizing",
-    ],
-    "health-wellness": [
-      "lose weight", "get healthy", "feel better", "natural remedy",
-      "wellness", "fitness goals", "supplement", "chronic pain",
-    ],
-  };
-  return defaults[flavor] ?? defaults["network-marketer"];
+  const config = loadFlavorConfig(flavor);
+  return config.defaultKeywords;
 }
 
 // ---------------------------------------------------------------------------

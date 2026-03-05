@@ -59,6 +59,7 @@ interface TenantSettings {
   // Metadata
   lastUpdatedAt: string;
   updatedFields: string[];      // Which fields have been manually changed
+  [key: string]: unknown;
 }
 
 interface ToolContext {
@@ -323,8 +324,8 @@ function handleSet(
   (settings as Record<string, unknown>)[key] = newValue;
   settings.lastUpdatedAt = new Date().toISOString();
 
-  if (!settings.updatedFields.includes(key)) {
-    settings.updatedFields.push(key);
+  if (!settings.updatedFields.includes(key as string)) {
+    settings.updatedFields.push(key as string);
   }
 
   saveSettings(workdir, settings);

@@ -72,6 +72,7 @@ interface OnboardState {
   botName?: string;
   flavor: string;
   language: string;
+  region?: string;
   tenantId: string;
   startedAt: string;
   completedAt?: string;
@@ -325,8 +326,8 @@ function handleICP(
   const icpData = isBuilder
     ? state.icpBuilder
     : isSingle
-    ? state.icpSingle
-    : state.icpCustomer;
+      ? state.icpSingle
+      : state.icpCustomer;
 
   // Confirmation phases — tenant is reviewing the summary
   if (phase === "icp_builder_confirm" || phase === "icp_customer_confirm" || phase === "icp_single_confirm") {
@@ -346,8 +347,8 @@ function handleICP(
       phase === "icp_builder_confirm"
         ? "ideal recruit"
         : phase === "icp_customer_confirm"
-        ? "ideal customer"
-        : `ideal ${oarLabel(state.flavor, "single")}`;
+          ? "ideal customer"
+          : `ideal ${oarLabel(state.flavor, "single")}`;
 
     // Stay in confirm phase — update adjustmentNote, let agent know to adjust
     saveState(workdir, state);
@@ -382,8 +383,8 @@ function handleICP(
     phase === "icp_builder"
       ? "ideal recruit"
       : phase === "icp_customer"
-      ? "ideal customer"
-      : `ideal ${oarLabel(state.flavor, "single")}`;
+        ? "ideal customer"
+        : `ideal ${oarLabel(state.flavor, "single")}`;
 
   state.phase = (phase + "_confirm") as OnboardPhase;
   state.questionIndex = 0;
@@ -1014,16 +1015,16 @@ async function handleComplete(state: OnboardState): Promise<ToolResult> {
   const slug = process.env["TENANT_SLUG"] ?? "";
   const wizardBlock = slug
     ? [
-        ``,
-        `Your Tiger Claw is ready on Telegram! 🎉`,
-        ``,
-        `To add WhatsApp or LINE for prospect outreach, complete your channel setup here:`,
-        `https://app.tigerclaw.io/wizard/${slug}`,
-        ``,
-        `This link is always available. You can also add channels any time by sending:`,
-        `  channels add whatsapp`,
-        `  channels add line [your-token]`,
-      ]
+      ``,
+      `Your Tiger Claw is ready on Telegram! 🎉`,
+      ``,
+      `To add WhatsApp or LINE for prospect outreach, complete your channel setup here:`,
+      `https://app.tigerclaw.io/wizard/${slug}`,
+      ``,
+      `This link is always available. You can also add channels any time by sending:`,
+      `  channels add whatsapp`,
+      `  channels add line [your-token]`,
+    ]
     : [];
 
   return {
@@ -1108,7 +1109,8 @@ async function execute(
   params: Record<string, unknown>,
   context: ToolContext
 ): Promise<ToolResult> {
-  const { action, response } = params as OnboardParams;
+  const action = String(params.action);
+  const response = params.response as string | undefined;
   const { workdir, logger } = context;
 
   logger.info("tiger_onboard called", { action, phase: "loading state" });
