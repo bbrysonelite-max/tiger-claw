@@ -60,6 +60,7 @@ interface LeadRecord {
   sourceUrl?: string;
   tags?: string[];
   needsRecalculate?: boolean;
+  involvementLevel?: number;
 }
 
 interface NurtureTouchRecord {
@@ -280,8 +281,8 @@ function buildDetailView(
   const oarLabel = lead.oar === "both"
     ? "Business Builder + Customer (Unicorn)"
     : lead.oar === "builder"
-    ? "Business Builder"
-    : "Customer";
+      ? "Business Builder"
+      : "Customer";
 
   const statusHeader = isEn ? "STATUS" : "สถานะ";
   lines.push(`[ ${statusHeader} ]`);

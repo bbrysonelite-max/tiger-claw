@@ -343,7 +343,7 @@ export async function inspectContainer(slug: string): Promise<ContainerStats | n
     const stats = await new Promise<Record<string, unknown>>((resolve, reject) => {
       container.stats({ stream: false }, (err, data) => {
         if (err) return reject(err);
-        resolve(data as Record<string, unknown>);
+        resolve(data as unknown as Record<string, unknown>);
       });
     });
 

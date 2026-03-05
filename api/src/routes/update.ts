@@ -35,7 +35,7 @@ const execFileAsync = promisify(execFile);
 
 const router = Router();
 
-const REPO_ROOT = process.env["REPO_ROOT"] ?? path.resolve(import.meta.dirname, "../../../..");
+const REPO_ROOT = process.env["REPO_ROOT"] ?? path.resolve(__dirname, "../../../..");
 const BUILD_SCRIPT = path.join(REPO_ROOT, "ops", "build.sh");
 const UPDATE_SCRIPT = path.join(REPO_ROOT, "ops", "update.sh");
 

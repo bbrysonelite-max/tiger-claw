@@ -1,0 +1,29 @@
+{
+    "id": "real-estate",
+    "name": "Real Estate Agent",
+    "professionLabel": "real estate",
+    "defaultKeywords": [
+        "want to buy a house",
+        "first time home buyer",
+        "mortgage rates",
+        "looking for an apartment",
+        "moving to",
+        "relocating to",
+        "looking for a realtor",
+        "need to sell my house"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hey {{name}},\n\nI'm {{botName}}, the assistant for {{tenantName}}.\n\nI saw you might be exploring the real estate market. Just wanted to drop a quick tip: the market shifts faster than Zillow updates. People who have an agent with off-market access are getting deals 3-5 days before they hit the public boards.\n\nNot pitching you — just something to keep in mind if you're seriously looking.\n\n— {{botName}}",
+        "testimonial": "Hey {{name}},\n\nQuick thought — {{tenantName}} just closed a deal for a client who was in your exact shoes 3 months ago.\n\nSame \"the rates are too high\" hesitations. They ended up finding a property where the seller did a huge rate buydown, saving them hundreds a month.\n\nIt happens when you have someone who knows where to look.\n\nAnyway, thought of you. No pressure.\n\n— {{botName}}",
+        "authority_transfer": "Hey {{name}},\n\nI wanted to properly introduce you to {{tenantName}}.\n\n{{tenantName}} has been hyper-focused on this local market for {{years}}. Their biggest recent win: {{biggestWin}}. What makes them different: {{differentiator}}.\n\nThey don't just set up MLS alerts; they actively hunt for exactly what you want: {{icp}}.\n\nIf you're still looking, it's definitely worth 10 minutes on the phone with them.\n\n— {{botName}}",
+        "personal_checkin": "Hi {{name}},\n\nJust checking in — how's the house hunt (or sale prep) going?\n\nNo agenda. {{tenantName}} likes me to keep tabs on people we've connected with, just to see if the market's been treating them well.\n\nAny updates on your side?\n\n— {{botName}}",
+        "one_to_ten_part1": "Hey {{name}},\n\nQuick question, and I'd love an honest answer.\n\nOn a scale of 1-10, how urgent is your need to move forward with {{product}}? (1 = Just browsing for fun, 10 = I need to move/sell ASAP).\n\nJust give me a number, no judgment.\n\n— {{botName}}",
+        "one_to_ten_part2": "Okay, thanks for being upfront.\n\nSo what's holding you back from a 10 right now? Is it rates, inventory, timing, or something else?\n\nI'm not trying to convince you of anything, just want to know what the primary hurdle is so we know what to keep an eye out for.\n\n— {{botName}}",
+        "gap_closing": "Got it — {{answer}}.\n\nThat makes total sense and {{tenantName}} hears that daily. Here's a thought:\n\nWaiting on the sidelines often means competing against 10x more buyers when the market finally shifts. {{tenantName}} is actually navigating that exact concern with clients right now by focusing on creative financing.\n\nDid that change your 1-10 urgency at all, or are you still pretty set on waiting?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hey {{name}},\n\nI'll be straight with you — {{tenantName}} only takes on a handful of active clients at a time so they can give them VIP service.\n\nWe have a couple of spots opening up this week. I don't want to keep following up if you're not ready, so let me know either way.\n\nIf you are serious about making a move, tell me now. If not, no hard feelings.\n\n— {{botName}}",
+        "pattern_interrupt": "Hey {{name}},\n\nBefore I take you off my active list, consider this.\n\nIf I told you I could get you a house for 1990 prices, you'd buy it instantly, right?\n\nWe don't know what prices will be in 5 years, but waiting guarantees you'll find out the hard way. Refinancing later is easy; buying later when prices rise is hard.\n\nIf you want to sit down with {{tenantName}} and review the actual numbers instead of the headlines, just say \"Let's review.\"\n\n— {{botName}}",
+        "final_takeaway": "Hey {{name}},\n\nIt's been great chatting, but I'll step back now. This is my last message regarding your search.\n\n{{tenantName}} is staying busy with active clients. If your timing changes and you need an expert, we're easy to find.\n\nBest of luck!\n\n— {{botName}}",
+        "slow_drip_value": "Hey {{name}},\n\nChecking in — it's been a while. Just a quick market update.\n\n{{tenantName}} has been seeing a shift in {{differentiator}}. Seems like the market is moving slightly. \n\nNo pitch, just wanted to keep you informed. Let me know if you need anything.\n\n— {{botName}}",
+        "default_fallback": "Hey {{name}}, just checking in. — {{botName}}"
+    }
+}

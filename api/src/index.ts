@@ -41,6 +41,8 @@ import hiveRouter from "./routes/hive.js";
 import tenantsRouter from "./routes/tenants.js";
 import updateRouter from "./routes/update.js";
 import wizardRouter from "./routes/wizard.js";
+import keysRouter from "./routes/keys.js";
+import subscriptionsRouter from "./routes/subscriptions.js";
 
 const app = express();
 const PORT = Number(process.env["PORT"] ?? 4000);
@@ -66,6 +68,8 @@ app.use("/admin/update", updateRouter);
 app.use("/hive", hiveRouter);
 app.use("/tenants", tenantsRouter);
 app.use("/wizard", wizardRouter);
+app.use("/keys", keysRouter);
+app.use("/subscriptions", subscriptionsRouter);
 
 // Root ping
 app.get("/", (_req: Request, res: Response) => {
@@ -106,7 +110,7 @@ const lastDiskAlert: { level: string; alertedAt: number } = { level: "ok", alert
 const POOL_ALERT = {
   LOW_THRESHOLD: 25,      // below this → daily alert
   CRITICAL_THRESHOLD: 10, // below this → hourly alert
-  LOW_COOLDOWN_MS:  24 * 60 * 60 * 1000, // 24 hours
+  LOW_COOLDOWN_MS: 24 * 60 * 60 * 1000, // 24 hours
   CRIT_COOLDOWN_MS: 60 * 60 * 1000,      // 1 hour
   EMPTY_COOLDOWN_MS: 0,                   // immediate, no cooldown
 };

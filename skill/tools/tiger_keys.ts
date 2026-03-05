@@ -28,7 +28,7 @@ import * as http from "http";
 // ---------------------------------------------------------------------------
 
 const LAYER_LIMITS = {
-  1: { totalMessages: 50, expiryHours: 72 },
+  1: { dailyMessages: 50, burstMaxMessages: 5, BurstWindowMs: 60000 }, // 5 msgs per minute burst, 50 daily
   2: { totalMessages: Infinity, expiryHours: Infinity },
   3: { dailyMessages: 20 },
   4: { totalMessages: 5, pauseAfterHours: 24 },
@@ -102,9 +102,11 @@ interface RetryTracker {
 interface KeyState {
   activeLayer: LayerNumber;
 
-  // Layer 1 tracking
-  layer1MessageCount: number;
-  layer1ActivatedAt?: string;
+  // Layer 1 tracking (Platform Key)
+  layer1MessageCountToday: number;
+  layer1CountDate: string; // YYYY-MM-DD
+  layer1BurstCount: number;
+  layer1BurstWindowStart: string; // ISO String
 
   // Layer 3 tracking (daily limit)
   layer3MessageCountToday: number;
@@ -210,10 +212,13 @@ function loadKeyState(workdir: string): KeyState {
   } catch {
     // Fall through to default
   }
-  // Default: start at Layer 2 (onboarding sets up Layer 1, tiger_onboard deactivates it)
+  // Default: start at Layer 1 (onboarding defaults to Platform Key)
   return {
-    activeLayer: 2,
-    layer1MessageCount: 0,
+    activeLayer: 1,
+    layer1MessageCountToday: 0,
+    layer1CountDate: "",
+    layer1BurstCount: 0,
+    layer1BurstWindowStart: new Date().toISOString(),
     layer3MessageCountToday: 0,
     layer3CountDate: "",
     layer4TotalMessages: 0,
@@ -933,41 +938,49 @@ async function handleRecordMessage(
   const today = new Date().toISOString().slice(0, 10);
   const layer = state.activeLayer;
 
-  // Layer 1: 72-hour expiry + total message count
+  // Layer 1: Strict Platform Key rate limits (Daily + Burst)
   if (layer === 1) {
-    // Check 72-hour expiry first
-    if (state.layer1ActivatedAt) {
-      const elapsedMs = Date.now() - new Date(state.layer1ActivatedAt).getTime();
-      const expiryMs = LAYER_LIMITS[1].expiryHours * 60 * 60 * 1000;
-      if (elapsedMs >= expiryMs) {
-        appendEvent(state, {
-          type: "limit_exceeded",
-          timestamp: new Date().toISOString(),
-          message: `Layer 1 expired (${LAYER_LIMITS[1].expiryHours}h elapsed).`,
-        });
-        const rotation = await performRotation(state, 1, "Layer 1 time limit reached (72h)", workdir, tenantId, logger);
-        saveKeyState(workdir, state);
-        return {
-          ok: true,
-          output: rotation.tenantMessage,
-          data: { layer, timeExpired: true, rotatedTo: rotation.toLayer },
-        };
-      }
-    } else {
-      // First Layer 1 message — record activation time
-      state.layer1ActivatedAt = new Date().toISOString();
+    if (state.layer1CountDate !== today) {
+      state.layer1MessageCountToday = 0;
+      state.layer1CountDate = today;
     }
 
-    state.layer1MessageCount++;
-    const remaining = LAYER_LIMITS[1].totalMessages - state.layer1MessageCount;
+    // Check Burst Limits (e.g. max 5 messages per minute)
+    const now = Date.now();
+    const burstStart = new Date(state.layer1BurstWindowStart).getTime();
+    if (now - burstStart > LAYER_LIMITS[1].BurstWindowMs) {
+      // Reset burst window
+      state.layer1BurstCount = 0;
+      state.layer1BurstWindowStart = new Date(now).toISOString();
+    }
 
-    if (state.layer1MessageCount >= LAYER_LIMITS[1].totalMessages) {
+    state.layer1BurstCount++;
+    state.layer1MessageCountToday++;
+
+    if (state.layer1BurstCount > LAYER_LIMITS[1].burstMaxMessages) {
       appendEvent(state, {
         type: "limit_exceeded",
         timestamp: new Date().toISOString(),
-        message: `Layer 1 exhausted (${LAYER_LIMITS[1].totalMessages} messages used).`,
+        message: `Layer 1 Burst limit exceeded (${LAYER_LIMITS[1].burstMaxMessages} msgs / ${LAYER_LIMITS[1].BurstWindowMs}ms). Loop suspected.`,
       });
-      const rotation = await performRotation(state, 1, "Layer 1 message limit reached", workdir, tenantId, logger);
+      const rotation = await performRotation(state, 1, "Platform Key Burst Limit Exceeded (Loop Prevention)", workdir, tenantId, logger);
+      saveKeyState(workdir, state);
+      return {
+        ok: true,
+        output: rotation.tenantMessage,
+        data: { layer, burstExceeded: true, rotatedTo: rotation.toLayer },
+      };
+    }
+
+    const remaining = LAYER_LIMITS[1].dailyMessages - state.layer1MessageCountToday;
+
+    if (state.layer1MessageCountToday > LAYER_LIMITS[1].dailyMessages) {
+      appendEvent(state, {
+        type: "limit_exceeded",
+        timestamp: new Date().toISOString(),
+        message: `Layer 1 daily limit reached (${LAYER_LIMITS[1].dailyMessages} messages).`,
+      });
+      const rotation = await performRotation(state, 1, "Platform Key Daily Limit Reached", workdir, tenantId, logger);
       saveKeyState(workdir, state);
       return {
         ok: true,
@@ -980,7 +993,7 @@ async function handleRecordMessage(
       appendEvent(state, {
         type: "limit_warning",
         timestamp: new Date().toISOString(),
-        message: `Layer 1: ${remaining} messages remaining.`,
+        message: `Layer 1: ${remaining} messages remaining today.`,
       });
     }
     saveKeyState(workdir, state);
@@ -1146,7 +1159,7 @@ function handleStatus(state: KeyState): ToolResult {
   ];
 
   // Layer 1
-  lines.push(`  Layer 1 (Onboarding): ${state.layer1MessageCount}/${LAYER_LIMITS[1].totalMessages} messages used`);
+  lines.push(`  Layer 1 (Onboarding): ${state.layer1MessageCountToday}/${LAYER_LIMITS[1].dailyMessages} messages used today`);
 
   // Layer 2
   lines.push(`  Layer 2 (Primary): No Tiger Claw limit`);
@@ -1187,7 +1200,7 @@ function handleStatus(state: KeyState): ToolResult {
     data: {
       activeLayer: state.activeLayer,
       tenantPaused: state.tenantPaused,
-      layer1MessageCount: state.layer1MessageCount,
+      layer1MessageCount: state.layer1MessageCountToday,
       layer3MessageCountToday: layer3Today,
       layer3DailyLimit: LAYER_LIMITS[3].dailyMessages,
       layer4TotalMessages: state.layer4TotalMessages,
