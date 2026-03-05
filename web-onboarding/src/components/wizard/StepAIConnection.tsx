@@ -101,106 +101,108 @@ export default function StepAIConnection({ state, updateState, onNext }: AIConne
                 </button>
 
                 {/* BYOK Option */}
-                <button
-                    onClick={() => updateState({ connectionType: "byok" })}
-                    className={`w-full flex items-start p-5 rounded-2xl border text-left transition-all ${state.connectionType === "byok"
-                        ? "bg-[#22c55e]/10 border-[#22c55e] ring-1 ring-[#22c55e]/50 text-white"
-                        : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                        }`}
-                >
-                    <div className={`mt-1 h-5 w-5 rounded-full border flex items-center justify-center mr-4 flex-shrink-0 ${state.connectionType === "byok" ? "border-[#22c55e] bg-[#22c55e] text-black" : "border-white/30"
-                        }`}>
-                        {state.connectionType === "byok" && <Check className="h-3 w-3 font-bold" />}
-                    </div>
-                    <div className="flex-1 w-full">
-                        <h4 className="font-semibold text-lg flex items-center gap-2">
-                            <Shield className="h-4 w-4 text-[#22c55e]" /> Bring Your Own Key
-                        </h4>
-                        <p className="text-sm opacity-70 mt-1 leading-relaxed">
-                            Use your own provider account. We encrypt your key Server-Side securely. No markup on usage.
-                        </p>
+                <div className={`w-full flex flex-col p-5 rounded-2xl border transition-all ${state.connectionType === "byok"
+                    ? "bg-[#22c55e]/10 border-[#22c55e] ring-1 ring-[#22c55e]/50 text-white"
+                    : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                    }`}>
+                    <button
+                        onClick={() => updateState({ connectionType: "byok" })}
+                        className="flex items-start text-left w-full focus:outline-none"
+                    >
+                        <div className={`mt-1 h-5 w-5 rounded-full border flex items-center justify-center mr-4 flex-shrink-0 ${state.connectionType === "byok" ? "border-[#22c55e] bg-[#22c55e] text-black" : "border-white/30"
+                            }`}>
+                            {state.connectionType === "byok" && <Check className="h-3 w-3 font-bold" />}
+                        </div>
+                        <div className="flex-1 w-full">
+                            <h4 className="font-semibold text-lg flex items-center gap-2">
+                                <Shield className="h-4 w-4 text-[#22c55e]" /> Bring Your Own Key
+                            </h4>
+                            <p className="text-sm opacity-70 mt-1 leading-relaxed">
+                                Use your own provider account. We encrypt your key Server-Side securely. No markup on usage.
+                            </p>
+                        </div>
+                    </button>
 
-                        <AnimatePresence>
-                            {state.connectionType === "byok" && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0, marginTop: 0 }}
-                                    animate={{ height: "auto", opacity: 1, marginTop: 20 }}
-                                    exit={{ height: 0, opacity: 0, marginTop: 0 }}
-                                    className="overflow-hidden space-y-4"
-                                    onClick={e => e.stopPropagation()} // Prevent toggling when clicking inputs
-                                >
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-white/50 mb-2 uppercase tracking-wider">Provider</label>
-                                            <select
-                                                className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm focus:border-[#22c55e] outline-none transition-colors max-h-40 overflow-y-auto z-50 appearance-none"
-                                                value={state.aiProvider}
-                                                onChange={(e) => handleProviderChange(e.target.value)}
-                                            >
-                                                <option value="openai">OpenAI</option>
-                                                <option value="anthropic">Anthropic</option>
-                                                <option value="google">Google</option>
-                                                <option value="xai">xAI</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-white/50 mb-2 uppercase tracking-wider">Model</label>
-                                            <select
-                                                className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm focus:border-[#22c55e] outline-none transition-colors appearance-none"
-                                                value={state.aiModel}
-                                                onChange={(e) => updateState({ aiModel: e.target.value })}
-                                            >
-                                                {providerModels[state.aiProvider].map(model => (
-                                                    <option key={model} value={model}>{model}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-
+                    <AnimatePresence>
+                        {state.connectionType === "byok" && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                                animate={{ height: "auto", opacity: 1, marginTop: 20 }}
+                                exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                                className="overflow-hidden space-y-4 ml-9"
+                            >
+                                <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider">API Key</label>
-                                            <a href="#" className="text-xs text-[#22c55e] hover:underline flex items-center gap-1 group">
-                                                Get API Key <ExternalLink className="h-3 w-3 group-hover:translate-x-[1px] transition-transform" />
-                                            </a>
-                                        </div>
-                                        <div className="relative">
-                                            <input
-                                                type="password"
-                                                className={`w-full bg-black/50 border rounded-lg p-3 text-sm pr-10 outline-none transition-colors font-mono tracking-wider ${validationResult === 'error' ? 'border-red-500 focus:border-red-500' :
-                                                    validationResult === 'success' ? 'border-[#22c55e] focus:border-[#22c55e]' :
-                                                        'border-white/10 focus:border-[#22c55e]'
-                                                    }`}
-                                                placeholder={`e.g. ${state.aiProvider === 'openai' ? 'sk-...' : 'sk-ant-...'}`}
-                                                value={state.apiKey}
-                                                onChange={(e) => handleKeyChange(e.target.value)}
-                                                autoComplete="off"
-                                                spellCheck="false"
-                                            />
-                                            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                                                {isValidating && <Loader2 className="h-4 w-4 animate-spin text-[#22c55e]" />}
-                                                {validationResult === "success" && !isValidating && <Check className="h-4 w-4 text-[#22c55e]" />}
-                                                {validationResult === "error" && !isValidating && <X className="h-4 w-4 text-red-500" />}
-                                            </div>
-                                        </div>
-                                        {validationResult === "error" && (
-                                            <p className="text-xs text-red-500 mt-2">{errorMessage}</p>
-                                        )}
-                                        {validationResult === "success" && (
-                                            <p className="text-xs text-[#22c55e] mt-2 flex items-center gap-1">
-                                                <Shield className="h-3 w-3" /> Valid Key — {state.aiModel} selected
-                                            </p>
-                                        )}
+                                        <label className="block text-xs font-semibold text-white/50 mb-2 uppercase tracking-wider">Provider</label>
+                                        <select
+                                            className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm focus:border-[#22c55e] outline-none transition-colors max-h-40 overflow-y-auto z-50 appearance-none"
+                                            value={state.aiProvider}
+                                            onChange={(e) => handleProviderChange(e.target.value)}
+                                        >
+                                            <option value="openai">OpenAI</option>
+                                            <option value="anthropic">Anthropic</option>
+                                            <option value="google">Google</option>
+                                            <option value="xai">xAI</option>
+                                        </select>
                                     </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-white/50 mb-2 uppercase tracking-wider">Model</label>
+                                        <select
+                                            className="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm focus:border-[#22c55e] outline-none transition-colors appearance-none"
+                                            value={state.aiModel}
+                                            onChange={(e) => updateState({ aiModel: e.target.value })}
+                                        >
+                                            {providerModels[state.aiProvider].map(model => (
+                                                <option key={model} value={model}>{model}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
 
-                                    <p className="text-xs text-white/30 flex items-center gap-2 pt-2 border-t border-white/10">
-                                        <Shield className="h-3 w-3" /> We encrypt keys with AES-256-GCM. Never logged, never shared.
-                                    </p>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-                </button>
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider">API Key</label>
+                                        <a href="#" className="text-xs text-[#22c55e] hover:underline flex items-center gap-1 group relative z-10 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+                                            Get API Key <ExternalLink className="h-3 w-3 group-hover:translate-x-[1px] transition-transform" />
+                                        </a>
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            type="password"
+                                            className={`w-full bg-black/50 border rounded-lg p-3 text-sm pr-10 outline-none transition-colors font-mono tracking-wider relative z-10 pointer-events-auto ${validationResult === 'error' ? 'border-red-500 focus:border-red-500' :
+                                                validationResult === 'success' ? 'border-[#22c55e] focus:border-[#22c55e]' :
+                                                    'border-white/10 focus:border-[#22c55e]'
+                                                }`}
+                                            placeholder={`e.g. ${state.aiProvider === 'openai' ? 'sk-...' : 'sk-ant-...'}`}
+                                            value={state.apiKey}
+                                            onChange={(e) => handleKeyChange(e.target.value)}
+                                            autoComplete="off"
+                                            spellCheck="false"
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none z-20">
+                                            {isValidating && <Loader2 className="h-4 w-4 animate-spin text-[#22c55e]" />}
+                                            {validationResult === "success" && !isValidating && <Check className="h-4 w-4 text-[#22c55e]" />}
+                                            {validationResult === "error" && !isValidating && <X className="h-4 w-4 text-red-500" />}
+                                        </div>
+                                    </div>
+                                    {validationResult === "error" && (
+                                        <p className="text-xs text-red-500 mt-2">{errorMessage}</p>
+                                    )}
+                                    {validationResult === "success" && (
+                                        <p className="text-xs text-[#22c55e] mt-2 flex items-center gap-1">
+                                            <Shield className="h-3 w-3" /> Valid Key — {state.aiModel} selected
+                                        </p>
+                                    )}
+                                </div>
+
+                                <p className="text-xs text-white/30 flex items-center gap-2 pt-2 border-t border-white/10">
+                                    <Shield className="h-3 w-3" /> We encrypt keys with AES-256-GCM. Never logged, never shared.
+                                </p>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
 
             <div className="mt-8 flex justify-end">
