@@ -25,8 +25,9 @@ test('completes the BYOK onboarding flow', async ({ page }) => {
 
     // Test OpenAI validation UI formatting
     const keyInput = page.getByPlaceholder('e.g. sk-');
-    await keyInput.fill('sk-invalidKeyThatIsTooLongToTriggerPatternMatchDemo');
-    await expect(page.getByText('Format doesn\'t match expected pattern')).toBeVisible();
+    // Using force since the div boundary might overlay the exact center pixel Playwright targets
+    await keyInput.fill('sk-invalidKeyThatIsTooLongToTriggerPatternMatchDemo', { force: true });
+    await expect(page.getByText('Format doesn\'t match expected pattern for this provider')).toBeVisible();
 
     // Switch back to Tiger Credits for faster checkout mock
     await page.getByRole('button', { name: 'Tiger Claw Credits' }).click();
