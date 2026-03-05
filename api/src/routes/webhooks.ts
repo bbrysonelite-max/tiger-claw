@@ -15,7 +15,7 @@
 
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
-import { provisionTenant } from "../services/provisioner.js";
+import { provisionQueue } from "../services/queue.js";
 import {
   createBYOKUser,
   createBYOKBot,
@@ -123,7 +123,9 @@ router.post("/stripe", async (req: Request, res: Response) => {
       }
 
       // 6. trigger Kubernetes provisioning
-      const result = await provisionTenant({
+      await provisionQueue.add('tenant-provisioning', {
+        userId,
+        botId,
         slug,
         name,
         email,
@@ -135,29 +137,7 @@ router.post("/stripe", async (req: Request, res: Response) => {
         timezone,
       });
 
-      if (result.success) {
-        // ... (remaining logic same)
-        console.log(`[webhooks] Provisioned ${slug} on port ${result.port}. Steps:`, result.steps);
-
-        // Update Bot State explicitly
-        const pool = (await import("../services/db.js")).getPool();
-        await pool.query("UPDATE bots SET status = 'live', deployed_at = NOW() WHERE id = $1", [botId]);
-
-        await sendAdminAlert(
-          `✅ New tenant provisioned!\n` +
-          `Name: ${name}\nSlug: ${slug}\nFlavor: ${flavor}\nPort: ${result.port}\n` +
-          `Steps: ${result.steps.join(", ")}`
-        );
-      } else {
-        const pool = (await import("../services/db.js")).getPool();
-        await pool.query("UPDATE bots SET status = 'error' WHERE id = $1", [botId]);
-
-        console.error(`[webhooks] Provisioning failed for ${slug}: ${result.error}`);
-        await sendAdminAlert(
-          `❌ Provisioning FAILED for ${name} (${slug})\n` +
-          `Error: ${result.error}\nSteps so far: ${result.steps.join(", ")}`
-        );
-      }
+      console.log(`[webhooks] Pushed provisioning job to BullMQ for ${slug}`);
     } catch (err) {
       console.error("[webhooks] Unexpected provisioning error:", err);
       // Wait to alert
