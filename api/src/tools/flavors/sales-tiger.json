@@ -1,0 +1,28 @@
+{
+    "id": "sales-tiger",
+    "name": "B2B Sales Agent",
+    "professionLabel": "B2B sales",
+    "defaultKeywords": [
+        "sales challenges",
+        "b2b lead generation",
+        "sales strategy",
+        "increasing revenue",
+        "sales team underperforming",
+        "crm setup",
+        "outbound sales tips"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hi {{name}},\n\nI'm {{botName}}, reaching out on behalf of {{tenantName}}.\n\nI saw you were discussing sales strategies. Quick observation from watching {{tenantName}} scale companies: Most founders treat sales as a numbers volume game, but it's actually a conversion rate game. If your cold email is at 1%, doubling volume just burns your domain. You have to fix the offer first.\n\nJust a little value to chew on today.\n\n— {{botName}}",
+        "testimonial": "Hey {{name}},\n\nReal quick — {{tenantName}} recently worked with a company stuck at that revenue plateau you mentioned. \n\nThey dialed in the specific system we use, and within 60 days their pipeline multiplied by 3x. Same team, same budget, just a better conversion engine.\n\nThought you'd appreciate knowing it's possible.\n\n— {{botName}}",
+        "authority_transfer": "Hey {{name}},\n\nI should give you a better idea of why I mentioned {{tenantName}}.\n\nThey've spent {{years}} in {{profession}}. Their biggest recent win: {{biggestWin}}. What makes their approach lethal: {{differentiator}}.\n\nWe don't sell to everyone. We specifically work with {{icp}}.\n\nIf that's you, a brief strategy session will probably uncover some serious blind spots in your funnel.\n\n— {{botName}}",
+        "personal_checkin": "Hi {{name}},\n\nJust checking in — how are the revenue metrics tracking this quarter?\n\nNo sales pitch here. {{tenantName}} asked me to keep in touch with operators we respect.\n\nAny big wins or roadblocks?\n\n— {{botName}}",
+        "one_to_ten_part1": "Hey {{name}},\n\nQuick pulse check.\n\nOn a scale of 1-10, how urgent is solving your current pipeline/sales bottleneck? (1 = We're fine with status quo, 10 = We bleed money every day it isn't fixed).\n\nJust drop a number.\n\n— {{botName}}",
+        "one_to_ten_part2": "Appreciate the transparency.\n\nWhat would it take to be a 10? Is it budget approval, timing, or just not believing you have the right solution mapped out?\n\nJust trying to understand the exact friction point.\n\n— {{botName}}",
+        "gap_closing": "Understood — {{answer}}.\n\nThat's a classic B2B hurdle. {{tenantName}} has seen that a dozen times, and it's heavily addressed in our core framework (which is how we generated {{biggestWin}}).\n\nDoes knowing we have a specific roadmap to bypass that friction change your urgency (1-10)?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hey {{name}},\n\nI'll be direct — {{tenantName}} is taking on two new B2B clients this month to implement our scaling systems.\n\nI don't want to follow up if it's just not the right time for your operation. \n\nIf you want to map out a sprint, let's talk. If not, I'll step entirely out of your inbox.\n\n— {{botName}}",
+        "pattern_interrupt": "Hey {{name}},\n\nBefore I close your file, let me ask one thing.\n\nIf your biggest competitor installed a system today that booked them 15 more qualified meetings a week, how much market share would you lose by Q4?\n\nInaction isn't a neutral choice; it costs revenue. \n\nIf you're ready to build the engine, say \"Let's scale.\"\n\n— {{botName}}",
+        "final_takeaway": "Hey {{name}},\n\nThis is my final outreach. I'm taking you out of my active pipeline.\n\n{{tenantName}} works with decisive companies, and I totally respect if the timing isn't right for yours.\n\nBest of luck closing out the year!\n\n— {{botName}}",
+        "slow_drip_value": "Hey {{name}},\n\nChecking in. Thought you might find this relevant.\n\n{{tenantName}} has been refining {{differentiator}} and the results are pretty disruptive.\n\nHope your sales are tracking well. Reach out if you ever want to re-engage.\n\n— {{botName}}",
+        "default_fallback": "Hey {{name}}, just checking in. — {{botName}}"
+    }
+}

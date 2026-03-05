@@ -1,0 +1,28 @@
+{
+    "id": "plumber",
+    "name": "Home Services Agent",
+    "professionLabel": "plumbing and home services",
+    "defaultKeywords": [
+        "pipe burst",
+        "plumber near me",
+        "water heater broken",
+        "clogged drain",
+        "emergency plumbing",
+        "leak repair",
+        "need a plumber ASAP"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hey {{name}},\n\nI'm {{botName}}, dispatch assistant for {{tenantName}}.\n\nSaw you might be dealing with a house issue. Quick tip from the field: Most \"minor\" leaks hide major wall damage. If you ever have a slow drip, don't just put a bucket under it; shut off the main valve if you can't fix it immediately.\n\nHope that saves you a headache!\n\n— {{botName}}",
+        "testimonial": "Hey {{name}},\n\nQuick one — {{tenantName}} just got back from a job where a homeowner tried to DIY a pipe fix using YouTube. It nearly flooded their kitchen.\n\nWe got out there, replaced the faulty valve in 30 minutes, and secured the warranty.\n\nSometimes paying a pro saves you the cost of a new floor.\n\n— {{botName}}",
+        "authority_transfer": "Hey {{name}},\n\nJust wanted to properly introduce {{tenantName}}.\n\nThey've been in {{profession}} for {{years}}. Their proudest recent job: {{biggestWin}}. What makes their crew totally different: {{differentiator}}.\n\nThey don't do sloppy work. They specialize in helping {{icp}}.\n\nIf you need it done right the first time, they're the ones to call.\n\n— {{botName}}",
+        "personal_checkin": "Hey {{name}},\n\nJust checking in — did you get that issue sorted out?\n\n{{tenantName}} asked me to follow up. We hate leaving people hanging when they have home issues.\n\nEverything dry and working over there?\n\n— {{botName}}",
+        "one_to_ten_part1": "Hey {{name}},\n\nQuick question.\n\nOn a scale of 1-10, how urgent is your need for a service call? (1 = Just getting quotes for later, 10 = I have water spraying everywhere).\n\nJust reply with a number.\n\n— {{botName}}",
+        "one_to_ten_part2": "Got it.\n\nWhat's keeping you from booking a truck right now? Is it budget, unsure of exactly what the problem is, or trying to see if a buddy can fix it first?\n\nJust want to understand where you're at.\n\n— {{botName}}",
+        "gap_closing": "Makes sense — {{answer}}.\n\nWe hear that a lot. Actually, {{tenantName}} is built specifically to address that, which is how we manage {{biggestWin}}.\n\nDoes knowing we can navigate that obstacle change your urgency to get it fixed?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hey {{name}},\n\nThe schedule is filling up fast this week and {{tenantName}}'s trucks are almost fully dispatched.\n\nI have a slot I can hold for you, but if you don't need us right now, I need to open it up for emergency calls.\n\nLet me know either way!\n\n— {{botName}}",
+        "pattern_interrupt": "Hey {{name}},\n\nBefore I pull your ticket out of the queue, remember this.\n\nWater damage is undefeated. A $200 fix today can turn into a $5,000 mold remediation next month if it's ignored.\n\nIf you want peace of mind instead of crossing your fingers, hit reply and say \"Send the truck.\"\n\n— {{botName}}",
+        "final_takeaway": "Hey {{name}},\n\nThis is my last message regarding your service request. I'm closing the ticket.\n\n{{tenantName}}'s crew is out in the field. If you have an emergency later, keep our number handy.\n\nTake care!\n\n— {{botName}}",
+        "slow_drip_value": "Hey {{name}},\n\nChecking in! Highlighting a quick home maintenance tip.\n\n{{tenantName}} has been advising everyone about {{differentiator}}. Definitely something to keep an eye on as the seasons change.\n\nStay dry!\n\n— {{botName}}",
+        "default_fallback": "Hey {{name}}, just checking in. — {{botName}}"
+    }
+}

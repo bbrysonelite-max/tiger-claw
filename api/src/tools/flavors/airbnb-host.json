@@ -1,0 +1,28 @@
+{
+    "id": "airbnb-host",
+    "name": "Airbnb/STR Operator",
+    "professionLabel": "short-term rentals",
+    "defaultKeywords": [
+        "want to start an airbnb",
+        "buying an airbnb",
+        "short term rental investing",
+        "str regulations",
+        "rent arbitrage",
+        "managing airbnbs",
+        "airbnb host tips"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hey {{name}},\n\nI'm {{botName}}, assisting {{tenantName}}.\n\nI noticed you're exploring the Short Term Rental space. Just a quick tip: the days of throwing IKEA furniture in a house and making $5k/mo are over. The top 10% of hosts are making 90% of the profit right now because they treat it like hospitality, not just real estate.\n\nSomething to consider if you're planning to launch.\n\n— {{botName}}",
+        "testimonial": "Hey {{name}},\n\nQuick story — {{tenantName}} helped someone a few months ago who was stuck in analysis paralysis, worried about saturation.\n\nThey finally launched using our specific framework. First month: $6,000 gross. They realized \"saturation\" only affects mediocre listings.\n\nThought that might encourage you if you're still on the fence.\n\n— {{botName}}",
+        "authority_transfer": "Hey {{name}},\n\nI should tell you a bit more about {{tenantName}}.\n\nThey have been operating in the STR space for {{years}}. Their biggest recent win: {{biggestWin}}. What sets them apart: {{differentiator}}.\n\nThey only work with people who treat this as a serious business: {{icp}}.\n\nIf that aligns with your goals, a 15-minute call will save you thousands in costly rookie mistakes.\n\n— {{botName}}",
+        "personal_checkin": "Hi {{name}},\n\nJust checking in — how goes the Airbnb journey?\n\nNo pitch or anything. {{tenantName}} just likes to keep tabs on the operators we connect with.\n\nHit any roadblocks recently?\n\n— {{botName}}",
+        "one_to_ten_part1": "Hey {{name}},\n\nQuick 1-10 question for you.\n\nWhere are you at with launching or scaling your STR portfolio? (1 = Just watching YouTube videos about it, 10 = Ready to execute today).\n\nJust reply with a number.\n\n— {{botName}}",
+        "one_to_ten_part2": "Okay, makes sense.\n\nWhat's keeping you from being a 10? Is it capital, finding the right property, or just knowing the exact next step?\n\nI'm just trying to understand the gap so I can send you the right resources (or tell you if we can't help).\n\n— {{botName}}",
+        "gap_closing": "Ah, got it — {{answer}}.\n\nThat's literally the #1 bottleneck for most aspiring hosts. {{tenantName}} spent a long time dialing in a system to solve exactly that, which is how they achieved {{biggestWin}}.\n\nDoes knowing there's a proven system for that bump up your 1-10 readiness at all?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hey {{name}},\n\nI'm going to be completely upfront — {{tenantName}} is busy actually running their portfolio and only mentors/consults a few people at a time.\n\nI don't want to keep buzzing your phone if you're not ready to take action. If you're serious, let me know. If you're just kicking the tires, that's totally fine, but I'll step back.\n\n— {{botName}}",
+        "pattern_interrupt": "Hey {{name}},\n\nBefore I close your file, think about this.\n\nEvery month you wait to launch your STR is a month of cash flow you never get back. The \"perfect time\" doesn't exist; you just get better at solving the problems.\n\nIf you're ready to stop researching and start doing, let's get you on a call with {{tenantName}}. Just reply \"Let's build.\"\n\n— {{botName}}",
+        "final_takeaway": "Hey {{name}},\n\nLast message from me. I'll take you off my active outreach list.\n\n{{tenantName}} is focused on their active properties and clients right now. If you ever decide to jump into the arena, we're around.\n\nGood luck!\n\n— {{botName}}",
+        "slow_drip_value": "Hey {{name}},\n\nChecking in! Just wanted to shoot over a quick STR update.\n\n{{tenantName}} has been seeing a lot of shifts with {{differentiator}}. The market favors pros more than ever.\n\nHope you're doing well. No need to reply unless you need something.\n\n— {{botName}}",
+        "default_fallback": "Hey {{name}}, just checking in. — {{botName}}"
+    }
+}

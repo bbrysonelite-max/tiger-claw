@@ -3,6 +3,7 @@ import IORedis from 'ioredis';
 import { provisionTenant } from './provisioner.js'; // K8s wrapper
 import { getPool } from './db.js';
 import { sendAdminAlert } from '../routes/admin.js';
+import TelegramBot from 'node-telegram-bot-api';
 
 // Provide a stable connection to our newly provisioned Memorystore Redis
 const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
@@ -92,4 +93,59 @@ export const provisionWorker = new Worker(
 
 provisionWorker.on('failed', (job, err) => {
     console.error(`[Worker] Provisioning Job ${job?.id} failed. Error:`, err);
+});
+
+// ---------------------------------------------------------------------------
+// Telegram Webhook Queue (Stateless Architecture)
+// ---------------------------------------------------------------------------
+
+export const telegramQueue = new Queue('telegram-webhooks', { connection: connection as any });
+console.log('[Queue] BullMQ telegram webhook queue configured.');
+
+export interface TelegramWebhookJobData {
+    tenantId: string;
+    botToken?: string;
+    payload: any;
+}
+
+export const telegramWorker = new Worker(
+    'telegram-webhooks',
+    async (job: Job<TelegramWebhookJobData>) => {
+        const { tenantId, botToken, payload } = job.data;
+        if (!botToken) {
+            console.error(`[Worker] Bot token missing for tenant: ${tenantId}. Aborting Telegram update.`);
+            return { success: false, error: "Missing botToken" };
+        }
+
+        console.log(`[Worker] Processing Telegram Webhook for tenant: ${tenantId}`);
+
+        try {
+            const bot = new TelegramBot(botToken);
+
+            // Extract the message text and chat id
+            if (payload.message && payload.message.chat) {
+                const chatId = payload.message.chat.id;
+                const text = payload.message.text ?? "";
+
+                console.log(`[Worker] Received message from ${chatId}: ${text}`);
+
+                // Delegate to the Stateless AI engine
+                const { processTelegramMessage } = await import('./ai.js');
+                await processTelegramMessage(tenantId, botToken, chatId, text);
+            }
+        } catch (err) {
+            console.error(`[Worker] Error processing Webhook for tenant ${tenantId}:`, err);
+            throw err;
+        }
+
+        return { success: true };
+    },
+    {
+        connection: connection as any,
+        concurrency: 50, // Higher concurrency since these are chat payloads
+    }
+);
+
+telegramWorker.on('failed', (job, err) => {
+    console.error(`[Worker] Telegram Job ${job?.id} failed. Error:`, err);
 });

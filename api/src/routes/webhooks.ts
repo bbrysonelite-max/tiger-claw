@@ -15,12 +15,13 @@
 
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
-import { provisionQueue } from "../services/queue.js";
+import { provisionQueue, telegramQueue } from "../services/queue.js";
 import {
   createBYOKUser,
   createBYOKBot,
   createBYOKConfig,
-  createBYOKSubscription
+  createBYOKSubscription,
+  getTenant,
 } from "../services/db.js";
 import { sendAdminAlert } from "./admin.js";
 
@@ -143,6 +144,47 @@ router.post("/stripe", async (req: Request, res: Response) => {
       // Wait to alert
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// POST /webhooks/telegram/:tenantId
+// Stateless multi-tenancy routing for all Telegram updates
+// ---------------------------------------------------------------------------
+
+router.post("/telegram/:tenantId", async (req: Request, res: Response) => {
+  const { tenantId } = req.params;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: "tenantId missing." });
+  }
+
+  // Ensure tenant exists and is active/onboarding
+  const tenant = await getTenant(tenantId);
+  if (!tenant || (tenant.status !== "active" && tenant.status !== "onboarding")) {
+    console.warn(`[webhooks] Telegram update ignored for inactive tenant: ${tenantId}`);
+    return res.status(200).send("OK"); // Acknowledge to stop Telegram from retrying
+  }
+
+  const payload = req.body;
+
+  try {
+    // Push the payload to BullMQ for asynchronous stateless processing
+    await telegramQueue.add('telegram-webhook', {
+      tenantId,
+      botToken: tenant.botToken,
+      payload
+    }, {
+      removeOnComplete: true,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 }
+    });
+
+    // Respond quickly to Telegram
+    res.status(200).send("OK");
+  } catch (err) {
+    console.error(`[webhooks] Failed to enqueue Telegram message for ${tenantId}:`, err);
+    res.status(500).send("Internal Server Error");
+  }
 });
 
 // ---------------------------------------------------------------------------
