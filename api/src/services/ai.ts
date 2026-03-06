@@ -169,3 +169,117 @@ export async function processTelegramMessage(tenantId: string, botToken: string,
         await bot.sendMessage(chatId, `❌ AI Error: ${err.message}`);
     }
 }
+
+export async function processSystemRoutine(tenantId: string, routineType: string) {
+    const tenant = await getTenant(tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+
+    const pool = getPool();
+    const configRes = await pool.query("SELECT * FROM ai_configs WHERE bot_id = (SELECT id FROM bots WHERE tenant_id = $1 LIMIT 1)", [tenantId]);
+    let anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+    if (configRes.rows.length > 0) {
+        const config = configRes.rows[0];
+        if (config.provider === 'anthropic' && config.encrypted_key) {
+            const { decryptToken } = await import('./pool.js');
+            anthropicKey = decryptToken(config.encrypted_key);
+        }
+    }
+
+    if (!anthropicKey) {
+        console.warn(`[AI Routine] No API key found for tenant ${tenantId}. Aborting ${routineType}.`);
+        return;
+    }
+
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+    // We use a dedicated system 'chatId' for background thoughts (e.g. 0)
+    const systemChatId = 0;
+
+    try {
+        let history = await getChatHistory(tenantId, systemChatId);
+
+        let systemPrompt = "";
+        if (routineType === 'daily_scout') {
+            systemPrompt = "SYSTEM: It is time to run your Daily Scout routine. Find new leads to contact.";
+        } else if (routineType === 'nurture_check') {
+            systemPrompt = "SYSTEM: It is time to run your Nurture Check routine. Review follow-ups and reach out if necessary.";
+        } else {
+            systemPrompt = `SYSTEM: Execute routine: ${routineType}`;
+        }
+
+        history.push({ role: "user", content: systemPrompt });
+
+        const workdir = path.join(process.cwd(), 'data', tenantId);
+        fs.mkdirSync(workdir, { recursive: true });
+
+        const toolContext = {
+            sessionKey: tenantId,
+            agentId: tenantId,
+            workdir,
+            config: {
+                TIGER_CLAW_TENANT_ID: tenantId,
+                BOT_FLAVOR: tenant.flavor,
+                REGION: tenant.region,
+                PREFERRED_LANGUAGE: tenant.language,
+                TIGER_CLAW_API_URL: process.env.TIGER_CLAW_API_URL ?? 'http://localhost:4000',
+            },
+            abortSignal: new AbortController().signal,
+            logger: console
+        };
+
+        let response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: 1024,
+            system: `You are Tiger Claw, an elite AI assistant for network marketing. Your tenant name is ${tenant.name}. You are currently running on a fully Serverless Multi-Tenant architecture. Use your tools to execute background commands.`,
+            messages: history,
+            tools: anthropicTools as any
+        });
+
+        while (response.stop_reason === "tool_use") {
+            history.push({ role: "assistant", content: response.content });
+
+            const toolCallBlock = response.content.find((b: any) => b.type === "tool_use");
+            const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+            if (toolCallBlock && toolCallBlock.type === "tool_use") {
+                const toolName = toolCallBlock.name;
+                const toolInput = toolCallBlock.input;
+                console.log(`[AI Routine] Tool Executing: ${toolName}`, toolInput);
+                let toolExecResult;
+
+                try {
+                    // @ts-ignore
+                    const legacyExecData = await toolsMap[toolName].execute(toolInput, toolContext);
+                    toolExecResult = JSON.stringify(legacyExecData);
+                } catch (toolErr: any) {
+                    console.error(`[AI Routine] Tool ${toolName} Failed:`, toolErr);
+                    toolExecResult = JSON.stringify({ error: toolErr.message });
+                }
+
+                toolResults.push({
+                    type: "tool_result",
+                    tool_use_id: toolCallBlock.id,
+                    content: toolExecResult
+                });
+            }
+
+            history.push({ role: "user", content: toolResults });
+
+            response = await anthropic.messages.create({
+                model: "claude-3-5-sonnet-20241022",
+                max_tokens: 1024,
+                system: `You are Tiger Claw, an elite AI assistant for network marketing.`,
+                messages: history,
+                tools: anthropicTools as any
+            });
+        }
+
+        history.push({ role: "assistant", content: response.content });
+        await saveChatHistory(tenantId, systemChatId, history);
+
+        console.log(`[AI Routine] Successfully evaluated ${routineType} for ${tenantId}.`);
+    } catch (err: any) {
+        console.error(`[AI Routine] Fatal error processing ${routineType} for tenant ${tenantId}:`, err);
+    }
+}

@@ -14,6 +14,12 @@ export const provisionQueue = new Queue('tenant-provisioning', { connection: con
 
 console.log('[Queue] BullMQ provision queue configured.');
 
+export const routineQueue = new Queue('ai-routines', { connection: connection as any });
+console.log('[Queue] BullMQ ai-routines queue configured.');
+
+export const cronQueue = new Queue('global-cron', { connection: connection as any });
+console.log('[Queue] BullMQ global-cron queue configured.');
+
 export interface ProvisionJobData {
     userId: string;
     botId: string;
@@ -148,4 +154,80 @@ export const telegramWorker = new Worker(
 
 telegramWorker.on('failed', (job, err) => {
     console.error(`[Worker] Telegram Job ${job?.id} failed. Error:`, err);
+});
+
+// ---------------------------------------------------------------------------
+// Background AI Routines (Scouting, Nurture Checks, Daily Reports)
+// ---------------------------------------------------------------------------
+
+export interface AIRoutineJobData {
+    tenantId: string;
+    routineType: 'daily_scout' | 'nurture_check';
+}
+
+export const routineWorker = new Worker(
+    'ai-routines',
+    async (job: Job<AIRoutineJobData>) => {
+        const { tenantId, routineType } = job.data;
+        console.log(`[Worker] Started AI Routine '${routineType}' for tenant: ${tenantId}`);
+
+        try {
+            // Forward the routine execution to the Stateless AI Gateway
+            const { processSystemRoutine } = await import('./ai.js');
+            await processSystemRoutine(tenantId, routineType);
+        } catch (err) {
+            console.error(`[Worker] Error executing routine ${routineType} for tenant ${tenantId}:`, err);
+            throw err;
+        }
+
+        return { success: true };
+    },
+    {
+        connection: connection as any,
+        concurrency: 20,
+    }
+);
+
+routineWorker.on('failed', (job, err) => {
+    console.error(`[Worker] Routine Job ${job?.id} failed. Error:`, err);
+});
+
+// ---------------------------------------------------------------------------
+// Global Heartbeat Scheduler
+// ---------------------------------------------------------------------------
+
+export const cronWorker = new Worker(
+    'global-cron',
+    async () => {
+        console.log(`[Cron] Global Heartbeat triggered. Polling PostgreSQL for tasks...`);
+        try {
+            const pool = getPool();
+            // Fetch all active tenants
+            const { rows: tenants } = await pool.query("SELECT id FROM tenants WHERE status = 'active'");
+
+            // In a production scenario, we evaluate the last_scout_at timestamp here
+            // For now, push the payload safely to the routineQueue for execution
+            for (const tenant of tenants) {
+                // We use deduplication IDs so BullMQ prevents duplicate routines running simultaneously
+                await routineQueue.add('nurture_check', {
+                    tenantId: tenant.id,
+                    routineType: 'nurture_check'
+                }, { jobId: `nurture_${tenant.id}`, removeOnComplete: true });
+            }
+
+            console.log(`[Cron] Enqueued routine checks for ${tenants.length} active tenants.`);
+        } catch (err) {
+            console.error(`[Cron] Heartbeat check failed:`, err);
+            throw err;
+        }
+    },
+    { connection: connection as any, concurrency: 1 }
+);
+
+// Schedule the global cron to run every minute
+cronQueue.add('heartbeat', {}, {
+    repeat: { pattern: '* * * * *' },
+    jobId: 'global_heartbeat_cron' // ensures singleton
+}).catch(err => {
+    console.error('[Queue] Failed to schedule global cron:', err);
 });
