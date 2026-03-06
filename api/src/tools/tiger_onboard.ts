@@ -9,8 +9,8 @@
 //   Phase 4 — Naming Ceremony: Bot name → regenerate SOUL.md
 //   Phase 5 — Flywheel Start: Set tenant active, trigger first scout
 //
-// State is persisted to {workdir}/onboard_state.json between calls.
-// SOUL.md is written to {workdir}/SOUL.md after Phase 4.
+// State is persisted to {tenantId}/onboard_state.json between calls.
+// SOUL.md is written to {tenantId}/SOUL.md after Phase 4.
 
 import * as fs from "fs";
 import * as path from "path";
@@ -86,7 +86,7 @@ interface OnboardParams {
 interface ToolContext {
   sessionKey: string;
   agentId: string;
-  workdir: string;
+  tenantId: string;
   config: Record<string, unknown>;
   abortSignal: AbortSignal;
   logger: {
@@ -186,32 +186,20 @@ function oarLabel(flavor: string, oar: "builder" | "customer" | "single"): "recr
 // State helpers
 // ---------------------------------------------------------------------------
 
-function stateFilePath(workdir: string): string {
-  return path.join(workdir, "onboard_state.json");
+import { getBotState, setBotState } from "../services/db.js";
+
+async function loadState(tenantId: string): Promise<OnboardState | null> {
+  return await getBotState<OnboardState>(tenantId, "onboard_state");
 }
 
-function loadState(workdir: string): OnboardState | null {
-  const filePath = stateFilePath(workdir);
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    const raw = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(raw) as OnboardState;
-  } catch {
-    return null;
-  }
+async function saveState(tenantId: string, state: OnboardState): Promise<void> {
+  await setBotState(tenantId, "onboard_state", state);
 }
 
-function saveState(workdir: string, state: OnboardState): void {
-  const filePath = stateFilePath(workdir);
-  // Ensure workdir exists
-  fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(state, null, 2), "utf8");
-}
-
-function initialState(workdir: string): OnboardState {
+function initialState(tenantId: string): OnboardState {
   const flavor = process.env.BOT_FLAVOR ?? "network-marketer";
   const language = process.env.PREFERRED_LANGUAGE ?? "en";
-  const tenantId = process.env.TIGER_CLAW_TENANT_ID ?? "unknown";
+
 
   return {
     phase: "identity",
@@ -233,18 +221,18 @@ function initialState(workdir: string): OnboardState {
 // Phase 1 — Identity
 // ---------------------------------------------------------------------------
 
-function handleIdentity(
+async function handleIdentity(
   state: OnboardState,
   response: string | undefined,
-  workdir: string
-): ToolResult {
+  tenantId: string
+): Promise<ToolResult> {
   const profession = professionLabel(state.flavor);
 
   // First call (action: 'start') — no answer yet, just ask question 0
   if (state.questionIndex === 0 && response === undefined) {
     const question = identityQuestion(IDENTITY_QUESTION_KEYS[0], profession);
     state.questionIndex = 1;
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: `Great, let's get you set up. I have a few quick questions so I can represent you properly.\n\n${question}`,
@@ -262,7 +250,7 @@ function handleIdentity(
   if (state.questionIndex < IDENTITY_QUESTION_KEYS.length) {
     const question = identityQuestion(IDENTITY_QUESTION_KEYS[state.questionIndex], profession);
     state.questionIndex++;
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: question,
@@ -278,7 +266,7 @@ function handleIdentity(
     ? `Perfect. Now let's build your recruiting engine. I need to understand exactly who you're hunting for — first your Business Builders, then your Customers.\n\n${icpQuestion("idealPerson", "recruit")}`
     : `Perfect. Now let's talk about who you're looking for.\n\n${icpQuestion("idealPerson", oarLabel(state.flavor, "single"))}`;
 
-  saveState(workdir, state);
+  await saveState(tenantId, state);
 
   return {
     ok: true,
@@ -307,11 +295,11 @@ function buildICPSummary(
   ].join("\n");
 }
 
-function handleICP(
+async function handleICP(
   state: OnboardState,
   response: string | undefined,
-  workdir: string
-): ToolResult {
+  tenantId: string
+): Promise<ToolResult> {
   const phase = state.phase as
     | "icp_builder"
     | "icp_builder_confirm"
@@ -336,7 +324,7 @@ function handleICP(
 
     if (confirmed) {
       icpData.confirmed = true;
-      return transitionAfterICPConfirm(state, workdir);
+      return await transitionAfterICPConfirm(state, tenantId);
     }
 
     // Tenant wants to adjust — store the note and re-show updated summary
@@ -351,7 +339,7 @@ function handleICP(
           : `ideal ${oarLabel(state.flavor, "single")}`;
 
     // Stay in confirm phase — update adjustmentNote, let agent know to adjust
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: `Got it. I've noted your adjustment: "${response}"\n\nHere's the revised ${oarDesc} profile:\n\n${buildICPSummary(icpData, oarDesc)}\n\n(The above incorporates your note. Reply "yes" to confirm or tell me what else to change.)`,
@@ -370,7 +358,7 @@ function handleICP(
     const label = oarLabel(state.flavor, oar);
     const question = icpQuestion(ICP_QUESTION_KEYS[state.questionIndex], label);
     state.questionIndex++;
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: question,
@@ -388,7 +376,7 @@ function handleICP(
 
   state.phase = (phase + "_confirm") as OnboardPhase;
   state.questionIndex = 0;
-  saveState(workdir, state);
+  await saveState(tenantId, state);
 
   return {
     ok: true,
@@ -397,14 +385,14 @@ function handleICP(
   };
 }
 
-function transitionAfterICPConfirm(state: OnboardState, workdir: string): ToolResult {
+async function transitionAfterICPConfirm(state: OnboardState, tenantId: string): Promise<ToolResult> {
   const phase = state.phase;
 
   if (phase === "icp_builder_confirm") {
     // Two-oar: move to customer ICP next
     state.phase = "icp_customer";
     state.questionIndex = 0;
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     const label = oarLabel(state.flavor, "customer");
     return {
       ok: true,
@@ -416,7 +404,7 @@ function transitionAfterICPConfirm(state: OnboardState, workdir: string): ToolRe
   // Both ICP phases complete (customer_confirm or single_confirm) — move to key setup
   state.phase = "keys_primary";
   state.questionIndex = 0;
-  saveState(workdir, state);
+  await saveState(tenantId, state);
 
   return {
     ok: true,
@@ -615,12 +603,12 @@ function notifyKeyActivation(tenantId: string): void {
 async function handleKeysPrimary(
   state: OnboardState,
   response: string | undefined,
-  workdir: string
+  tenantId: string
 ): Promise<ToolResult> {
   // First visit — no response yet, just show the intro
   if (response === undefined || state.phase === "keys_primary") {
     if (response === undefined) {
-      saveState(workdir, state);
+      await saveState(tenantId, state);
       return {
         ok: true,
         output: buildKeySetupIntro(),
@@ -635,7 +623,7 @@ async function handleKeysPrimary(
 
   if (!result.valid) {
     state.phase = "keys_primary_retry";
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: `${result.error}\n\nPlease paste your primary API key again.`,
@@ -647,7 +635,7 @@ async function handleKeysPrimary(
   state.primaryKeyValidated = true;
   state.primaryKey = key;
   state.phase = "keys_fallback";
-  saveState(workdir, state);
+  await saveState(tenantId, state);
 
   return {
     ok: true,
@@ -670,10 +658,10 @@ async function handleKeysPrimary(
 async function handleKeysFallback(
   state: OnboardState,
   response: string | undefined,
-  workdir: string
+  tenantId: string
 ): Promise<ToolResult> {
   if (response === undefined) {
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: "Please paste your backup API key.",
@@ -689,7 +677,7 @@ async function handleKeysFallback(
 
   if (!result.valid) {
     state.phase = "keys_fallback_retry";
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: `${result.error}\n\nI need a valid backup key to continue. Please paste it again.`,
@@ -727,7 +715,7 @@ async function handleKeysFallback(
   };
   try {
     fs.writeFileSync(
-      path.join(workdir, "key_state.json"),
+      path.join(tenantId, "key_state.json"),
       JSON.stringify(keyStateData, null, 2),
       "utf8"
     );
@@ -741,7 +729,7 @@ async function handleKeysFallback(
 
   // Move to naming ceremony
   state.phase = "naming";
-  saveState(workdir, state);
+  await saveState(tenantId, state);
 
   return {
     ok: true,
@@ -760,7 +748,7 @@ async function handleKeysFallback(
 // Phase 4 — Naming Ceremony + SOUL.md
 // ---------------------------------------------------------------------------
 
-function generateSOULmd(state: OnboardState): string {
+async function generateSOULmd(state: OnboardState): Promise<string> {
   const botName = state.botName ?? "Tiger";
   const tenantName = state.identity.name ?? "your operator";
   const profession = professionLabel(state.flavor);
@@ -831,13 +819,13 @@ function generateSOULmd(state: OnboardState): string {
   return configSoul + "\n\n---\n\n" + tenantSections.join("\n\n---\n\n");
 }
 
-function handleNaming(
+async function handleNaming(
   state: OnboardState,
   response: string | undefined,
-  workdir: string
-): ToolResult {
+  tenantId: string
+): Promise<ToolResult> {
   if (response === undefined) {
-    saveState(workdir, state);
+    await saveState(tenantId, state);
     return {
       ok: true,
       output: "What do you want to call me?",
@@ -849,8 +837,8 @@ function handleNaming(
   state.botName = botName;
 
   // Generate and write SOUL.md
-  const soulContent = generateSOULmd(state);
-  const soulPath = path.join(workdir, "SOUL.md");
+  const soulContent = await generateSOULmd(state);
+  const soulPath = path.join(tenantId, "SOUL.md");
   try {
     fs.writeFileSync(soulPath, soulContent, "utf8");
   } catch (err) {
@@ -878,7 +866,7 @@ function handleNaming(
   // Transition to complete phase — flywheel start is triggered in handleComplete
   state.phase = "complete";
   state.completedAt = new Date().toISOString();
-  saveState(workdir, state);
+  await saveState(tenantId, state);
 
   return {
     ok: true,
@@ -1111,12 +1099,12 @@ async function execute(
 ): Promise<ToolResult> {
   const action = String(params.action);
   const response = params.response as string | undefined;
-  const { workdir, logger } = context;
+  const { sessionKey: tenantId, logger } = context;
 
   logger.info("tiger_onboard called", { action, phase: "loading state" });
 
   // Load persisted state (or null if first run)
-  let state = loadState(workdir);
+  let state = await loadState(tenantId);
 
   // Status check — works at any time
   if (action === "status") {
@@ -1125,8 +1113,8 @@ async function execute(
 
   // Initialize state on first start
   if (action === "start" && !state) {
-    state = initialState(workdir);
-    saveState(workdir, state);
+    state = initialState(tenantId);
+    await saveState(tenantId, state);
     logger.info("tiger_onboard: new onboarding session started");
   }
 
@@ -1152,7 +1140,7 @@ async function execute(
   try {
     switch (state.phase) {
       case "identity":
-        return handleIdentity(state, action === "start" ? undefined : response, workdir);
+        return await handleIdentity(state, action === "start" ? undefined : response, tenantId);
 
       case "icp_builder":
       case "icp_builder_confirm":
@@ -1160,18 +1148,18 @@ async function execute(
       case "icp_customer_confirm":
       case "icp_single":
       case "icp_single_confirm":
-        return handleICP(state, response, workdir);
+        return await handleICP(state, response, tenantId);
 
       case "keys_primary":
       case "keys_primary_retry":
-        return await handleKeysPrimary(state, response, workdir);
+        return await handleKeysPrimary(state, response, tenantId);
 
       case "keys_fallback":
       case "keys_fallback_retry":
-        return await handleKeysFallback(state, response, workdir);
+        return await handleKeysFallback(state, response, tenantId);
 
       case "naming":
-        return handleNaming(state, response, workdir);
+        return await handleNaming(state, response, tenantId);
 
       case "complete":
         return await handleComplete(state);

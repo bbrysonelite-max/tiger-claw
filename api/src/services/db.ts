@@ -137,6 +137,16 @@ export async function initSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_bot_pool_tenant_id ON bot_pool(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_bot_pool_assignment ON bot_pool(tenant_id, created_at);
 
+      -- Bot tool states (formerly stored in local files)
+      CREATE TABLE IF NOT EXISTS bot_states (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id text NOT NULL,
+        state_key TEXT NOT NULL,
+        state_value JSONB,
+        updated_at TIMESTAMPTZ DEFAULT now(),
+        UNIQUE(tenant_id, state_key)
+      );
+
       -- Tiger Claw BYOK Architecture (V4.0)
 
       -- Users
@@ -760,5 +770,24 @@ export async function createBYOKSubscription(data: {
     `INSERT INTO subscriptions (user_id, bot_id, stripe_subscription_id, plan_tier, status)
      VALUES ($1, $2, $3, $4, 'active')`,
     [data.userId, data.botId, data.stripeSubscriptionId, data.planTier]
+  );
+}
+
+export async function getBotState<T>(tenantId: string, stateKey: string): Promise<T | null> {
+  const result = await getPool().query(
+    "SELECT state_value FROM bot_states WHERE tenant_id = $1 AND state_key = $2",
+    [tenantId, stateKey]
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0].state_value as T;
+}
+
+export async function setBotState(tenantId: string, stateKey: string, value: any): Promise<void> {
+  await getPool().query(
+    `INSERT INTO bot_states (tenant_id, state_key, state_value, updated_at) 
+     VALUES ($1, $2, $3, NOW()) 
+     ON CONFLICT (tenant_id, state_key) 
+     DO UPDATE SET state_value = EXCLUDED.state_value, updated_at = NOW()`,
+    [tenantId, stateKey, value]
   );
 }

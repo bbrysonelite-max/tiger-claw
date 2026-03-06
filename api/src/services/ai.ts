@@ -1,6 +1,7 @@
 import { Anthropic } from '@anthropic-ai/sdk';
 import { getTenant, getPool } from './db.js';
 import TelegramBot from 'node-telegram-bot-api';
+import IORedis from 'ioredis';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -22,7 +23,18 @@ const anthropicTools = Object.values(toolsMap).map((tool: any) => ({
     input_schema: tool.parameters
 }));
 
-const BOT_CONTEXTS: Record<string, Anthropic.MessageParam[]> = {};
+const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
+    maxRetriesPerRequest: null,
+});
+
+async function getChatHistory(tenantId: string, chatId: number): Promise<Anthropic.MessageParam[]> {
+    const raw = await redis.get(`chat_history:${tenantId}:${chatId}`);
+    return raw ? JSON.parse(raw) : [];
+}
+
+async function saveChatHistory(tenantId: string, chatId: number, history: Anthropic.MessageParam[]): Promise<void> {
+    await redis.set(`chat_history:${tenantId}:${chatId}`, JSON.stringify(history), 'EX', 86400 * 7);
+}
 
 export async function processTelegramMessage(tenantId: string, botToken: string, chatId: number, text: string) {
     // Note: Since OpenClaw container daemon was replaced by Serverless Multi-Tenancy,
@@ -62,12 +74,8 @@ export async function processTelegramMessage(tenantId: string, botToken: string,
         await bot.sendChatAction(chatId, "typing");
 
         // Maintain conversation history in memory for this stateless execution
-        // Memory will reset per-pod, which requires redis caching in production scale, but works for MVP validation
-        if (!BOT_CONTEXTS[tenantId]) {
-            BOT_CONTEXTS[tenantId] = [];
-        }
-
-        BOT_CONTEXTS[tenantId].push({ role: "user", content: text });
+        let history = await getChatHistory(tenantId, chatId);
+        history.push({ role: "user", content: text });
 
         // Build the mock context expected by native OpenClaw tools
         const workdir = path.join(process.cwd(), 'data', tenantId);
@@ -92,7 +100,7 @@ export async function processTelegramMessage(tenantId: string, botToken: string,
             model: "claude-3-5-sonnet-20241022",
             max_tokens: 1024,
             system: `You are Tiger Claw, an elite AI assistant for network marketing. Your tenant name is ${tenant.name}. You are currently running on a fully Serverless Multi-Tenant architecture. Use your tools to execute commands and interact with the user or prospect.`,
-            messages: BOT_CONTEXTS[tenantId],
+            messages: history,
             tools: anthropicTools as any
         });
 
@@ -101,7 +109,7 @@ export async function processTelegramMessage(tenantId: string, botToken: string,
         // -------------------------------------------------------------
         while (response.stop_reason === "tool_use") {
             // Push Assistant's tool use request to history
-            BOT_CONTEXTS[tenantId].push({ role: "assistant", content: response.content });
+            history.push({ role: "assistant", content: response.content });
 
             const toolCallBlock = response.content.find((b: any) => b.type === "tool_use");
             const toolResults: Anthropic.ToolResultBlockParam[] = [];
@@ -131,14 +139,14 @@ export async function processTelegramMessage(tenantId: string, botToken: string,
             }
 
             // Push tool execution result to history
-            BOT_CONTEXTS[tenantId].push({ role: "user", content: toolResults });
+            history.push({ role: "user", content: toolResults });
 
             // Generate Next Response
             response = await anthropic.messages.create({
                 model: "claude-3-5-sonnet-20241022",
                 max_tokens: 1024,
                 system: `You are Tiger Claw, an elite AI assistant for network marketing.`,
-                messages: BOT_CONTEXTS[tenantId],
+                messages: history,
                 tools: anthropicTools as any
             });
         }
@@ -147,7 +155,8 @@ export async function processTelegramMessage(tenantId: string, botToken: string,
         // Final Output To User
         // -------------------------------------------------------------
 
-        BOT_CONTEXTS[tenantId].push({ role: "assistant", content: response.content });
+        history.push({ role: "assistant", content: response.content });
+        await saveChatHistory(tenantId, chatId, history);
 
         const replyBlock = response.content.find((b: { type: string }) => b.type === "text") as { text: string } | undefined;
         const replyText = replyBlock?.text ?? "Done.";
