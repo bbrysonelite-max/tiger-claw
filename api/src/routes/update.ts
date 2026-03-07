@@ -118,7 +118,7 @@ async function rolloutBatch(
 
     // Check auto-rollback after each batch
     for (const r of batchResults) {
-      if (!r.success && checkAutoRollback(r.slug)) {
+      if (!r.success && await checkAutoRollback(r.slug)) {
         console.error(`[update] Auto-rollback triggered by ${r.slug} (${AUTO_ROLLBACK_THRESHOLD} consecutive failures)`);
         await sendAdminAlert(
           `Auto-rollback triggered: ${r.slug} hit ${AUTO_ROLLBACK_THRESHOLD} consecutive failures. Rolling back.`,
@@ -133,7 +133,7 @@ async function rolloutBatch(
   return { results: allResults, autoRolledBack };
 }
 
-function checkAutoRollback(slug: string): boolean {
+async function checkAutoRollback(slug: string): Promise<boolean> {
   const state = readDeploymentState();
   const record = state.tenants[slug];
   return (record?.consecutiveFailures ?? 0) >= AUTO_ROLLBACK_THRESHOLD;

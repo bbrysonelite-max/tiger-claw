@@ -116,6 +116,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -129,36 +131,24 @@ interface ToolResult {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
-function loadLeads(workdir: string): Record<string, LeadRecord> {
-  const p = path.join(workdir, "leads.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadLeads(context: ToolContext): Promise<Record<string, LeadRecord>> {
+  const data = await context.storage.get("leads.json");
+  return data ?? ({} as any);
 }
 
-function loadNurture(workdir: string): Record<string, NurtureRecord> {
-  const p = path.join(workdir, "nurture.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadNurture(context: ToolContext): Promise<Record<string, NurtureRecord>> {
+  const data = await context.storage.get("nurture.json");
+  return data ?? ({} as any);
 }
 
-function loadContacts(workdir: string): Record<string, ContactRecord> {
-  const p = path.join(workdir, "contacts.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadContacts(context: ToolContext): Promise<Record<string, ContactRecord>> {
+  const data = await context.storage.get("contacts.json");
+  return data ?? ({} as any);
 }
 
-function loadSettings(workdir: string): Record<string, unknown> {
-  const p = path.join(workdir, "settings.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadSettings(context: ToolContext): Promise<Record<string, unknown>> {
+  const data = await context.storage.get("settings.json");
+  return data ?? ({} as any);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,11 +174,11 @@ function findLeadByName(leads: Record<string, LeadRecord>, nameQuery: string): L
 }
 
 // Derive status label (same logic as tiger_search for consistency)
-function deriveStatus(
+async function deriveStatus(
   lead: LeadRecord,
   contactsByLead: Record<string, ContactRecord[]>,
   nurtureByLead: Record<string, NurtureRecord>
-): string {
+): Promise<string> {
   if (lead.manualStatus) return lead.manualStatus;
   if (lead.optedOut) return "do-not-contact";
 
@@ -249,12 +239,12 @@ function touchTypeLabel(type: string): string {
 // Build the detail view
 // ---------------------------------------------------------------------------
 
-function buildDetailView(
+async function buildDetailView(
   lead: LeadRecord,
   contacts: ContactRecord[],
   nurture: NurtureRecord | undefined,
   lang: string
-): string {
+): Promise<string> {
   const lines: string[] = [];
   const isEn = lang !== "th";
 
@@ -277,7 +267,7 @@ function buildDetailView(
   // ── Status and OAR ──
   const contactsByLead: Record<string, ContactRecord[]> = { [lead.id]: contacts };
   const nurtureByLead: Record<string, NurtureRecord> = nurture ? { [lead.id]: nurture } : {};
-  const status = deriveStatus(lead, contactsByLead, nurtureByLead);
+  const status = await deriveStatus(lead, contactsByLead, nurtureByLead);
   const oarLabel = lead.oar === "both"
     ? "Business Builder + Customer (Unicorn)"
     : lead.oar === "builder"
@@ -386,10 +376,10 @@ async function execute(
 
   logger.info("tiger_lead called", { name: nameQuery });
 
-  const leads = loadLeads(workdir);
-  const allContacts = loadContacts(workdir);
-  const allNurture = loadNurture(workdir);
-  const settings = loadSettings(workdir);
+  const leads = await loadLeads(context);
+  const allContacts = await loadContacts(context);
+  const allNurture = await loadNurture(context);
+  const settings = await loadSettings(context);
   const lang = (settings.language as string) ?? "en";
 
   const matches = findLeadByName(leads, nameQuery);
@@ -413,7 +403,7 @@ async function execute(
       "",
     ];
     for (const m of matches.slice(0, 10)) {
-      const status = deriveStatus(m, {}, allNurture);
+      const status = await deriveStatus(m, {}, allNurture);
       lines.push(`  • ${m.displayName}  (${m.platform}, score: ${Math.round(m.qualifyingScore ?? 0)}, ${status})`);
     }
     return {
@@ -431,7 +421,7 @@ async function execute(
   // nurture.json is keyed by nurtureId, not leadId — find by leadId field
   const nurture = Object.values(allNurture).find((n) => n.leadId === lead.id);
 
-  const output = buildDetailView(lead, leadContacts, nurture, lang);
+  const output = await buildDetailView(lead, leadContacts, nurture, lang);
 
   return {
     ok: true,
@@ -440,7 +430,7 @@ async function execute(
       found: true,
       leadId: lead.id,
       displayName: lead.displayName,
-      status: deriveStatus(lead, { [lead.id]: leadContacts }, nurture ? { [lead.id]: nurture } : {}),
+      status: await deriveStatus(lead, { [lead.id]: leadContacts }, nurture ? { [lead.id]: nurture } : {}),
       scores: {
         profileFit: lead.profileFit,
         intentScore: lead.intentScore,

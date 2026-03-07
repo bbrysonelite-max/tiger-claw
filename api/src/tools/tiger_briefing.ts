@@ -135,6 +135,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -148,16 +150,13 @@ interface ToolResult {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
-function loadJson<T>(filePath: string): T | null {
-  try {
-    if (fs.existsSync(filePath)) return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
-  } catch { /* fall through */ }
-  return null;
+async function loadJson<T>(context: ToolContext, key: string): Promise<T | null> {
+  const data = await context.storage.get(key);
+  return data ?? null;
 }
 
-function saveJson(filePath: string, data: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+async function saveJson<T>(context: ToolContext, key: string, data: unknown): Promise<void> {
+  await context.storage.set(key, data);
 }
 
 function todayDate(): string {
@@ -206,11 +205,11 @@ interface BriefingData {
   aftercareAlerts: Array<{ name: string; platform: string; alertType: string }>;
 }
 
-function aggregateData(workdir: string, lastBriefingAt?: string): BriefingData {
-  const leads = loadJson<Record<string, LeadRecord>>(path.join(workdir, "leads.json")) ?? {};
-  const nurture = loadJson<Record<string, NurtureRecord>>(path.join(workdir, "nurture.json")) ?? {};
-  const contacts = loadJson<Record<string, ContactRecord>>(path.join(workdir, "contacts.json")) ?? {};
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+async function aggregateData(context: ToolContext, lastBriefingAt?: string): Promise<BriefingData> {
+  const leads = await loadJson<Record<string, LeadRecord>>(context, "leads.json") ?? {};
+  const nurture = await loadJson<Record<string, NurtureRecord>>(context, "nurture.json") ?? {};
+  const contacts = await loadJson<Record<string, ContactRecord>>(context, "contacts.json") ?? {};
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
 
   const tenantName = onboard?.identity?.name ?? "there";
   const flavor = onboard?.flavor ?? "network-marketer";
@@ -311,7 +310,7 @@ function aggregateData(workdir: string, lastBriefingAt?: string): BriefingData {
   const activeConversations = activeNurture.length + activeContactsSent;
 
   // Aftercare
-  const aftercareStore = loadJson<Record<string, AftercareRecordBrief>>(path.join(workdir, "aftercare.json")) ?? {};
+  const aftercareStore = await loadJson<Record<string, AftercareRecordBrief>>(context, "aftercare.json") ?? {};
   const allAftercare = Object.values(aftercareStore);
   const aftercareActive: BriefingData["aftercareActive"] = allAftercare
     .filter((r) => ["active", "inactive_flagged", "upgrade_flagged"].includes(r.status))
@@ -497,16 +496,16 @@ function assembleBriefing(data: BriefingData): string {
 // Action: generate
 // ---------------------------------------------------------------------------
 
-function handleGenerate(workdir: string, logger: ToolContext["logger"]): ToolResult {
+async function handleGenerate(context: ToolContext, logger: ToolContext["logger"]): Promise<ToolResult> {
   const date = todayDate();
-  const logPath = path.join(workdir, "briefing.json");
-  const log = loadJson<BriefingLog>(logPath) ?? {};
+  /* unused path */
+  const log = await loadJson<BriefingLog>(context, "briefing.json") ?? {};
 
   // Find last briefing timestamp for "since yesterday" filtering
   const entries = Object.values(log).sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1));
   const lastBriefingAt = entries[0]?.generatedAt;
 
-  const data = aggregateData(workdir, lastBriefingAt);
+  const data = await aggregateData(context, lastBriefingAt);
   const content = assembleBriefing(data);
 
   const entry: BriefingEntry = {
@@ -519,7 +518,7 @@ function handleGenerate(workdir: string, logger: ToolContext["logger"]): ToolRes
   };
 
   log[date] = entry;
-  saveJson(logPath, log);
+  await saveJson(context, "briefing.json", log);
 
   logger.info("tiger_briefing: generated", {
     date,
@@ -537,7 +536,7 @@ function handleGenerate(workdir: string, logger: ToolContext["logger"]): ToolRes
       activeConversations: data.activeConversations,
       conversionReady: data.conversionReady.length,
       newQualified: data.newQualified.length,
-      channel: (loadJson<OnboardState>(path.join(workdir, "onboard_state.json")))?.identity?.preferredChannel ?? "configured channel",
+      channel: (await loadJson<OnboardState>(context, "onboard_state.json"))?.identity?.preferredChannel ?? "configured channel",
     },
   };
 }
@@ -546,10 +545,10 @@ function handleGenerate(workdir: string, logger: ToolContext["logger"]): ToolRes
 // Action: mark_sent
 // ---------------------------------------------------------------------------
 
-function handleMarkSent(workdir: string, date?: string, logger?: ToolContext["logger"]): ToolResult {
+async function handleMarkSent(context: ToolContext, date?: string, logger?: ToolContext["logger"]): Promise<ToolResult> {
   const targetDate = date ?? todayDate();
-  const logPath = path.join(workdir, "briefing.json");
-  const log = loadJson<BriefingLog>(logPath) ?? {};
+  /* unused path */
+  const log = await loadJson<BriefingLog>(context, "briefing.json") ?? {};
 
   if (!log[targetDate]) {
     return {
@@ -559,7 +558,7 @@ function handleMarkSent(workdir: string, date?: string, logger?: ToolContext["lo
   }
 
   log[targetDate].sentAt = new Date().toISOString();
-  saveJson(logPath, log);
+  await saveJson(context, "briefing.json", log);
 
   logger?.info("tiger_briefing: marked sent", { date: targetDate });
 
@@ -574,9 +573,9 @@ function handleMarkSent(workdir: string, date?: string, logger?: ToolContext["lo
 // Action: history
 // ---------------------------------------------------------------------------
 
-function handleHistory(workdir: string, limit: number): ToolResult {
-  const logPath = path.join(workdir, "briefing.json");
-  const log = loadJson<BriefingLog>(logPath) ?? {};
+async function handleHistory(context: ToolContext, limit: number): Promise<ToolResult> {
+  /* unused path */
+  const log = await loadJson<BriefingLog>(context, "briefing.json") ?? {};
 
   const entries = Object.values(log)
     .sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1))
@@ -614,13 +613,13 @@ async function execute(
   try {
     switch (action) {
       case "generate":
-        return handleGenerate(workdir, logger);
+        return await handleGenerate(context, logger);
 
       case "mark_sent":
-        return handleMarkSent(workdir, params.date as string | undefined, logger);
+        return await handleMarkSent(context, params.date as string | undefined, logger);
 
       case "history":
-        return handleHistory(workdir, typeof params.limit === "number" ? params.limit : 7);
+        return await handleHistory(context, typeof params.limit === "number" ? params.limit : 7);
 
       default:
         return {

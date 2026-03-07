@@ -29,6 +29,8 @@ interface ToolContext {
     info: (msg: string, data?: Record<string, unknown>) => void;
     error: (msg: string, data?: Record<string, unknown>) => void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -145,18 +147,13 @@ function parseCSVLine(line: string): string[] {
 // JSON helpers
 // ---------------------------------------------------------------------------
 
-function loadJSON<T>(filePath: string): T | null {
-  try {
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
-    }
-  } catch { /* fall through */ }
-  return null;
+async function loadJSON<T>(context: ToolContext, key: string): Promise<T | null> {
+  const data = await context.storage.get(key);
+  return data ?? null;
 }
 
-function saveJSON(filePath: string, data: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+async function saveJSON(context: ToolContext, key: string, data: unknown): Promise<void> {
+  await context.storage.set(key, data);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +188,7 @@ function rowToLead(row: Record<string, string>, importId: string): LeadRecord | 
   const oarRaw = findCol(row, OAR_COLS).toLowerCase();
   const oar: "builder" | "customer" | "both" =
     oarRaw === "builder" ? "builder" :
-    oarRaw === "both" ? "both" : "customer";
+      oarRaw === "both" ? "both" : "customer";
   const notesText = findCol(row, NOTES_COLS);
   const tagsRaw = findCol(row, TAGS_COLS);
 
@@ -237,7 +234,7 @@ function rowToLead(row: Record<string, string>, importId: string): LeadRecord | 
 // Action: preview — dry run, show what would be imported
 // ---------------------------------------------------------------------------
 
-function handlePreview(csvData: string): ToolResult {
+async function handlePreview(csvData: string): Promise<ToolResult> {
   if (!csvData || csvData.trim().length === 0) {
     return { ok: false, error: "No CSV data provided. Paste CSV content in the 'csv' parameter." };
   }
@@ -284,12 +281,12 @@ function handlePreview(csvData: string): ToolResult {
 // Action: import — create lead records from CSV
 // ---------------------------------------------------------------------------
 
-function handleImport(
+async function handleImport(
   csvData: string,
-  workdir: string,
+  context: ToolContext,
   source: string,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   if (!csvData || csvData.trim().length === 0) {
     return { ok: false, error: "No CSV data provided." };
   }
@@ -299,10 +296,10 @@ function handleImport(
     return { ok: false, error: "No data rows found in CSV." };
   }
 
-  const leadsPath = path.join(workdir, "leads.json");
-  const importLogPath = path.join(workdir, "import_log.json");
-  const leads = loadJSON<Record<string, LeadRecord>>(leadsPath) ?? {};
-  const importLog = loadJSON<ImportRecord[]>(importLogPath) ?? [];
+  /* unused path */
+  /* unused path */
+  const leads = await loadJSON<Record<string, LeadRecord>>(context, "leads.json") ?? {};
+  const importLog = await loadJSON<ImportRecord[]>(context, "import_log.json") ?? [];
 
   const importId = crypto.randomUUID().slice(0, 8);
   const created: string[] = [];
@@ -332,7 +329,7 @@ function handleImport(
     created.push(lead.displayName);
   }
 
-  saveJSON(leadsPath, leads);
+  await saveJSON(context, "leads.json", leads);
 
   // Log the import
   importLog.push({
@@ -344,7 +341,7 @@ function handleImport(
       Object.values(leads).find((l) => l.displayName === name)?.id ?? ""
     ).filter(Boolean),
   });
-  saveJSON(importLogPath, importLog);
+  await saveJSON(context, "import_log.json", importLog);
 
   logger.info("tiger_import: contacts imported", {
     created: created.length,
@@ -396,9 +393,9 @@ function handleImport(
 // Action: status — show import history
 // ---------------------------------------------------------------------------
 
-function handleStatus(workdir: string): ToolResult {
-  const importLogPath = path.join(workdir, "import_log.json");
-  const importLog = loadJSON<ImportRecord[]>(importLogPath) ?? [];
+async function handleStatus(context: ToolContext): Promise<ToolResult> {
+  /* unused path */
+  const importLog = await loadJSON<ImportRecord[]>(context, "import_log.json") ?? [];
 
   if (importLog.length === 0) {
     return { ok: true, output: "No imports yet. Use action: 'import' with CSV data to import contacts." };
@@ -433,11 +430,11 @@ async function execute(
 
   switch (action) {
     case "preview":
-      return handlePreview(params.csv as string);
+      return await handlePreview(params.csv as string);
     case "import":
-      return handleImport(params.csv as string, workdir, (params.source as string) ?? "", logger);
+      return await handleImport(params.csv as string, context, (params.source as string) ?? "", logger);
     case "status":
-      return handleStatus(workdir);
+      return await handleStatus(context);
     default:
       return { ok: false, error: `Unknown action: "${action}". Valid: preview | import | status` };
   }

@@ -228,6 +228,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -241,16 +243,13 @@ interface ToolResult {
 // Persistence
 // ---------------------------------------------------------------------------
 
-function loadJson<T>(filePath: string): T | null {
-  try {
-    if (fs.existsSync(filePath)) return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
-  } catch { /* fall through */ }
-  return null;
+async function loadJson<T>(context: ToolContext, key: string): Promise<T | null> {
+  const data = await context.storage.get(key);
+  return data ?? null;
 }
 
-function saveJson(filePath: string, data: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+async function saveJson<T>(context: ToolContext, key: string, data: unknown): Promise<void> {
+  await context.storage.set(key, data);
 }
 
 function daysFromEnrollment(enrolledAt: string): number {
@@ -825,23 +824,23 @@ interface EnrollParams {
   tier?: CustomerTier;
 }
 
-function handleEnroll(
+async function handleEnroll(
   params: EnrollParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+): Promise<ToolResult> {
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
   if (!onboard || onboard.phase !== "complete") {
     return { ok: false, error: "Onboarding not complete." };
   }
 
-  const leadsPath = path.join(workdir, "leads.json");
-  const leads = loadJson<Record<string, { id: string; displayName: string; platform: string }>>(leadsPath) ?? {};
+  /* unused path */
+  const leads = await loadJson<Record<string, { id: string; displayName: string; platform: string }>>(context, "leads.json") ?? {};
   const lead = leads[params.leadId];
   if (!lead) return { ok: false, error: `Lead ${params.leadId} not found.` };
 
-  const storePath = path.join(workdir, "aftercare.json");
-  const store = loadJson<AftercarStore>(storePath) ?? {};
+  /* unused path */
+  const store = await loadJson<AftercarStore>(context, "aftercare.json") ?? {};
 
   // Check for existing active aftercare
   const existing = Object.values(store).find(
@@ -901,7 +900,7 @@ function handleEnroll(
   record.nextTouchScheduledFor = firstTouch?.scheduledFor ?? now;
 
   store[id] = record;
-  saveJson(storePath, store);
+  await saveJson(context, "aftercare.json", store);
 
   logger.info("tiger_aftercare: enrolled", {
     aftercareId: id,
@@ -938,10 +937,10 @@ function handleEnroll(
 // Action: check (cron — daily)
 // ---------------------------------------------------------------------------
 
-function handleCheck(workdir: string, logger: ToolContext["logger"]): ToolResult {
-  const storePath = path.join(workdir, "aftercare.json");
-  const store = loadJson<AftercarStore>(storePath) ?? {};
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+async function handleCheck(context: ToolContext, logger: ToolContext["logger"]): Promise<ToolResult> {
+  /* unused path */
+  const store = await loadJson<AftercarStore>(context, "aftercare.json") ?? {};
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
   if (!onboard) return { ok: false, error: "Onboard state not found." };
 
   const now = new Date().toISOString();
@@ -1013,13 +1012,13 @@ interface MarkSentParams {
   touchNumber: number;
 }
 
-function handleMarkSent(
+async function handleMarkSent(
   params: MarkSentParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const storePath = path.join(workdir, "aftercare.json");
-  const store = loadJson<AftercarStore>(storePath) ?? {};
+): Promise<ToolResult> {
+  /* unused path */
+  const store = await loadJson<AftercarStore>(context, "aftercare.json") ?? {};
   const record = store[params.aftercareId];
   if (!record) return { ok: false, error: `Aftercare record ${params.aftercareId} not found.` };
 
@@ -1053,7 +1052,7 @@ function handleMarkSent(
   }
 
   store[params.aftercareId] = record;
-  saveJson(storePath, store);
+  await saveJson(context, "aftercare.json", store);
 
   logger.info("tiger_aftercare: mark_sent", {
     aftercareId: params.aftercareId,
@@ -1094,14 +1093,14 @@ interface RecordSignalParams {
   notes?: string;
 }
 
-function handleRecordSignal(
+async function handleRecordSignal(
   params: RecordSignalParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const storePath = path.join(workdir, "aftercare.json");
-  const store = loadJson<AftercarStore>(storePath) ?? {};
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+): Promise<ToolResult> {
+  /* unused path */
+  const store = await loadJson<AftercarStore>(context, "aftercare.json") ?? {};
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
   const record = store[params.aftercareId];
   if (!record) return { ok: false, error: `Aftercare record ${params.aftercareId} not found.` };
 
@@ -1229,11 +1228,11 @@ function handleRecordSignal(
   }
 
   store[params.aftercareId] = record;
-  saveJson(storePath, store);
+  await saveJson(context, "aftercare.json", store);
 
   // Advance involvement level based on aftercare signals
-  const leadsPath = path.join(workdir, "leads.json");
-  const allLeads = loadJson<Record<string, { involvementLevel?: number }>>(leadsPath) ?? {};
+  /* unused path */
+  const allLeads = await loadJson<Record<string, { involvementLevel?: number }>>(context, "leads.json") ?? {};
   const theLead = allLeads[record.leadId];
   if (theLead) {
     const cur = theLead.involvementLevel ?? 2;
@@ -1243,7 +1242,7 @@ function handleRecordSignal(
     if (record.status === "upgrade_flagged" && cur < 6) next = 6;   // Side hustle builder
     if (next > cur) {
       (theLead as Record<string, unknown>).involvementLevel = next;
-      saveJson(leadsPath, allLeads);
+      await saveJson(context, "leads.json", allLeads);
     }
   }
 
@@ -1280,13 +1279,13 @@ interface SetTierParams {
   reason?: string;
 }
 
-function handleSetTier(
+async function handleSetTier(
   params: SetTierParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const storePath = path.join(workdir, "aftercare.json");
-  const store = loadJson<AftercarStore>(storePath) ?? {};
+): Promise<ToolResult> {
+  /* unused path */
+  const store = await loadJson<AftercarStore>(context, "aftercare.json") ?? {};
   const record = store[params.aftercareId];
   if (!record) return { ok: false, error: `Aftercare record ${params.aftercareId} not found.` };
   if (record.oar !== "customer") return { ok: false, error: "Tier management is for customer oar only." };
@@ -1310,7 +1309,7 @@ function handleSetTier(
   }
 
   store[params.aftercareId] = record;
-  saveJson(storePath, store);
+  await saveJson(context, "aftercare.json", store);
 
   logger.info("tiger_aftercare: set_tier", {
     aftercareId: params.aftercareId,
@@ -1329,9 +1328,9 @@ function handleSetTier(
 // Action: list
 // ---------------------------------------------------------------------------
 
-function handleList(workdir: string): ToolResult {
-  const storePath = path.join(workdir, "aftercare.json");
-  const store = loadJson<AftercarStore>(storePath) ?? {};
+async function handleList(context: ToolContext): Promise<ToolResult> {
+  /* unused path */
+  const store = await loadJson<AftercarStore>(context, "aftercare.json") ?? {};
   const all = Object.values(store);
 
   if (all.length === 0) return { ok: true, output: "No aftercare records yet.", data: { records: [] } };
@@ -1382,22 +1381,22 @@ async function execute(
   try {
     switch (action) {
       case "enroll":
-        return handleEnroll(params as unknown as EnrollParams, workdir, logger);
+        return await handleEnroll(params as unknown as EnrollParams, context, logger);
 
       case "check":
-        return handleCheck(workdir, logger);
+        return await handleCheck(context, logger);
 
       case "mark_sent":
-        return handleMarkSent(params as unknown as MarkSentParams, workdir, logger);
+        return await handleMarkSent(params as unknown as MarkSentParams, context, logger);
 
       case "record_signal":
-        return handleRecordSignal(params as unknown as RecordSignalParams, workdir, logger);
+        return await handleRecordSignal(params as unknown as RecordSignalParams, context, logger);
 
       case "set_tier":
-        return handleSetTier(params as unknown as SetTierParams, workdir, logger);
+        return await handleSetTier(params as unknown as SetTierParams, context, logger);
 
       case "list":
-        return handleList(workdir);
+        return await handleList(context);
 
       default:
         return {

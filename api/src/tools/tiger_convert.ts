@@ -166,6 +166,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -179,16 +181,13 @@ interface ToolResult {
 // Persistence
 // ---------------------------------------------------------------------------
 
-function loadJson<T>(filePath: string): T | null {
-  try {
-    if (fs.existsSync(filePath)) return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
-  } catch { /* fall through */ }
-  return null;
+async function loadJson<T>(context: ToolContext, key: string): Promise<T | null> {
+  const data = await context.storage.get(key);
+  return data ?? null;
 }
 
-function saveJson(filePath: string, data: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+async function saveJson<T>(context: ToolContext, key: string, data: unknown): Promise<void> {
+  await context.storage.set(key, data);
 }
 
 // ---------------------------------------------------------------------------
@@ -410,14 +409,14 @@ interface InitiateParams {
   nurtureId: string;
 }
 
-function handleInitiate(
+async function handleInitiate(
   params: InitiateParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const leads = loadJson<Record<string, LeadRecord>>(path.join(workdir, "leads.json")) ?? {};
-  const nurtures = loadJson<Record<string, NurtureRecord>>(path.join(workdir, "nurture.json")) ?? {};
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+): Promise<ToolResult> {
+  const leads = await loadJson<Record<string, LeadRecord>>(context, "leads.json") ?? {};
+  const nurtures = await loadJson<Record<string, NurtureRecord>>(context, "nurture.json") ?? {};
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
 
   const lead = leads[params.leadId];
   if (!lead) return { ok: false, error: `Lead ${params.leadId} not found.` };
@@ -430,7 +429,7 @@ function handleInitiate(
     return { ok: false, error: "Onboarding not complete. Cannot initiate conversion." };
   }
 
-  const store = loadJson<ConversionsStore>(path.join(workdir, "conversions.json")) ?? {};
+  const store = await loadJson<ConversionsStore>(context, "conversions.json") ?? {};
 
   // Check for existing active conversion
   const existing = Object.values(store).find(
@@ -524,12 +523,12 @@ function handleInitiate(
 
   // Persist conversion record
   store[id] = record;
-  saveJson(path.join(workdir, "conversions.json"), store);
+  await saveJson(context, "conversions.json", store);
 
   // Mark lead as conversion in progress in leads.json
   lead.converted = false; // will be set true on confirm
   leads[params.leadId] = lead;
-  saveJson(path.join(workdir, "leads.json"), leads);
+  await saveJson(context, "leads.json", leads);
 
   logger.info("tiger_convert: initiated", {
     conversionId: id,
@@ -573,12 +572,12 @@ interface MarkSentParams {
   step: "tenant_briefed" | "prospect_edified" | "connected" | "tenant_notified";
 }
 
-function handleMarkSent(
+async function handleMarkSent(
   params: MarkSentParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const store = loadJson<ConversionsStore>(path.join(workdir, "conversions.json")) ?? {};
+): Promise<ToolResult> {
+  const store = await loadJson<ConversionsStore>(context, "conversions.json") ?? {};
   const record = store[params.conversionId];
   if (!record) return { ok: false, error: `Conversion ${params.conversionId} not found.` };
 
@@ -606,7 +605,7 @@ function handleMarkSent(
   }
 
   store[params.conversionId] = record;
-  saveJson(path.join(workdir, "conversions.json"), store);
+  await saveJson(context, "conversions.json", store);
 
   logger.info("tiger_convert: mark_sent", {
     conversionId: params.conversionId,
@@ -643,12 +642,12 @@ interface ConfirmParams {
   conversionId: string;
 }
 
-function handleConfirm(
+async function handleConfirm(
   params: ConfirmParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const store = loadJson<ConversionsStore>(path.join(workdir, "conversions.json")) ?? {};
+): Promise<ToolResult> {
+  const store = await loadJson<ConversionsStore>(context, "conversions.json") ?? {};
   const record = store[params.conversionId];
   if (!record) return { ok: false, error: `Conversion ${params.conversionId} not found.` };
 
@@ -657,10 +656,10 @@ function handleConfirm(
   record.status = record.oar === "customer" ? "customer_closed" : "confirmed";
 
   store[params.conversionId] = record;
-  saveJson(path.join(workdir, "conversions.json"), store);
+  await saveJson(context, "conversions.json", store);
 
   // Mark lead as converted + advance involvement: 1 (Engaged) → 2 (Customer)
-  const leads = loadJson<Record<string, LeadRecord>>(path.join(workdir, "leads.json")) ?? {};
+  const leads = await loadJson<Record<string, LeadRecord>>(context, "leads.json") ?? {};
   const lead = leads[record.leadId];
   if (lead) {
     lead.converted = true;
@@ -669,16 +668,16 @@ function handleConfirm(
       (lead as Record<string, unknown>).involvementLevel = 2;
     }
     leads[record.leadId] = lead;
-    saveJson(path.join(workdir, "leads.json"), leads);
+    await saveJson(context, "leads.json", leads);
   }
 
   // Also update nurture record status
-  const nurtures = loadJson<Record<string, NurtureRecord>>(path.join(workdir, "nurture.json")) ?? {};
+  const nurtures = await loadJson<Record<string, NurtureRecord>>(context, "nurture.json") ?? {};
   const nurture = nurtures[record.nurtureId];
   if (nurture) {
     (nurture as Record<string, unknown>)["completedAt"] = now;
     nurtures[record.nurtureId] = nurture;
-    saveJson(path.join(workdir, "nurture.json"), nurtures);
+    await saveJson(context, "nurture.json", nurtures);
   }
 
   logger.info("tiger_convert: confirmed", {
@@ -714,8 +713,8 @@ function handleConfirm(
 // Action: list
 // ---------------------------------------------------------------------------
 
-function handleList(workdir: string): ToolResult {
-  const store = loadJson<ConversionsStore>(path.join(workdir, "conversions.json")) ?? {};
+async function handleList(context: ToolContext): Promise<ToolResult> {
+  const store = await loadJson<ConversionsStore>(context, "conversions.json") ?? {};
   const all = Object.values(store).sort((a, b) => (a.initiatedAt < b.initiatedAt ? 1 : -1));
 
   if (all.length === 0) {
@@ -761,16 +760,16 @@ async function execute(
   try {
     switch (action) {
       case "initiate":
-        return handleInitiate(params as unknown as InitiateParams, workdir, logger);
+        return await handleInitiate(params as unknown as InitiateParams, context, logger);
 
       case "mark_sent":
-        return handleMarkSent(params as unknown as MarkSentParams, workdir, logger);
+        return await handleMarkSent(params as unknown as MarkSentParams, context, logger);
 
       case "confirm":
-        return handleConfirm(params as unknown as ConfirmParams, workdir, logger);
+        return await handleConfirm(params as unknown as ConfirmParams, context, logger);
 
       case "list":
-        return handleList(workdir);
+        return await handleList(context);
 
       default:
         return {

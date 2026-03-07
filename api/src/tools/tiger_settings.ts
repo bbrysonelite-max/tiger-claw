@@ -74,6 +74,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -112,21 +114,13 @@ function defaultSettings(): TenantSettings {
 // Persistence
 // ---------------------------------------------------------------------------
 
-function loadSettings(workdir: string): TenantSettings {
-  const p = path.join(workdir, "settings.json");
-  try {
-    if (fs.existsSync(p)) {
-      const stored = JSON.parse(fs.readFileSync(p, "utf8")) as Partial<TenantSettings>;
-      // Merge stored over defaults so new fields are always present
-      return { ...defaultSettings(), ...stored };
-    }
-  } catch { /* fall through */ }
-  return defaultSettings();
+async function loadSettings(context: ToolContext): Promise<TenantSettings> {
+  const data = await context.storage.get("settings.json");
+  return data ?? (defaultSettings());
 }
 
-function saveSettings(workdir: string, settings: TenantSettings): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(path.join(workdir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
+async function saveSettings(context: ToolContext, settings: TenantSettings): Promise<void> {
+  await context.storage.set("settings.json", settings);
 }
 
 // ---------------------------------------------------------------------------
@@ -250,8 +244,8 @@ function validateValue(key: SettingKey, value: unknown): { ok: boolean; error?: 
 // Action: get
 // ---------------------------------------------------------------------------
 
-function handleGet(workdir: string): ToolResult {
-  const settings = loadSettings(workdir);
+async function handleGet(context: ToolContext): Promise<ToolResult> {
+  const settings = await loadSettings(context);
 
   const lines = [
     `Current settings:`,
@@ -303,11 +297,11 @@ interface SetParams {
   value: unknown;
 }
 
-function handleSet(
+async function handleSet(
   params: SetParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   const key = params.key as SettingKey;
   if (!SETTING_META[key]) {
     const validKeys = Object.keys(SETTING_META).join(", ");
@@ -317,7 +311,7 @@ function handleSet(
   const validation = validateValue(key, params.value);
   if (!validation.ok) return { ok: false, error: validation.error };
 
-  const settings = loadSettings(workdir);
+  const settings = await loadSettings(context);
   const oldValue = settings[key];
   const newValue = validation.coerced !== undefined ? validation.coerced : params.value;
 
@@ -328,7 +322,7 @@ function handleSet(
     settings.updatedFields.push(key as string);
   }
 
-  saveSettings(workdir, settings);
+  await saveSettings(context, settings);
 
   logger.info("tiger_settings: set", { key, oldValue, newValue });
 
@@ -381,12 +375,12 @@ interface ResetParams {
   key?: string;   // Reset one key, or all if omitted
 }
 
-function handleReset(
+async function handleReset(
   params: ResetParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const settings = loadSettings(workdir);
+): Promise<ToolResult> {
+  const settings = await loadSettings(context);
   const defaults = defaultSettings();
 
   if (params.key) {
@@ -398,7 +392,7 @@ function handleReset(
     (settings as Record<string, unknown>)[key] = defaultVal;
     settings.updatedFields = settings.updatedFields.filter((f) => f !== key);
     settings.lastUpdatedAt = new Date().toISOString();
-    saveSettings(workdir, settings);
+    await saveSettings(context, settings);
     logger.info("tiger_settings: reset one", { key, defaultVal });
     return {
       ok: true,
@@ -409,7 +403,7 @@ function handleReset(
 
   // Reset all
   const fresh = defaultSettings();
-  saveSettings(workdir, fresh);
+  await saveSettings(context, fresh);
   logger.info("tiger_settings: reset all");
 
   return {
@@ -436,7 +430,7 @@ interface ChannelsParams {
 
 async function handleChannels(
   params: ChannelsParams,
-  _workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"],
 ): Promise<ToolResult> {
   const slug = process.env["TENANT_SLUG"] ?? process.env["TENANT_ID"] ?? "";
@@ -557,16 +551,16 @@ async function execute(
   try {
     switch (action) {
       case "get":
-        return handleGet(workdir);
+        return await handleGet(context);
 
       case "set":
-        return handleSet(params as unknown as SetParams, workdir, logger);
+        return await handleSet(params as unknown as SetParams, context, logger);
 
       case "reset":
-        return handleReset(params as unknown as ResetParams, workdir, logger);
+        return await handleReset(params as unknown as ResetParams, context, logger);
 
       case "channels":
-        return await handleChannels(params as unknown as ChannelsParams, workdir, logger);
+        return await handleChannels(params as unknown as ChannelsParams, context, logger);
 
       default:
         return {

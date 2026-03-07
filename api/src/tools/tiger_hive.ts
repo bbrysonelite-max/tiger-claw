@@ -118,6 +118,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -131,24 +133,22 @@ interface ToolResult {
 // Persistence
 // ---------------------------------------------------------------------------
 
-function loadJson<T>(filePath: string): T | null {
-  try {
-    if (fs.existsSync(filePath)) return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
-  } catch { /* fall through */ }
-  return null;
+async function loadJson<T>(context: ToolContext, key: string): Promise<T | null> {
+  const data = await context.storage.get(key);
+  return data ?? null;
 }
 
-function saveJson(filePath: string, data: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+async function saveJson<T>(context: ToolContext, key: string, data: unknown): Promise<void> {
+  await context.storage.set(key, data);
 }
 
-function loadCache(workdir: string): HiveCache {
-  return loadJson<HiveCache>(path.join(workdir, "hive_cache.json")) ?? { patterns: [], submitted: [] };
+async function loadCache(context: ToolContext): Promise<HiveCache> {
+  const data = await context.storage.get("cache.json");
+  return data ?? ([]);
 }
 
-function saveCache(workdir: string, cache: HiveCache): void {
-  saveJson(path.join(workdir, "hive_cache.json"), cache);
+async function saveCache(context: ToolContext, cache: HiveCache): Promise<void> {
+  await context.storage.set("cache.json", cache);
 }
 
 function getApiBase(config: Record<string, unknown>): string {
@@ -237,10 +237,9 @@ interface QueryParams {
 
 async function handleQuery(
   params: QueryParams,
-  workdir: string,
   context: ToolContext
 ): Promise<ToolResult> {
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
   const flavor = onboard?.flavor ?? process.env["BOT_FLAVOR"] ?? "network-marketer";
   const region = (process.env["REGION"] ?? "us-en");
   const apiBase = getApiBase(context.config);
@@ -257,7 +256,7 @@ async function handleQuery(
   context.logger.info("tiger_hive: querying platform", { url });
 
   const result = await httpRequest(url, "GET");
-  const cache = loadCache(workdir);
+  const cache = await loadCache(context);
 
   if (result.ok && Array.isArray((result.data as Record<string, unknown>)?.patterns)) {
     const patterns = ((result.data as Record<string, unknown>).patterns as HivePattern[]).map((p) => ({
@@ -266,7 +265,7 @@ async function handleQuery(
     }));
     cache.patterns = patterns;
     cache.lastRefreshedAt = new Date().toISOString();
-    saveCache(workdir, cache);
+    await saveCache(context, cache);
 
     const lines = formatPatterns(patterns, "Platform Hive Patterns");
     return {
@@ -327,10 +326,9 @@ interface SubmitParams {
 
 async function handleSubmit(
   params: SubmitParams,
-  workdir: string,
   context: ToolContext
 ): Promise<ToolResult> {
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
   const flavor = onboard?.flavor ?? process.env["BOT_FLAVOR"] ?? "network-marketer";
   const region = process.env["REGION"] ?? "us-en";
   const apiBase = getApiBase(context.config);
@@ -367,9 +365,9 @@ async function handleSubmit(
   const result = await httpRequest(url, "POST", pattern);
 
   // Save to local submitted list regardless of API success
-  const cache = loadCache(workdir);
+  const cache = await loadCache(context);
   cache.submitted.push({ ...pattern, source: "local" });
-  saveCache(workdir, cache);
+  await saveCache(context, cache);
 
   if (!result.ok) {
     return {
@@ -419,15 +417,14 @@ interface GenerateParams {
 
 async function handleGenerate(
   params: GenerateParams,
-  workdir: string,
   context: ToolContext
 ): Promise<ToolResult> {
-  const leads = loadJson<Record<string, LeadRecord>>(path.join(workdir, "leads.json")) ?? {};
-  const nurtures = loadJson<Record<string, NurtureRecord>>(path.join(workdir, "nurture.json")) ?? {};
-  const contacts = loadJson<Record<string, ContactRecord>>(path.join(workdir, "contacts.json")) ?? {};
-  const conversions = loadJson<Record<string, { leadId: string; oar: string; journeySummary?: { touchesCompleted: number; daysInNurture: number } }>>
-    (path.join(workdir, "conversions.json")) ?? {};
-  const onboard = loadJson<OnboardState>(path.join(workdir, "onboard_state.json"));
+  const leads = await loadJson<Record<string, LeadRecord>>(context, "leads.json") ?? {};
+  const nurtures = await loadJson<Record<string, NurtureRecord>>(context, "nurture.json") ?? {};
+  const contacts = await loadJson<Record<string, ContactRecord>>(context, "contacts.json") ?? {};
+  const conversions = await loadJson<Record<string, { leadId: string; oar: string; journeySummary?: { touchesCompleted: number; daysInNurture: number } }>>
+    (context, "conversions.json") ?? {};
+  const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
 
   const flavor = onboard?.flavor ?? process.env["BOT_FLAVOR"] ?? "network-marketer";
   const allLeads = Object.values(leads);
@@ -582,7 +579,7 @@ async function handleGenerate(
   }
 
   // Save locally
-  const cache = loadCache(workdir);
+  const cache = await loadCache(context);
   const now = new Date().toISOString();
   const newPatterns: HivePattern[] = patterns.map((p) => ({
     ...p,
@@ -596,7 +593,7 @@ async function handleGenerate(
     ...cache.patterns.filter((p) => p.source === "platform"),
     ...newPatterns,
   ];
-  saveCache(workdir, cache);
+  await saveCache(context, cache);
 
   // Auto-submit high-confidence patterns if requested
   let submitted = 0;
@@ -606,7 +603,6 @@ async function handleGenerate(
       if (piiCheck.length === 0) {
         await handleSubmit(
           { action: "submit", category: p.category, observation: p.observation, dataPoints: p.dataPoints, confidence: p.confidence },
-          workdir,
           context
         );
         submitted++;
@@ -638,8 +634,8 @@ async function handleGenerate(
 // Action: list — show cached + submitted patterns
 // ---------------------------------------------------------------------------
 
-function handleList(workdir: string, category?: PatternCategory): ToolResult {
-  const cache = loadCache(workdir);
+async function handleList(context: ToolContext, category?: PatternCategory): Promise<ToolResult> {
+  const cache = await loadCache(context);
 
   const allPatterns = [...cache.patterns, ...cache.submitted];
   const filtered = category ? allPatterns.filter((p) => p.category === category) : allPatterns;
@@ -708,16 +704,16 @@ async function execute(
   try {
     switch (action) {
       case "query":
-        return await handleQuery(params as unknown as QueryParams, workdir, context);
+        return await handleQuery(params as unknown as QueryParams, context);
 
       case "submit":
-        return await handleSubmit(params as unknown as SubmitParams, workdir, context);
+        return await handleSubmit(params as unknown as SubmitParams, context);
 
       case "generate":
-        return await handleGenerate(params as unknown as GenerateParams, workdir, context);
+        return await handleGenerate(params as unknown as GenerateParams, context);
 
       case "list":
-        return handleList(workdir, params.category as PatternCategory | undefined);
+        return await handleList(context, params.category as PatternCategory | undefined);
 
       default:
         return {

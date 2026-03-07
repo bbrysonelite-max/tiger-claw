@@ -172,6 +172,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -185,38 +187,27 @@ interface ToolResult {
 // Persistence
 // ---------------------------------------------------------------------------
 
-function loadNurture(workdir: string): NurtureStore {
-  const p = path.join(workdir, "nurture.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8")) as NurtureStore;
-  } catch { /* fall through */ }
-  return {};
+async function loadNurture(context: ToolContext): Promise<NurtureStore> {
+  const data = await context.storage.get("nurture.json");
+  return data ?? ({} as any);
 }
 
-function saveNurture(workdir: string, store: NurtureStore): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(path.join(workdir, "nurture.json"), JSON.stringify(store, null, 2), "utf8");
+async function saveNurture(context: ToolContext, store: NurtureStore): Promise<void> {
+  await context.storage.set("nurture.json", store);
 }
 
-function loadOnboardState(workdir: string): OnboardState | null {
-  const p = path.join(workdir, "onboard_state.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8")) as OnboardState;
-  } catch { /* fall through */ }
-  return null;
+async function loadOnboardState(context: ToolContext): Promise<OnboardState | null> {
+  const data = await context.storage.get("onboard_state.json");
+  return data ?? (null);
 }
 
-function loadLeads(workdir: string): Record<string, LeadRecord> {
-  const p = path.join(workdir, "leads.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadLeads(context: ToolContext): Promise<Record<string, LeadRecord>> {
+  const data = await context.storage.get("leads.json");
+  return data ?? ({} as any);
 }
 
-function saveLeads(workdir: string, leads: Record<string, LeadRecord>): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(path.join(workdir, "leads.json"), JSON.stringify(leads, null, 2), "utf8");
+async function saveLeads(context: ToolContext, leads: Record<string, LeadRecord>): Promise<void> {
+  await context.storage.set("leads.json", leads);
 }
 
 // ---------------------------------------------------------------------------
@@ -303,18 +294,18 @@ function buildTouchMessage(
 // Score penalty helper
 // ---------------------------------------------------------------------------
 
-function applyScorePenalty(leadId: string, workdir: string): void {
-  const leads = loadLeads(workdir);
+async function applyScorePenalty(context: ToolContext, leadId: string, workdir: string): Promise<void> {
+  const leads = await loadLeads(context);
   const lead = leads[leadId];
   if (!lead) return;
   (lead as Record<string, unknown>)["intentScore"] = Math.max(0, ((lead.intentScore ?? 50) as number) - 15);
   (lead as Record<string, unknown>)["needsRecalculate"] = true;
   leads[leadId] = lead;
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
 }
 
-function markLeadOptedOut(leadId: string, workdir: string): void {
-  const leads = loadLeads(workdir);
+async function markLeadOptedOut(context: ToolContext, leadId: string, workdir: string): Promise<void> {
+  const leads = await loadLeads(context);
   const lead = leads[leadId];
   if (!lead) return;
   lead.optedOut = true;
@@ -323,7 +314,7 @@ function markLeadOptedOut(leadId: string, workdir: string): void {
   (lead as Record<string, unknown>)["customerScore"] = 0;
   (lead as Record<string, unknown>)["qualified"] = false;
   leads[leadId] = lead;
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,13 +343,13 @@ function buildNextTouch(
 // Transition to slow drip
 // ---------------------------------------------------------------------------
 
-function transitionToSlowDrip(
-  record: NurtureRecord,
+async function transitionToSlowDrip(
+  context: ToolContext, record: NurtureRecord,
   store: NurtureStore,
   workdir: string,
   onboard: OnboardState,
   logger: ToolContext["logger"]
-): void {
+): Promise<void> {
   record.status = "slow_drip";
   record.currentTouchNumber = 0;
   // Schedule first drip 30 days from now
@@ -372,7 +363,7 @@ function transitionToSlowDrip(
   });
 
   store[record.id] = record;
-  saveNurture(workdir, store);
+  await saveNurture(context, store);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,23 +376,23 @@ interface EnrollParams {
   oar?: "builder" | "customer";
 }
 
-function handleEnroll(
+async function handleEnroll(
   params: EnrollParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const leads = loadLeads(workdir);
+): Promise<ToolResult> {
+  const leads = await loadLeads(context);
   const lead = leads[params.leadId];
 
   if (!lead) return { ok: false, error: `Lead ${params.leadId} not found.` };
   if (lead.optedOut) return { ok: false, error: `${lead.displayName} has opted out — cannot enroll.` };
 
-  const onboard = loadOnboardState(workdir);
+  const onboard = await loadOnboardState(context);
   if (!onboard || onboard.phase !== "complete") {
     return { ok: false, error: "Onboarding not complete." };
   }
 
-  const store = loadNurture(workdir);
+  const store = await loadNurture(context);
 
   // Check for already-active nurture
   const existing = Object.values(store).find(
@@ -441,14 +432,14 @@ function handleEnroll(
   record.nextTouchScheduledFor = enrolledAt;
 
   store[id] = record;
-  saveNurture(workdir, store);
+  await saveNurture(context, store);
 
   // Advance involvement level: 0 (Prospect) → 1 (Engaged)
   if ((lead.involvementLevel ?? 0) < 1) {
-    const allLeads = loadLeads(workdir);
+    const allLeads = await loadLeads(context);
     if (allLeads[params.leadId]) {
       (allLeads[params.leadId] as Record<string, unknown>).involvementLevel = 1;
-      saveLeads(workdir, allLeads);
+      await saveLeads(context, allLeads);
     }
   }
 
@@ -480,8 +471,8 @@ function handleEnroll(
 // Action: check (cron — surfaces due touches)
 // ---------------------------------------------------------------------------
 
-function handleCheck(workdir: string, logger: ToolContext["logger"]): ToolResult {
-  const store = loadNurture(workdir);
+async function handleCheck(context: ToolContext, logger: ToolContext["logger"]): Promise<ToolResult> {
+  const store = await loadNurture(context);
   const now = new Date().toISOString();
 
   const due: Array<{
@@ -496,7 +487,7 @@ function handleCheck(workdir: string, logger: ToolContext["logger"]): ToolResult
   }> = [];
 
   // Check 30-day expiry on active sequences
-  const onboard = loadOnboardState(workdir);
+  const onboard = await loadOnboardState(context);
 
   for (const record of Object.values(store)) {
     if (!["active", "accelerated", "gap_closing", "slow_drip"].includes(record.status)) continue;
@@ -518,7 +509,7 @@ function handleCheck(workdir: string, logger: ToolContext["logger"]): ToolResult
           messageText: finalMsg,
           isSlowDrip: false,
         });
-        transitionToSlowDrip(record, store, workdir, onboard, logger);
+        transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
         continue;
       }
     }
@@ -596,12 +587,12 @@ interface MarkSentParams {
   isSlowDrip?: boolean;
 }
 
-function handleMarkSent(
+async function handleMarkSent(
   params: MarkSentParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const store = loadNurture(workdir);
+): Promise<ToolResult> {
+  const store = await loadNurture(context);
   const record = store[params.nurtureId];
   if (!record) return { ok: false, error: `Nurture record ${params.nurtureId} not found.` };
 
@@ -616,7 +607,7 @@ function handleMarkSent(
       record.status = "archived";
       record.completedAt = now;
       store[params.nurtureId] = record;
-      saveNurture(workdir, store);
+      await saveNurture(context, store);
       return {
         ok: true,
         output: `${record.leadDisplayName}: slow drip complete (3 of 3 sent). Archiving — no further contact.`,
@@ -627,7 +618,7 @@ function handleMarkSent(
     // Schedule next drip
     record.nextTouchScheduledFor = slowDripNextDate(now);
     store[params.nurtureId] = record;
-    saveNurture(workdir, store);
+    await saveNurture(context, store);
 
     return {
       ok: true,
@@ -643,7 +634,7 @@ function handleMarkSent(
   touch.sentAt = now;
   record.lastTouchSentAt = now;
   store[params.nurtureId] = record;
-  saveNurture(workdir, store);
+  await saveNurture(context, store);
 
   logger.info("tiger_nurture: touch marked sent", {
     nurtureId: params.nurtureId,
@@ -672,16 +663,16 @@ interface RecordResponseParams {
   oneToTenScore?: number;  // If this was a 1-10 response, the number they gave
 }
 
-function handleRecordResponse(
+async function handleRecordResponse(
   params: RecordResponseParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const store = loadNurture(workdir);
+): Promise<ToolResult> {
+  const store = await loadNurture(context);
   const record = store[params.nurtureId];
   if (!record) return { ok: false, error: `Nurture record ${params.nurtureId} not found.` };
 
-  const onboard = loadOnboardState(workdir);
+  const onboard = await loadOnboardState(context);
   if (!onboard) return { ok: false, error: "Onboarding state not found." };
 
   const now = new Date().toISOString();
@@ -711,8 +702,8 @@ function handleRecordResponse(
     record.status = "opted_out";
     record.completedAt = now;
     store[params.nurtureId] = record;
-    saveNurture(workdir, store);
-    markLeadOptedOut(record.leadId, workdir);
+    await saveNurture(context, store);
+    markLeadOptedOut(context, record.leadId, context.workdir);
 
     return {
       ok: true,
@@ -731,7 +722,7 @@ function handleRecordResponse(
       record.convertedAt = now;
       record.completedAt = now;
       store[params.nurtureId] = record;
-      saveNurture(workdir, store);
+      await saveNurture(context, store);
 
       return {
         ok: true,
@@ -751,7 +742,7 @@ function handleRecordResponse(
 
     // 5 or below → Immediate takeaway
     if (score <= 5) {
-      transitionToSlowDrip(record, store, workdir, onboard, logger);
+      transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
       return {
         ok: true,
         output: [
@@ -774,7 +765,7 @@ function handleRecordResponse(
         record.nextTouchScheduledFor = nextScheduled;
         record.status = "gap_closing";
         store[params.nurtureId] = record;
-        saveNurture(workdir, store);
+        await saveNurture(context, store);
 
         return {
           ok: true,
@@ -793,7 +784,7 @@ function handleRecordResponse(
 
         if (record.oneToTenRound > 2) {
           // Exceeded max 2 rounds → takeaway
-          transitionToSlowDrip(record, store, workdir, onboard, logger);
+          transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
           return {
             ok: true,
             output: [
@@ -830,7 +821,7 @@ function handleRecordResponse(
         record.currentTouchNumber++;
         record.nextTouchScheduledFor = nextScheduled;
         store[params.nurtureId] = record;
-        saveNurture(workdir, store);
+        await saveNurture(context, store);
 
         logger.info("tiger_nurture: gap-closing via objection bucket", { bucket, flavor, round: record.oneToTenRound });
 
@@ -861,8 +852,8 @@ function handleRecordResponse(
       record.status = "back_to_pool";
       record.completedAt = now;
       store[params.nurtureId] = record;
-      saveNurture(workdir, store);
-      applyScorePenalty(record.leadId, workdir);
+      await saveNurture(context, store);
+      applyScorePenalty(context, record.leadId, context.workdir);
 
       return {
         ok: true,
@@ -876,35 +867,35 @@ function handleRecordResponse(
 
     // Just 1 no-response — continue sequence on standard schedule
     store[params.nurtureId] = record;
-    saveNurture(workdir, store);
-    return advanceToNextTouch(record, store, workdir, onboard, "standard");
+    await saveNurture(context, store);
+    return advanceToNextTouch(context, record, store, context.workdir, onboard, "standard");
   }
 
   // 4. Hot / warm response — reset no-response counter, advance (with acceleration if hot)
   record.consecutiveNoResponses = 0;
   store[params.nurtureId] = record;
-  saveNurture(workdir, store);
+  await saveNurture(context, store);
 
   const cadence = params.classification === "hot" ? "accelerated" : "standard";
-  return advanceToNextTouch(record, store, workdir, onboard, cadence);
+  return advanceToNextTouch(context, record, store, context.workdir, onboard, cadence);
 }
 
 // ---------------------------------------------------------------------------
 // Advance to next touch helper
 // ---------------------------------------------------------------------------
 
-function advanceToNextTouch(
-  record: NurtureRecord,
+async function advanceToNextTouch(
+  context: ToolContext, record: NurtureRecord,
   store: NurtureStore,
   workdir: string,
   onboard: OnboardState,
   cadence: "standard" | "accelerated"
-): ToolResult {
+): Promise<ToolResult> {
   const nextTouchNumber = record.currentTouchNumber + 1;
 
   if (nextTouchNumber > TOTAL_TOUCHES) {
     // Sequence complete — final takeaway + slow drip
-    transitionToSlowDrip(record, store, workdir, onboard, { info: () => { }, warn: () => { }, debug: () => { }, error: () => { } });
+    transitionToSlowDrip(context, record, store, workdir, onboard, { info: () => { }, warn: () => { }, debug: () => { }, error: () => { } });
     return {
       ok: true,
       output: [
@@ -925,7 +916,7 @@ function advanceToNextTouch(
   record.status = cadence === "accelerated" ? "accelerated" : "active";
 
   store[record.id] = record;
-  saveNurture(workdir, store);
+  await saveNurture(context, store);
 
   const cadenceLabel = cadence === "accelerated"
     ? "accelerated (24h — hot response!)"
@@ -948,8 +939,8 @@ function advanceToNextTouch(
 // Action: list
 // ---------------------------------------------------------------------------
 
-function handleList(workdir: string): ToolResult {
-  const store = loadNurture(workdir);
+async function handleList(context: ToolContext): Promise<ToolResult> {
+  const store = await loadNurture(context);
   const all = Object.values(store);
 
   const byStatus: Record<string, number> = {};
@@ -1006,19 +997,19 @@ async function execute(
   try {
     switch (action) {
       case "enroll":
-        return handleEnroll(params as unknown as EnrollParams, workdir, logger);
+        return await handleEnroll(params as unknown as EnrollParams, context, logger);
 
       case "check":
-        return handleCheck(workdir, logger);
+        return await handleCheck(context, logger);
 
       case "mark_sent":
-        return handleMarkSent(params as unknown as MarkSentParams, workdir, logger);
+        return await handleMarkSent(params as unknown as MarkSentParams, context, logger);
 
       case "record_response":
-        return handleRecordResponse(params as unknown as RecordResponseParams, workdir, logger);
+        return await handleRecordResponse(params as unknown as RecordResponseParams, context, logger);
 
       case "list":
-        return handleList(workdir);
+        return await handleList(context);
 
       default:
         return {
