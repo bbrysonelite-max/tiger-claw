@@ -125,8 +125,9 @@ export async function initSchema(): Promise<void> {
 
       -- Idempotent constraint for existing deployments that created the table without UNIQUE on bot_token
       DO $$ BEGIN
-        ALTER TABLE bot_pool ADD CONSTRAINT bot_pool_token_unique UNIQUE (bot_token);
-      EXCEPTION WHEN duplicate_object THEN NULL;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'bot_pool_token_unique') THEN
+          ALTER TABLE bot_pool ADD CONSTRAINT bot_pool_token_unique UNIQUE (bot_token);
+        END IF;
       END $$;
 
       CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);

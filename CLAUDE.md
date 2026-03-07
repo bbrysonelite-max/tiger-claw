@@ -1,4 +1,4 @@
-# Tiger Claw — Agent Briefing
+# Tiger Claw — Agent Briefing (v4)
 
 **Read this file first. Every time. No exceptions.**
 
@@ -8,16 +8,15 @@ This is the master briefing for any AI agent (Claude Code, Cursor, or any other)
 
 ## What Tiger Claw Is
 
-Tiger Claw is a **multi-tenant AI sales and recruiting engine** built on top of [OpenClaw](https://github.com/openclaw/openclaw), an open-source personal AI assistant platform.
+Tiger Claw is a **multi-tenant AI sales and recruiting engine** delivered as a SaaS platform. Tenants sign up through a web wizard, pay via Stripe, bring their own Anthropic API key (BYOK), and receive a dedicated AI agent that handles prospect discovery, outreach, nurture sequences, and follow-up — automatically via Telegram.
 
-Each paying tenant gets a dedicated Docker container running an unmodified OpenClaw instance. Tiger Claw's business logic lives entirely as OpenClaw Skills (tools). One tenant = one container = one agent.
+**Target market:** Network marketers, real estate agents, health & wellness professionals, and 8 other business flavors.
 
-**Target market:** Network marketers, real estate agents, health & wellness professionals who want an AI agent to handle prospect discovery, outreach, nurture sequences, and follow-up — automatically.
+**Scale target:** 1,000+ tenants on GKE at launch maturity.
 
-**Scale target:** 1,000+ tenants at launch maturity.
+**Architecture:** Stateless multi-tenancy. One API process handles all tenants. Tenant context is resolved per-request via slug/ID. No per-tenant containers.
 
-**Current OpenClaw version:** `2026.3.2`
-**Current Tiger Claw version:** See `deployment_state.json`
+**Current version:** `v2026.03.04.1` (see `deployment_state.json`)
 
 ---
 
@@ -25,159 +24,246 @@ Each paying tenant gets a dedicated Docker container running an unmodified OpenC
 
 ```
 tiger-claw/
-├── CLAUDE.md                    ← YOU ARE HERE
-├── skill/                       ← Tiger Claw OpenClaw Skills (13 tools)
-│   ├── SKILL.md                 ← Skill manifest
-│   ├── tools/                   ← Individual tool implementations
-│   └── config/                  ← Four-layer flavor/regional config system
-├── api/                         ← Tiger Claw API (TenantOrchestrator, port 4000)
+├── CLAUDE.md                        ← YOU ARE HERE
+├── deployment_state.json            ← Build/version tracking
+├── api/                             ← Tiger Claw API (Express, port 4000)
 │   └── src/
-│       ├── index.ts             ← Express server + fleet health monitor
-│       ├── routes/              ← webhooks, admin, tenants, hive, health, wizard
-│       └── services/            ← docker, db, pool, provisioner
-├── docker/                      ← Container definitions
-│   ├── customer/                ← Per-tenant production container
-│   └── dev/                     ← Dev environment
-├── ops/                         ← Deployment and operations scripts
-│   ├── provision-customer.sh    ← Tenant provisioning (working)
-│   ├── build.sh                 ← Docker image builder (Phase 2)
-│   └── update.sh                ← Rolling container update (Phase 2)
+│       ├── index.ts                 ← Server entry point, route mounting
+│       ├── routes/                  ← 9 route files (see below)
+│       ├── services/                ← 6 service files (see below)
+│       ├── tools/                   ← 19 Anthropic-native tools (see below)
+│       └── config/                  ← Flavor/region config system
+├── web-onboarding/                  ← Next.js 5-step wizard (port 3000)
+│   └── src/
+│       ├── app/                     ← Next.js app router
+│       └── components/
+│           └── wizard/              ← StepNichePicker, StepIdentity, StepAIConnection,
+│                                       StepReviewPayment, PostPaymentSuccess
+├── ops/
+│   ├── admin-bot/                   ← Telegram admin bot (fleet management)
+│   ├── botpool/                     ← BotFather token pool scripts (MTProto + manual import)
+│   ├── gcp-terraform/               ← GKE, Cloud SQL, Memorystore (Terraform)
+│   └── k8s/                         ← Kubernetes manifests
+├── skill/                           ← Legacy OpenClaw skills (not active in v4)
+├── docker/                          ← Container definitions (legacy + dev compose)
 ├── specs/
-│   ├── tiger-claw/              ← Tiger Claw spec documents
-│   └── openclaw/                ← OpenClaw platform spec documents
-├── docs/
-│   └── adr/                     ← Architectural Decision Records
-└── tasks/                       ← Phase work orders
+│   ├── tiger-claw/                  ← TIGERCLAW-MASTER-SPEC-v2.md, BLUEPRINT-v3.md, PRD-v3.md
+│   └── openclaw/                    ← OpenClaw platform specs (18 files)
+├── tasks/                           ← Phase work orders (PHASE-0 through PHASE-4)
+└── docs/
+    └── adr/                         ← Architectural Decision Records
 ```
 
 ---
 
-## Canonical Spec Documents
+## v4 Architecture
 
-Read these in order for the component you are building:
+### How It Works
 
-| Document | Purpose | When to Read |
-|----------|---------|--------------|
-| `specs/tiger-claw/TIGERCLAW-MASTER-SPEC-v2.md` | 127 locked architectural decisions | Always — before any code |
-| `specs/tiger-claw/TIGERCLAW-BLUEPRINT-v3.md` | v3 changes: update pipeline, channel wizard, OpenClaw integration hardening | Before any v3 work |
-| `specs/tiger-claw/TIGERCLAW-PRD-v3.md` | v3 product requirements, user stories, acceptance criteria | For feature implementation |
-| `docs/adr/` | Individual architectural decision records | When you encounter a decision point |
-| `specs/openclaw/` | OpenClaw platform documentation (18 files) | When building anything that touches OpenClaw APIs |
+1. Tenant signs up at `app.tigerclaw.io/wizard` — 5-step Next.js wizard
+2. Stripe payment processed via webhook
+3. `POST /webhooks/stripe` → creates tenant + bot record in PostgreSQL → enqueues provisioning job in BullMQ
+4. `provisionWorker` calls K8s provisioner to deploy tenant pod on GKE
+5. Tenant's Telegram bot receives messages → Telegram webhook → `POST /webhooks/telegram/:token`
+6. Message enqueued in BullMQ `telegram-webhooks` queue
+7. `telegramWorker` picks up job → calls `processTelegramMessage()` in `ai.ts`
+8. `ai.ts` resolves tenant's Anthropic key (BYOK or platform key) → creates Anthropic client → runs tool execution loop
+9. All 19 tools available in the loop. Tool context includes `workdir` (per-tenant data directory), tenant config, and DB access
+10. BullMQ `global-cron` heartbeat fires every minute → enqueues `nurture_check` for all active tenants
 
-**Precedence:** TIGERCLAW-BLUEPRINT-v3.md overrides TIGERCLAW-MASTER-SPEC-v2.md where they conflict.
+### Key Components
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| API | Express/TypeScript | Webhook router, admin API, wizard backend |
+| AI Orchestrator | `services/ai.ts` + Anthropic SDK | Stateless tool execution loop per message |
+| Queues | BullMQ + Redis | `tenant-provisioning`, `telegram-webhooks`, `ai-routines`, `global-cron` |
+| Database | PostgreSQL (Cloud SQL) | Tenants, bots, ai_configs, bot_pool, admin events |
+| Cache / Queue broker | Redis (Memorystore) | Chat history (7-day TTL), BullMQ |
+| Infrastructure | GKE + Terraform | Kubernetes cluster, HA Postgres, HA Redis |
+| Web Wizard | Next.js 16 | Onboarding flow with Stripe |
+| Bot Token Pool | `services/pool.ts` | Unassigned Telegram bot tokens for new tenants |
+
+### Chat History
+
+Stored in Redis as `chat_history:{tenantId}:{chatId}` with 7-day TTL. System routine jobs use chatId `0`. Cleared on demand via `docker exec <redis-container> sh -c 'redis-cli KEYS "chat_history:*" | while read k; do redis-cli DEL "$k"; done'`.
 
 ---
 
-## Current Phase: PHASE 4 (WhatsApp + LINE E2E Verification)
+## Routes (`api/src/routes/`)
 
-**See `tasks/PHASE-4.md` for the exact task list (to be created at Phase 4 start).**
+| File | Key Endpoints |
+|------|--------------|
+| `admin.ts` | `POST /admin/provision`, `GET /admin/fleet`, fleet suspend/resume/delete/logs, admin alerts |
+| `health.ts` | `GET /health`, `GET /healthz`, `GET /readyz` |
+| `hive.ts` | `GET /hive/patterns`, `POST /hive/patterns` — cross-tenant pattern learning |
+| `keys.ts` | `POST /tenants/:id/keys/activate` — BYOK key activation |
+| `subscriptions.ts` | Stripe subscription management |
+| `tenants.ts` | `PATCH /tenants/:id/status`, `POST /tenants/:id/scout` |
+| `update.ts` | `POST /admin/update/build`, canary, advance, rollback |
+| `webhooks.ts` | `POST /webhooks/stripe` — payment + provisioning trigger |
+| `wizard.ts` | `GET /wizard/:slug`, `POST /wizard/:slug/save` — channel configuration UI |
 
-Phase 3 is complete — Channel Wizard web page, in-chat channel commands, WhatsApp Baileys conditional block, bot token pool, and onboarding wizard link are all implemented. Phase 4 validates the full end-to-end flow with live channels.
+---
 
-**Phase 4 scope (from TIGERCLAW-BLUEPRINT-v3.md §7):**
-1. End-to-end WhatsApp (Baileys) outreach test — Telegram onboarding → wizard → WhatsApp QR scan → prospect message
-2. Verify LINE channel formalization — token input via wizard and in-chat, prospect messaging
-3. SecretRef end-to-end validation with live API keys (carry-forward from Phase 1/2)
-4. First live canary deployment with real tenants
+## Services (`api/src/services/`)
 
-**Do not start Phase 5 until Phase 4 is complete.**
+| File | Purpose |
+|------|---------|
+| `ai.ts` | Core AI orchestrator. Resolves BYOK key, runs Anthropic tool loop, stores chat history in Redis. Loads all 19 tools. |
+| `db.ts` | PostgreSQL pool, schema init, tenant/bot/ai_config CRUD, admin event logging |
+| `deploymentState.ts` | Build version read/write (`deployment_state.json`) |
+| `pool.ts` | Bot token pool: assign, status, replenish, encrypt/decrypt tokens |
+| `provisioner.ts` | K8s container lifecycle: create, start, stop, restart, logs |
+| `queue.ts` | BullMQ workers: `provisionWorker`, `telegramWorker`, `routineWorker`, `cronWorker`. Global heartbeat scheduler. |
+
+---
+
+## Tools (`api/src/tools/`)
+
+All 19 tools are registered in `ai.ts` `toolsMap`. Each exports a `{ name, description, parameters, execute }` object following the Anthropic tool schema.
+
+| Tool | Purpose |
+|------|---------|
+| `tiger_aftercare` | Post-sale follow-up sequences |
+| `tiger_briefing` | Daily briefings with lead summaries |
+| `tiger_contact` | Contact database CRUD |
+| `tiger_convert` | Lead-to-customer conversion |
+| `tiger_export` | Data export (CSV, JSON) |
+| `tiger_hive` | Hive pattern submission and retrieval |
+| `tiger_import` | Data import from files |
+| `tiger_keys` | **4-layer API key management** — resolution, rotation, layer switching |
+| `tiger_lead` | Lead creation and lifecycle |
+| `tiger_move` | Lead movement between pipeline stages |
+| `tiger_note` | Notes on leads and contacts |
+| `tiger_nurture` | Automated nurture sequences |
+| `tiger_objection` | Objection handling coach |
+| `tiger_onboard` | 5-phase tenant onboarding flow |
+| `tiger_score` | Lead scoring (threshold: 80, LOCKED) |
+| `tiger_score_1to10` | Quick 1-10 scoring |
+| `tiger_scout` | Prospect discovery and research |
+| `tiger_search` | Search prospects and leads |
+| `tiger_settings` | Tenant config and channel management |
+
+`flavorConfig.ts` is a helper (not a tool) that loads flavor/region JSON configs.
+
+---
+
+## Business Flavors (11)
+
+`network-marketer`, `real-estate`, `health-wellness`, `airbnb-host`, `baker`, `candle-maker`, `doctor`, `gig-economy`, `lawyer`, `plumber`, `sales-tiger`
+
+---
+
+## Infrastructure
+
+### GCP / GKE (Terraform in `ops/gcp-terraform/`)
+- **GKE:** Regional cluster, workload identity, deletion protection
+- **Node pool:** e2-standard-4, 1-10 auto-scaling (3 initial across zones)
+- **Cloud SQL:** PostgreSQL 15, HA (REGIONAL), PITR enabled, private IP
+- **Memorystore:** Redis STANDARD_HA, 5GB, cross-zone replication, private VPC
+
+### Kubernetes (`ops/k8s/api-deployment.yaml`)
+- Deployment: 2-10 replicas, rolling update
+- HPA: CPU 70% / Memory 80%
+- Readiness: `/health` (10s initial, 5s period)
+- Liveness: `/health` (15s initial, 20s period)
+
+### Local Dev Environment
+Docker Compose in `docker/dev/docker-compose.dev.yml`. Running containers:
+- `tiger-claw-api` — API image (port 4000), compiled from `api/dist/`
+- `tiger-claw-redis` — Redis (port 6379), used by API container internally as `redis:6379`
+- `tiger-staging-redis` — Staging Redis (port 6380)
+- `tiger-claw-postgres` — PostgreSQL (port 5434)
+- `tiger-staging-postgres` — Staging PostgreSQL (port 5433)
+
+**To update the running API container after a code change:**
+```bash
+cd api && npm run build
+cd dist/services
+docker cp ai.js <container-id>:/app/dist/services/ai.js
+docker restart <container-id>
+```
+
+---
+
+## Web Onboarding (`web-onboarding/`)
+
+Next.js 16 / React 19 / Tailwind 4 / Stripe.js / Framer Motion
+
+5-step wizard:
+1. **StepNichePicker** — Choose business flavor (11 options)
+2. **StepIdentity** — Name, email, preferred language, timezone
+3. **StepAIConnection** — Provider selection, BYOK API key input
+4. **StepReviewPayment** — Stripe payment (subscription)
+5. **PostPaymentSuccess** — Confirmation + Telegram bot link
+
+Playwright E2E tests cover the full wizard flow.
+
+---
+
+## Bot Token Pool
+
+- Stored in PostgreSQL `bot_pool` table (status: `unassigned`, `assigned`, `retired`)
+- Managed by `services/pool.ts`
+- New tokens added via `ops/botpool/create_bots.ts --tokens-file <file>` (plain text, one token per line)
+- MTProto automation available (`--mtproto` flag, requires GramJS session strings in `sessions.json`)
+- 11 tokens currently loaded; minimum 10 needed before canary deployment
 
 ---
 
 ## Locked Decisions (Non-Negotiable)
 
-These cannot be changed. Do not propose changes. Do not work around them. If you think one is wrong, STOP and report it.
-
 | # | Decision |
 |---|----------|
-| 1 | Per-tenant SQLite for all prospect/lead data. Shared PostgreSQL for platform ops only. |
-| 2 | Four-layer API key management. Never a single shared key. |
-| 3 | Lead scoring threshold is **80**. Not 70. Not configurable. |
-| 4 | Fallback key (Layer 3) is required to complete onboarding. Cannot be skipped. |
-| 5 | All flywheel logic lives as OpenClaw Skills. Never modify OpenClaw core. |
-| 6 | One Docker process per tenant. No sidecars. |
-| 7 | OpenClaw cron for scheduling. No BullMQ or external job queues. |
-| 8 | Blue-green deployment with auto-rollback on 3 consecutive failures. |
-| 9 | Canary group: 5 tenants, 24h soak minimum before fleet rollout. |
-| 10 | Health check every 30 seconds per container. |
-| 11 | `channels.telegram.streaming` is explicitly `"off"` in all generated configs. |
-| 12 | `agents.defaults.thinkingDefault` is explicitly `"low"` in all generated configs. |
-| 13 | Layer 2/3 API keys use OpenClaw SecretRef (`~/.openclaw/secrets.json`). Layer 4 stays as env var. Never hot-write `openclaw.json` for key rotation. |
-| 14 | Container readiness uses `/readyz` endpoint. Container liveness uses `/healthz`. |
+| 1 | Lead scoring threshold is **80**. Not 70. Not configurable. |
+| 2 | Four-layer API key system (tiger_keys). Layer order: Platform Onboarding → Tenant Primary → Tenant Fallback → Platform Emergency. Never skip layers. |
+| 3 | Layer 1 (Platform Onboarding): 50 messages total, 72h expiry. Deactivated after onboarding. |
+| 4 | Layer 3 (Tenant Fallback): 20 messages/day. |
+| 5 | Layer 4 (Platform Emergency): 5 messages total, 24h then auto-pause. |
+| 6 | Canary group: 5 tenants, 24h soak minimum before fleet rollout. |
+| 7 | All 19 tools must be registered in `ai.ts` toolsMap. Missing tools cause infinite loop. |
+| 8 | Chat history lives in Redis (`chat_history:{tenantId}:{chatId}`, 7-day TTL). Never in PostgreSQL. |
+| 9 | BYOK key decryption via `decryptToken()` in `services/pool.ts`. Never store plaintext keys. |
+| 10 | BullMQ job deduplication: use `jobId` to prevent duplicate routines per tenant. |
 
 ---
 
-## Architecture Rules
+## Current Phase: PHASE 4 (E2E Verification + First Canary)
 
-**OpenClaw:**
-- Tiger Claw wraps unmodified OpenClaw. Never fork it. Never modify its source.
-- OpenClaw is installed as a package inside the customer Docker container.
-- Tiger Claw skills live in `skill/tools/`. They are loaded by OpenClaw's skill system.
-- OpenClaw handles: messaging channels, LLM calls, cron scheduling, memory, tool execution.
-- Tiger Claw provides: the business logic, the flywheel tools, the config system, the platform API.
+See `tasks/PHASE-4.md` for the full task list.
 
-**Channels:**
-- Telegram = primary channel for ALL tenants. Onboarding, briefings, Q&A, admin interface.
-- WhatsApp (Baileys) = optional outreach channel. Tenant brings their own number. Disabled by default.
-- LINE = optional outreach channel. Tenant provides their own LINE channel token. Disabled by default.
-- Prospect outreach channels depend on the market: Reddit + Facebook Groups + Telegram (US), Facebook Groups + LINE + Telegram (Thailand).
+| Task | Status | Notes |
+|------|--------|-------|
+| P4-0 | ✅ Done | Phase document created |
+| P4-1 | ❌ Pending | SecretRef E2E validation with live API key |
+| P4-2 | ❌ Pending | WhatsApp Baileys E2E test |
+| P4-3 | ⚠️ Partial | LINE wizard integrated; runtime test needed |
+| P4-4 | ❌ Blocked | First canary deployment (blocked on P4-1 + P4-5) |
+| P4-5 | ⚠️ Partial | Bot pool: 11 tokens loaded, MTProto automation ready |
 
-**Platform infrastructure:**
-- Server: DigitalOcean (209.97.168.251)
-- Platform domain: `tigerclaw.io` (marketing + Channel Wizard), `app.tigerclaw.io` (tenant portal), `api.tigerclaw.io` (Tiger Claw API proxy)
-- Domain registrar: Porkbun (`porkbun.com/account/domainsSpeedy`) — currently parked, DNS not yet configured
-- When ready to go live: point `tigerclaw.io` A record to DigitalOcean server (209.97.168.251), add SSL via Let's Encrypt
-- Tiger Claw API port: 4000
-- Container port: 18789 (OpenClaw gateway)
-- Database: PostgreSQL (platform ops) + SQLite (per-tenant data)
-- Cache: Redis
-
-**Key environment variables (per-container):**
-
-| Variable | Purpose |
-|----------|---------|
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Active provider API key (set by `entrypoint.sh` from four-layer resolution) |
-| `OPENCLAW_GATEWAY_TOKEN` | Auth token for OpenClaw gateway RPC calls (used by `tiger_keys.ts` for `secrets.reload`) |
-| `OPENCLAW_PORT` | Gateway listen port (default 18789) |
-| `PLATFORM_ONBOARDING_KEY` | Layer 1 key (platform-provided) |
-| `TENANT_PRIMARY_KEY` / `TENANT_FALLBACK_KEY` | Layer 2/3 initial keys (overridden by `key_state.json` at runtime) |
-| `PLATFORM_EMERGENCY_KEY` | Layer 4 key (platform-provided, last resort) |
-| `PLATFORM_CHEAP_MODEL` | Cheapest model for Layer 1/4 (default `anthropic/claude-haiku-4-5-20251001`) |
-
----
-
-## Code Quality Rules
-
-- TypeScript strict mode. No `any` types.
-- Error handling for every external call, state transition, and user interaction.
-- Tests for every public interface, state transition, and error path.
-- No `console.log` in production code. Use structured logging.
-- No hardcoded secrets. Everything from environment variables.
-- All OpenClaw config values (streaming, thinking level) must be explicitly set. Never rely on defaults.
+**Do not start Phase 5 until Phase 4 is complete.**
 
 ---
 
 ## What NOT To Do
 
-- Do NOT simplify or skip requirements marked LOCKED in any spec.
-- Do NOT make architectural decisions not covered by the spec. Flag them.
-- Do NOT use BullMQ or any external job queue. OpenClaw cron only.
-- Do NOT put tenant data in shared PostgreSQL.
-- Do NOT use a single shared API key.
-- Do NOT set scoring threshold to anything other than 80.
-- Do NOT rely on OpenClaw default values for streaming or thinking. Always set explicitly.
-- Do NOT hot-write `openclaw.json` for key rotation. Use SecretRef.
+- Do NOT add tools to `skill/tools/` — that is the legacy OpenClaw path, not active in v4
+- Do NOT skip registering a new tool in `ai.ts` `toolsMap` — unregistered tools cause infinite loops
+- Do NOT set the scoring threshold to anything other than 80
+- Do NOT store tenant prospect/lead data in PostgreSQL — use the per-tenant `workdir` (SQLite or files)
+- Do NOT put plaintext API keys in logs, database, or environment output
+- Do NOT deploy canary without 10+ bot pool tokens
+- Do NOT modify the tool execution loop in `ai.ts` without understanding the full Anthropic `tool_use` cycle
 
 ---
 
 ## When In Doubt
 
-If you encounter a decision point not covered by the spec, **STOP and ask**. Do not guess. Do not pick the "reasonable" option. Flag it with: "DECISION REQUIRED: [description of the choice]" and wait for instruction.
+STOP and ask. Flag with: `DECISION REQUIRED: [description]` and wait for instruction. Do not guess.
 
 ---
 
 ## GitHub Repository
 
 `https://github.com/bbrysonelite-max/tiger-claw`
-
-All spec documents, ADRs, and task files must be committed before starting implementation work. The GitHub history is the source of truth for architectural decisions.

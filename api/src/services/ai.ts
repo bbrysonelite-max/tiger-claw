@@ -9,12 +9,44 @@ import * as path from 'path';
 import { tiger_onboard } from '../tools/tiger_onboard.js';
 import { tiger_scout } from '../tools/tiger_scout.js';
 import { tiger_contact } from '../tools/tiger_contact.js';
+import { tiger_aftercare } from '../tools/tiger_aftercare.js';
+import { tiger_briefing } from '../tools/tiger_briefing.js';
+import { tiger_convert } from '../tools/tiger_convert.js';
+import { tiger_export } from '../tools/tiger_export.js';
+import { tiger_hive } from '../tools/tiger_hive.js';
+import { tiger_import } from '../tools/tiger_import.js';
+import { tiger_keys } from '../tools/tiger_keys.js';
+import { tiger_lead } from '../tools/tiger_lead.js';
+import { tiger_move } from '../tools/tiger_move.js';
+import { tiger_note } from '../tools/tiger_note.js';
+import { tiger_nurture } from '../tools/tiger_nurture.js';
+import { tiger_objection } from '../tools/tiger_objection.js';
+import { tiger_score } from '../tools/tiger_score.js';
+import { tiger_score_1to10 } from '../tools/tiger_score_1to10.js';
+import { tiger_search } from '../tools/tiger_search.js';
+import { tiger_settings } from '../tools/tiger_settings.js';
 
 // Convert Legacy OpenClaw Tools to Anthropic Tool Schema
 const toolsMap = {
     "tiger_onboard": tiger_onboard,
     "tiger_scout": tiger_scout,
-    "tiger_contact": tiger_contact
+    "tiger_contact": tiger_contact,
+    "tiger_aftercare": tiger_aftercare,
+    "tiger_briefing": tiger_briefing,
+    "tiger_convert": tiger_convert,
+    "tiger_export": tiger_export,
+    "tiger_hive": tiger_hive,
+    "tiger_import": tiger_import,
+    "tiger_keys": tiger_keys,
+    "tiger_lead": tiger_lead,
+    "tiger_move": tiger_move,
+    "tiger_note": tiger_note,
+    "tiger_nurture": tiger_nurture,
+    "tiger_objection": tiger_objection,
+    "tiger_score": tiger_score,
+    "tiger_score_1to10": tiger_score_1to10,
+    "tiger_search": tiger_search,
+    "tiger_settings": tiger_settings,
 };
 
 const anthropicTools = Object.values(toolsMap).map((tool: any) => ({
