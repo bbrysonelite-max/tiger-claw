@@ -87,8 +87,8 @@ router.post("/stripe", async (req: Request, res: Response) => {
       const userId = await createBYOKUser(email!, name, typeof session.customer === "string" ? session.customer : undefined);
 
       // 2. Extract BYOK Config / Keys from Stripe Session
-      let finalKeyToStore = null;
-      let finalKeyPreview = null;
+      let finalKeyToStore: string | null = null;
+      let finalKeyPreview: string | null = null;
       let finalProvider = meta["aiProvider"];
       let finalModel = meta["aiModel"];
 
