@@ -60,6 +60,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -73,57 +75,36 @@ interface ToolResult {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
-function loadLeads(workdir: string): Record<string, LeadRecord> {
-  const p = path.join(workdir, "leads.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadLeads(context: ToolContext): Promise<Record<string, LeadRecord>> {
+  const data = await context.storage.get("leads.json");
+  return data ?? ({} as any);
 }
 
-function saveLeads(workdir: string, leads: Record<string, LeadRecord>): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  const tmpPath = path.join(workdir, "leads.json.tmp");
-  fs.writeFileSync(tmpPath, JSON.stringify(leads, null, 2), "utf8");
-  fs.renameSync(tmpPath, path.join(workdir, "leads.json"));
+async function saveLeads(context: ToolContext, leads: Record<string, LeadRecord>): Promise<void> {
+  await context.storage.set("leads.json", leads);
 }
 
-function loadNurture(workdir: string): Record<string, NurtureRecord> {
-  const p = path.join(workdir, "nurture.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadNurture(context: ToolContext): Promise<Record<string, NurtureRecord>> {
+  const data = await context.storage.get("nurture.json");
+  return data ?? ({} as any);
 }
 
-function saveNurture(workdir: string, nurture: Record<string, NurtureRecord>): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  const tmpPath = path.join(workdir, "nurture.json.tmp");
-  fs.writeFileSync(tmpPath, JSON.stringify(nurture, null, 2), "utf8");
-  fs.renameSync(tmpPath, path.join(workdir, "nurture.json"));
+async function saveNurture(context: ToolContext, nurture: Record<string, NurtureRecord>): Promise<void> {
+  await context.storage.set("nurture.json", nurture);
 }
 
-function loadContacts(workdir: string): Record<string, ContactRecord> {
-  const p = path.join(workdir, "contacts.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadContacts(context: ToolContext): Promise<Record<string, ContactRecord>> {
+  const data = await context.storage.get("contacts.json");
+  return data ?? ({} as any);
 }
 
-function saveContacts(workdir: string, contacts: Record<string, ContactRecord>): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  const tmpPath = path.join(workdir, "contacts.json.tmp");
-  fs.writeFileSync(tmpPath, JSON.stringify(contacts, null, 2), "utf8");
-  fs.renameSync(tmpPath, path.join(workdir, "contacts.json"));
+async function saveContacts(context: ToolContext, contacts: Record<string, ContactRecord>): Promise<void> {
+  await context.storage.set("contacts.json", contacts);
 }
 
-function loadSettings(workdir: string): Record<string, unknown> {
-  const p = path.join(workdir, "settings.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadSettings(context: ToolContext): Promise<Record<string, unknown>> {
+  const data = await context.storage.get("settings.json");
+  return data ?? ({} as any);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,13 +128,13 @@ function findLeadByName(leads: Record<string, LeadRecord>, nameQuery: string): L
  * 2. Mark any active nurture record as opted_out
  * 3. Mark any active contact record as opted_out
  */
-function removeFromAllSequences(
-  leadId: string,
+async function removeFromAllSequences(
+  context: ToolContext, leadId: string,
   workdir: string,
   logger: ToolContext["logger"]
-): void {
+): Promise<void> {
   // Leads
-  const leads = loadLeads(workdir);
+  const leads = await loadLeads(context);
   const lead = leads[leadId];
   if (lead) {
     lead.optedOut = true;
@@ -164,11 +145,11 @@ function removeFromAllSequences(
     lead.qualifyingScore = 0;
     (lead as Record<string, unknown>)["qualified"] = false;
     leads[leadId] = lead;
-    saveLeads(workdir, leads);
+    await saveLeads(context, leads);
   }
 
   // Nurture sequences
-  const nurture = loadNurture(workdir);
+  const nurture = await loadNurture(context);
   let nurtureChanged = false;
   for (const [key, n] of Object.entries(nurture)) {
     if (n.leadId === leadId && n.status !== "opted_out") {
@@ -176,10 +157,10 @@ function removeFromAllSequences(
       nurtureChanged = true;
     }
   }
-  if (nurtureChanged) saveNurture(workdir, nurture);
+  if (nurtureChanged) await saveNurture(context, nurture);
 
   // Contact records
-  const contacts = loadContacts(workdir);
+  const contacts = await loadContacts(context);
   let contactsChanged = false;
   for (const [key, c] of Object.entries(contacts)) {
     if (
@@ -190,7 +171,7 @@ function removeFromAllSequences(
       contactsChanged = true;
     }
   }
-  if (contactsChanged) saveContacts(workdir, contacts);
+  if (contactsChanged) await saveContacts(context, contacts);
 
   logger.info("tiger_move: removed from all sequences", { leadId });
 }
@@ -226,8 +207,8 @@ async function execute(
 
   logger.info("tiger_move called", { name: nameQuery, status: targetStatus, confirmed });
 
-  const leads = loadLeads(workdir);
-  const settings = loadSettings(workdir);
+  const leads = await loadLeads(context);
+  const settings = await loadSettings(context);
   const lang = (settings.language as string) ?? "en";
   const isEn = lang !== "th";
 
@@ -290,7 +271,7 @@ async function execute(
   // ── Execute the move ──
   if (targetStatus === "do-not-contact") {
     // Permanent — remove from all sequences and zero out scores
-    removeFromAllSequences(lead.id, workdir, logger);
+    removeFromAllSequences(context, lead.id, workdir, logger);
 
     const msgEn = `${lead.displayName} has been permanently moved to do-not-contact. Removed from all active sequences. Scores zeroed.`;
     const msgTh = `${lead.displayName} ถูกย้ายไปยัง do-not-contact อย่างถาวร ลบออกจากลำดับที่ใช้งานอยู่ทั้งหมด คะแนนถูกรีเซ็ตเป็น 0 แล้ว`;
@@ -303,7 +284,7 @@ async function execute(
 
   // Non-permanent override — write manualStatus to lead record
   // Reload leads (removeFromAllSequences may have saved in the do-not-contact path)
-  const freshLeads = loadLeads(workdir);
+  const freshLeads = await loadLeads(context);
   const freshLead = freshLeads[lead.id];
   if (!freshLead) {
     return { ok: false, error: `Lead ${lead.id} not found after reload.` };
@@ -312,7 +293,7 @@ async function execute(
   const previousStatus = freshLead.manualStatus ?? "automatic";
   freshLead.manualStatus = targetStatus;
   freshLeads[lead.id] = freshLead;
-  saveLeads(workdir, freshLeads);
+  await saveLeads(context, freshLeads);
 
   logger.info("tiger_move: status overridden", {
     leadId: lead.id,

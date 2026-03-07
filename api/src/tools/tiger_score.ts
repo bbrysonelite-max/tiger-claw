@@ -204,6 +204,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -373,21 +375,13 @@ function leadsFilePath(workdir: string): string {
   return path.join(workdir, "leads.json");
 }
 
-function loadLeads(workdir: string): LeadsStore {
-  const filePath = leadsFilePath(workdir);
-  try {
-    if (!fs.existsSync(filePath)) return {};
-    const raw = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(raw) as LeadsStore;
-  } catch {
-    return {};
-  }
+async function loadLeads(context: ToolContext): Promise<LeadsStore> {
+  const data = await context.storage.get("leads.json");
+  return data ?? ({} as any);
 }
 
-function saveLeads(workdir: string, leads: LeadsStore): void {
-  const filePath = leadsFilePath(workdir);
-  fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(leads, null, 2), "utf8");
+async function saveLeads(context: ToolContext, leads: LeadsStore): Promise<void> {
+  await context.storage.set("leads.json", leads);
 }
 
 function findLeadByPlatformId(
@@ -555,11 +549,11 @@ function recomputeScores(lead: LeadRecord): LeadRecord {
 // Action handlers
 // ---------------------------------------------------------------------------
 
-function handleScore(
+async function handleScore(
   params: Record<string, unknown>,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   const input = params as unknown as ScoreInput;
 
   if (!input.platform || !input.platformId || !input.displayName) {
@@ -575,7 +569,7 @@ function handleScore(
     return { ok: false, error: "score requires oar: 'builder' | 'customer' | 'both'" };
   }
 
-  const leads = loadLeads(workdir);
+  const leads = await loadLeads(context);
 
   // Check for existing lead (deduplication)
   const existing = findLeadByPlatformId(leads, input.platform, input.platformId);
@@ -612,7 +606,7 @@ function handleScore(
 
     recomputeScores(existing);
     leads[existing.id] = existing;
-    saveLeads(workdir, leads);
+    await saveLeads(context, leads);
 
     logger.info("tiger_score: re-scored existing lead", {
       id: existing.id,
@@ -632,7 +626,7 @@ function handleScore(
   // New lead
   const record = buildLeadRecord(input);
   leads[record.id] = record;
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
 
   logger.info("tiger_score: scored new lead", {
     id: record.id,
@@ -649,18 +643,18 @@ function handleScore(
   };
 }
 
-function handleUpdateEngagement(
+async function handleUpdateEngagement(
   params: Record<string, unknown>,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   const input = params as unknown as UpdateEngagementInput;
 
   if (!input.event) {
     return { ok: false, error: "update_engagement requires event type" };
   }
 
-  const leads = loadLeads(workdir);
+  const leads = await loadLeads(context);
   let lead: LeadRecord | undefined;
 
   if (input.leadId) {
@@ -702,7 +696,7 @@ function handleUpdateEngagement(
     lead.lastScoredAt = new Date().toISOString();
 
     leads[lead.id] = lead;
-    saveLeads(workdir, leads);
+    await saveLeads(context, leads);
 
     logger.info("tiger_score: lead opted out — permanent", {
       id: lead.id,
@@ -718,7 +712,7 @@ function handleUpdateEngagement(
 
   recomputeScores(lead);
   leads[lead.id] = lead;
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
 
   logger.info("tiger_score: engagement updated", {
     id: lead.id,
@@ -741,13 +735,13 @@ function handleUpdateEngagement(
   };
 }
 
-function handleRecalculate(
+async function handleRecalculate(
   params: Record<string, unknown>,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
+): Promise<ToolResult> {
   const input = params as unknown as RecalculateInput;
-  const leads = loadLeads(workdir);
+  const leads = await loadLeads(context);
 
   let count = 0;
   let newlyQualified = 0;
@@ -768,7 +762,7 @@ function handleRecalculate(
   // Also purge expired below-threshold leads
   const { purged } = purgeExpiredLeads(leads);
 
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
 
   logger.info("tiger_score: recalculated", { count, newlyQualified, purged });
 
@@ -786,12 +780,12 @@ function handleRecalculate(
   };
 }
 
-function handleGet(
+async function handleGet(
   params: Record<string, unknown>,
-  workdir: string
-): ToolResult {
+  context: ToolContext
+): Promise<ToolResult> {
   const input = params as unknown as GetInput;
-  const leads = loadLeads(workdir);
+  const leads = await loadLeads(context);
 
   let lead: LeadRecord | undefined;
 
@@ -812,12 +806,12 @@ function handleGet(
   };
 }
 
-function handleList(
+async function handleList(
   params: Record<string, unknown>,
-  workdir: string
-): ToolResult {
+  context: ToolContext
+): Promise<ToolResult> {
   const input = params as unknown as ListInput;
-  const leads = loadLeads(workdir);
+  const leads = await loadLeads(context);
 
   const filter = input.filter ?? "qualified";
   const limit = input.limit ?? 50;
@@ -975,19 +969,19 @@ async function execute(
   try {
     switch (action) {
       case "score":
-        return handleScore(params, workdir, logger);
+        return await handleScore(params, context, logger);
 
       case "update_engagement":
-        return handleUpdateEngagement(params, workdir, logger);
+        return await handleUpdateEngagement(params, context, logger);
 
       case "recalculate":
-        return handleRecalculate(params, workdir, logger);
+        return await handleRecalculate(params, context, logger);
 
       case "get":
-        return handleGet(params, workdir);
+        return await handleGet(params, context);
 
       case "list":
-        return handleList(params, workdir);
+        return await handleList(params, context);
 
       default:
         return {

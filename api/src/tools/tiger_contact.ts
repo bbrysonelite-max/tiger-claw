@@ -120,6 +120,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -133,46 +135,32 @@ interface ToolResult {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
-function loadContacts(workdir: string): ContactsStore {
-  const p = path.join(workdir, "contacts.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8")) as ContactsStore;
-  } catch { /* fall through */ }
-  return {};
+async function loadContacts(context: ToolContext): Promise<ContactsStore> {
+  const data = await context.storage.get("contacts.json");
+  return data ?? ({} as any);
 }
 
-function saveContacts(workdir: string, contacts: ContactsStore): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(path.join(workdir, "contacts.json"), JSON.stringify(contacts, null, 2), "utf8");
+async function saveContacts(context: ToolContext, contacts: ContactsStore): Promise<void> {
+  await context.storage.set("contacts.json", contacts);
 }
 
-function loadLeads(workdir: string): Record<string, LeadRecord> {
-  const p = path.join(workdir, "leads.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadLeads(context: ToolContext): Promise<Record<string, LeadRecord>> {
+  const data = await context.storage.get("leads.json");
+  return data ?? ({} as any);
 }
 
-function saveLeads(workdir: string, leads: Record<string, LeadRecord>): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  fs.writeFileSync(path.join(workdir, "leads.json"), JSON.stringify(leads, null, 2), "utf8");
+async function saveLeads(context: ToolContext, leads: Record<string, LeadRecord>): Promise<void> {
+  await context.storage.set("leads.json", leads);
 }
 
-function loadOnboardState(workdir: string): OnboardState | null {
-  const p = path.join(workdir, "onboard_state.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8")) as OnboardState;
-  } catch { /* fall through */ }
-  return null;
+async function loadOnboardState(context: ToolContext): Promise<OnboardState | null> {
+  const data = await context.storage.get("onboard_state.json");
+  return data ?? (null);
 }
 
-function loadSettings(workdir: string): Record<string, unknown> {
-  const p = path.join(workdir, "settings.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadSettings(context: ToolContext): Promise<Record<string, unknown>> {
+  const data = await context.storage.get("settings.json");
+  return data ?? ({} as any);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,8 +368,8 @@ function professionLabel(flavor: string): string {
 // Score penalty helper — applies to leads that go back to pool
 // ---------------------------------------------------------------------------
 
-function applyScorePenalty(leadId: string, workdir: string, logger: ToolContext["logger"]): void {
-  const leads = loadLeads(workdir);
+async function applyScorePenalty(context: ToolContext, leadId: string, workdir: string, logger: ToolContext["logger"]): Promise<void> {
+  const leads = await loadLeads(context);
   const lead = leads[leadId];
   if (!lead) return;
 
@@ -394,12 +382,12 @@ function applyScorePenalty(leadId: string, workdir: string, logger: ToolContext[
   (lead as Record<string, unknown>)["needsRecalculate"] = true;
 
   leads[leadId] = lead;
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
   logger.info("tiger_contact: score penalty applied", { leadId, updatedIntentScore });
 }
 
-function markLeadOptedOut(leadId: string, workdir: string): void {
-  const leads = loadLeads(workdir);
+async function markLeadOptedOut(context: ToolContext, leadId: string, workdir: string): Promise<void> {
+  const leads = await loadLeads(context);
   const lead = leads[leadId];
   if (!lead) return;
   lead.optedOut = true;
@@ -409,7 +397,7 @@ function markLeadOptedOut(leadId: string, workdir: string): void {
   (lead as Record<string, unknown>)["customerScore"] = 0;
   (lead as Record<string, unknown>)["qualified"] = false;
   leads[leadId] = lead;
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,12 +410,12 @@ interface QueueParams {
   referredBy?: string;
 }
 
-function handleQueue(
+async function handleQueue(
   params: QueueParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const leads = loadLeads(workdir);
+): Promise<ToolResult> {
+  const leads = await loadLeads(context);
   const lead = leads[params.leadId];
 
   if (!lead) {
@@ -443,12 +431,12 @@ function handleQueue(
     };
   }
 
-  const onboard = loadOnboardState(workdir);
+  const onboard = await loadOnboardState(context);
   if (!onboard || onboard.phase !== "complete") {
     return { ok: false, error: "Onboarding not complete. Cannot generate contact messages." };
   }
 
-  const contacts = loadContacts(workdir);
+  const contacts = await loadContacts(context);
 
   // Check for existing active contact for this lead
   const existingActive = Object.values(contacts).find(
@@ -481,7 +469,7 @@ function handleQueue(
   // We don't know the response type yet, so we defer follow-up generation to record_response
 
   // Determine initial status based on manual approval setting
-  const settings = loadSettings(workdir);
+  const settings = await loadSettings(context);
   const manualApproval = settings.manualApproval === true;
   const scheduledFor = computeScheduledTime();
   const status: ContactStatus = manualApproval ? "pending_approval" : "scheduled";
@@ -503,7 +491,7 @@ function handleQueue(
   };
 
   contacts[record.id] = record;
-  saveContacts(workdir, contacts);
+  await saveContacts(context, contacts);
 
   logger.info("tiger_contact: queued", {
     contactId: record.id,
@@ -548,8 +536,8 @@ function handleQueue(
 // Action: check (cron — surfaces due messages)
 // ---------------------------------------------------------------------------
 
-function handleCheck(workdir: string, logger: ToolContext["logger"]): ToolResult {
-  const contacts = loadContacts(workdir);
+async function handleCheck(context: ToolContext, logger: ToolContext["logger"]): Promise<ToolResult> {
+  const contacts = await loadContacts(context);
   const now = new Date().toISOString();
   const due: ContactRecord[] = [];
   const followUpsDue: ContactRecord[] = [];
@@ -656,12 +644,12 @@ interface MarkSentParams {
   isFollowUp?: boolean;
 }
 
-function handleMarkSent(
+async function handleMarkSent(
   params: MarkSentParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const contacts = loadContacts(workdir);
+): Promise<ToolResult> {
+  const contacts = await loadContacts(context);
   const contact = contacts[params.contactId];
 
   if (!contact) {
@@ -679,7 +667,7 @@ function handleMarkSent(
   }
 
   contacts[params.contactId] = contact;
-  saveContacts(workdir, contacts);
+  await saveContacts(context, contacts);
 
   logger.info("tiger_contact: marked sent", {
     contactId: params.contactId,
@@ -705,19 +693,19 @@ interface RecordResponseParams {
   responseText?: string;
 }
 
-function handleRecordResponse(
+async function handleRecordResponse(
   params: RecordResponseParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const contacts = loadContacts(workdir);
+): Promise<ToolResult> {
+  const contacts = await loadContacts(context);
   const contact = contacts[params.contactId];
 
   if (!contact) {
     return { ok: false, error: `Contact ${params.contactId} not found.` };
   }
 
-  const onboard = loadOnboardState(workdir);
+  const onboard = await loadOnboardState(context);
   const now = new Date().toISOString();
 
   contact.responseType = params.responseType;
@@ -736,7 +724,7 @@ function handleRecordResponse(
       contact.status = "nurture";
       contact.completedAt = now;
       contacts[params.contactId] = contact;
-      saveContacts(workdir, contacts);
+      await saveContacts(context, contacts);
 
       return {
         ok: true,
@@ -758,9 +746,9 @@ function handleRecordResponse(
       contact.status = "opted_out";
       contact.completedAt = now;
       contacts[params.contactId] = contact;
-      saveContacts(workdir, contacts);
+      await saveContacts(context, contacts);
 
-      markLeadOptedOut(contact.leadId, workdir);
+      markLeadOptedOut(context, contact.leadId, context.workdir);
 
       return {
         ok: true,
@@ -785,8 +773,8 @@ function handleRecordResponse(
         contact.status = "back_to_pool";
         contact.completedAt = now;
         contacts[params.contactId] = contact;
-        saveContacts(workdir, contacts);
-        applyScorePenalty(contact.leadId, workdir, logger);
+        await saveContacts(context, contacts);
+        applyScorePenalty(context, contact.leadId, context.workdir, logger);
 
         return {
           ok: true,
@@ -806,7 +794,7 @@ function handleRecordResponse(
         ? buildFollowUpMessage(contact, onboard, "neutral")
         : contact.messageText;
       contacts[params.contactId] = contact;
-      saveContacts(workdir, contacts);
+      await saveContacts(context, contacts);
 
       return {
         ok: true,
@@ -829,8 +817,8 @@ function handleRecordResponse(
         contact.status = "back_to_pool";
         contact.completedAt = now;
         contacts[params.contactId] = contact;
-        saveContacts(workdir, contacts);
-        applyScorePenalty(contact.leadId, workdir, logger);
+        await saveContacts(context, contacts);
+        applyScorePenalty(context, contact.leadId, context.workdir, logger);
 
         return {
           ok: true,
@@ -850,7 +838,7 @@ function handleRecordResponse(
         ? buildFollowUpMessage(contact, onboard, "no_response")
         : contact.messageText;
       contacts[params.contactId] = contact;
-      saveContacts(workdir, contacts);
+      await saveContacts(context, contacts);
 
       return {
         ok: true,
@@ -877,12 +865,12 @@ interface ApproveParams {
   contactId: string;
 }
 
-function handleApprove(
+async function handleApprove(
   params: ApproveParams,
-  workdir: string,
+  context: ToolContext,
   logger: ToolContext["logger"]
-): ToolResult {
-  const contacts = loadContacts(workdir);
+): Promise<ToolResult> {
+  const contacts = await loadContacts(context);
   const contact = contacts[params.contactId];
 
   if (!contact) {
@@ -900,7 +888,7 @@ function handleApprove(
   contact.scheduledFor = computeScheduledTime();
   contact.status = "scheduled";
   contacts[params.contactId] = contact;
-  saveContacts(workdir, contacts);
+  await saveContacts(context, contacts);
 
   logger.info("tiger_contact: approved", {
     contactId: params.contactId,
@@ -928,8 +916,8 @@ function handleApprove(
 // Action: list
 // ---------------------------------------------------------------------------
 
-function handleList(workdir: string): ToolResult {
-  const contacts = loadContacts(workdir);
+async function handleList(context: ToolContext): Promise<ToolResult> {
+  const contacts = await loadContacts(context);
   const all = Object.values(contacts);
 
   const byStatus: Record<string, ContactRecord[]> = {};
@@ -996,22 +984,22 @@ async function execute(
   try {
     switch (action) {
       case "queue":
-        return handleQueue(params as unknown as QueueParams, workdir, logger);
+        return await handleQueue(params as unknown as QueueParams, context, logger);
 
       case "check":
-        return handleCheck(workdir, logger);
+        return await handleCheck(context, logger);
 
       case "mark_sent":
-        return handleMarkSent(params as unknown as MarkSentParams, workdir, logger);
+        return await handleMarkSent(params as unknown as MarkSentParams, context, logger);
 
       case "record_response":
-        return handleRecordResponse(params as unknown as RecordResponseParams, workdir, logger);
+        return await handleRecordResponse(params as unknown as RecordResponseParams, context, logger);
 
       case "approve":
-        return handleApprove(params as unknown as ApproveParams, workdir, logger);
+        return await handleApprove(params as unknown as ApproveParams, context, logger);
 
       case "list":
-        return handleList(workdir);
+        return await handleList(context);
 
       default:
         return {

@@ -64,6 +64,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -79,47 +81,35 @@ interface ToolResult {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
-function loadLeads(workdir: string): Record<string, LeadRecord> {
-  const p = path.join(workdir, "leads.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadLeads(context: ToolContext): Promise<Record<string, LeadRecord>> {
+  const data = await context.storage.get("leads.json");
+  return data ?? ({} as any);
 }
 
-function loadNurture(workdir: string): Record<string, NurtureRecord> {
-  const p = path.join(workdir, "nurture.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadNurture(context: ToolContext): Promise<Record<string, NurtureRecord>> {
+  const data = await context.storage.get("nurture.json");
+  return data ?? ({} as any);
 }
 
-function loadContacts(workdir: string): Record<string, ContactRecord> {
-  const p = path.join(workdir, "contacts.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadContacts(context: ToolContext): Promise<Record<string, ContactRecord>> {
+  const data = await context.storage.get("contacts.json");
+  return data ?? ({} as any);
 }
 
-function loadSettings(workdir: string): Record<string, unknown> {
-  const p = path.join(workdir, "settings.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadSettings(context: ToolContext): Promise<Record<string, unknown>> {
+  const data = await context.storage.get("settings.json");
+  return data ?? ({} as any);
 }
 
 // ---------------------------------------------------------------------------
 // Status derivation (same logic as tiger_search / tiger_lead)
 // ---------------------------------------------------------------------------
 
-function deriveStatus(
+async function deriveStatus(
   lead: LeadRecord,
   contactsByLead: Record<string, ContactRecord[]>,
   nurtureByLead: Record<string, NurtureRecord>
-): string {
+): Promise<string> {
   if (lead.manualStatus) return lead.manualStatus;
   if (lead.optedOut) return "do-not-contact";
 
@@ -146,10 +136,10 @@ function deriveStatus(
   return "new";
 }
 
-function deriveFirstContactDate(
+async function deriveFirstContactDate(
   leadId: string,
   contactsByLead: Record<string, ContactRecord[]>
-): string {
+): Promise<string> {
   const contacts = contactsByLead[leadId] ?? [];
   const sentDates = contacts
     .map((c) => c.sentAt)
@@ -158,11 +148,11 @@ function deriveFirstContactDate(
   return sentDates.sort()[0]!.slice(0, 10);
 }
 
-function deriveLastTouchDate(
+async function deriveLastTouchDate(
   leadId: string,
   contactsByLead: Record<string, ContactRecord[]>,
   nurtureByLead: Record<string, NurtureRecord>
-): string {
+): Promise<string> {
   const dates: string[] = [];
   for (const c of contactsByLead[leadId] ?? []) {
     if (c.followUpSentAt) dates.push(c.followUpSentAt);
@@ -252,10 +242,10 @@ async function execute(
 
   logger.info("tiger_export called", { filter });
 
-  const leads = loadLeads(workdir);
-  const allContacts = loadContacts(workdir);
-  const allNurture = loadNurture(workdir);
-  const settings = loadSettings(workdir);
+  const leads = await loadLeads(context);
+  const allContacts = await loadContacts(context);
+  const allNurture = await loadNurture(context);
+  const settings = await loadSettings(context);
   const lang = (settings.language as string) ?? "en";
 
   // Index by leadId
@@ -274,7 +264,7 @@ async function execute(
   const rows: CsvRow[] = [];
 
   for (const lead of Object.values(leads)) {
-    const status = deriveStatus(lead, contactsByLead, nurtureByLead);
+    const status = await deriveStatus(lead, contactsByLead, nurtureByLead);
 
     // Apply status filter
     if (filter && status !== filter) continue;
@@ -296,8 +286,8 @@ async function execute(
       source: lead.platform,
       source_url: lead.profileUrl ?? lead.sourceUrl ?? "",
       language: lead.language ?? "",
-      first_contact_date: deriveFirstContactDate(lead.id, contactsByLead),
-      last_touch_date: deriveLastTouchDate(lead.id, contactsByLead, nurtureByLead),
+      first_contact_date: await deriveFirstContactDate(lead.id, contactsByLead),
+      last_touch_date: await deriveLastTouchDate(lead.id, contactsByLead, nurtureByLead),
       converted_date: nurture?.convertedAt?.slice(0, 10) ?? "",
       notes: notesText,
     });

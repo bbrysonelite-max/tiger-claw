@@ -43,6 +43,8 @@ interface ToolContext {
     warn(msg: string, ...args: unknown[]): void;
     error(msg: string, ...args: unknown[]): void;
   };
+
+  storage: { get: (key: string) => Promise<any>; set: (key: string, value: any) => Promise<void>; };
 }
 
 interface ToolResult {
@@ -56,27 +58,18 @@ interface ToolResult {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
-function loadLeads(workdir: string): Record<string, LeadRecord> {
-  const p = path.join(workdir, "leads.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadLeads(context: ToolContext): Promise<Record<string, LeadRecord>> {
+  const data = await context.storage.get("leads.json");
+  return data ?? ({} as any);
 }
 
-function saveLeads(workdir: string, leads: Record<string, LeadRecord>): void {
-  fs.mkdirSync(workdir, { recursive: true });
-  const tmpPath = path.join(workdir, "leads.json.tmp");
-  fs.writeFileSync(tmpPath, JSON.stringify(leads, null, 2), "utf8");
-  fs.renameSync(tmpPath, path.join(workdir, "leads.json"));
+async function saveLeads(context: ToolContext, leads: Record<string, LeadRecord>): Promise<void> {
+  await context.storage.set("leads.json", leads);
 }
 
-function loadSettings(workdir: string): Record<string, unknown> {
-  const p = path.join(workdir, "settings.json");
-  try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch { /* fall through */ }
-  return {};
+async function loadSettings(context: ToolContext): Promise<Record<string, unknown>> {
+  const data = await context.storage.get("settings.json");
+  return data ?? ({} as any);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +104,8 @@ async function execute(
 
   logger.info("tiger_note called", { name: nameQuery, noteLength: noteText.length });
 
-  const leads = loadLeads(workdir);
-  const settings = loadSettings(workdir);
+  const leads = await loadLeads(context);
+  const settings = await loadSettings(context);
   const lang = (settings.language as string) ?? "en";
 
   const matches = findLeadByName(leads, nameQuery);
@@ -152,7 +145,7 @@ async function execute(
   };
   lead.notes.push(entry);
   leads[lead.id] = lead;
-  saveLeads(workdir, leads);
+  await saveLeads(context, leads);
 
   logger.info("tiger_note: note added", { leadId: lead.id, displayName: lead.displayName });
 
