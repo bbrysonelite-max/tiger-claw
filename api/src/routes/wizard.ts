@@ -157,13 +157,13 @@ router.get("/:slug", async (req: Request, res: Response) => {
 
   const botUsername = await getTenantBotUsername(tenant.id);
 
+  // Never send LINE credentials back to the browser — show configured/not status only
   const html = renderWizardPage({
     slug: tenant.slug,
     name: tenant.name,
     botUsername,
     whatsappEnabled: tenant.whatsappEnabled,
-    lineChannelSecret: tenant.lineChannelSecret,
-    lineChannelAccessToken: tenant.lineChannelAccessToken,
+    lineConfigured: !!(tenant.lineChannelSecret && tenant.lineChannelAccessToken),
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -196,10 +196,19 @@ router.post("/:slug/save", async (req: Request, res: Response) => {
     }
   }
 
+  // Encrypt LINE credentials before storage (AES-256-GCM — same as BYOK keys)
+  // NEVER store plaintext LINE credentials in the database.
+  const encryptedSecret = lineChannelSecret
+    ? (lineChannelSecret === "" ? null : encryptToken(lineChannelSecret))
+    : undefined;
+  const encryptedToken = lineChannelAccessToken
+    ? (lineChannelAccessToken === "" ? null : encryptToken(lineChannelAccessToken))
+    : undefined;
+
   await updateTenantChannelConfig(tenant.id, {
     whatsappEnabled: whatsappEnabled ?? undefined,
-    lineChannelSecret: lineChannelSecret === "" ? null : lineChannelSecret,
-    lineChannelAccessToken: lineChannelAccessToken === "" ? null : lineChannelAccessToken,
+    lineChannelSecret: lineChannelSecret === "" ? null : encryptedSecret,
+    lineChannelAccessToken: lineChannelAccessToken === "" ? null : encryptedToken,
   });
 
   return res.json({ ok: true });
@@ -212,8 +221,7 @@ interface WizardData {
   name: string;
   botUsername: string | null;
   whatsappEnabled: boolean;
-  lineChannelSecret?: string;
-  lineChannelAccessToken?: string;
+  lineConfigured: boolean; // true if both LINE credentials are stored — never expose the values
 }
 
 function renderWizardPage(data: WizardData): string {
@@ -225,10 +233,6 @@ function renderWizardPage(data: WizardData): string {
   const waStatus = data.whatsappEnabled
     ? `<span class="status active">Enabled</span>`
     : `<span class="status off">Disabled</span>`;
-
-  const lineSecretVal = esc(data.lineChannelSecret ?? "");
-  const lineAccessVal = esc(data.lineChannelAccessToken ?? "");
-  const lineConfigured = data.lineChannelSecret || data.lineChannelAccessToken;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -307,7 +311,7 @@ function renderWizardPage(data: WizardData): string {
   <!-- LINE -->
   <div class="card">
     <h2><span class="icon">🟢</span> LINE</h2>
-    <p>Optional outreach channel. ${lineConfigured ? '<span class="status active">Configured</span>' : '<span class="status off">Not configured</span>'}</p>
+    <p>Optional outreach channel. ${data.lineConfigured ? '<span class="status active">Configured</span>' : '<span class="status off">Not configured</span>'}</p>
     <p>LINE requires a free <a href="https://developers.line.biz/" target="_blank">LINE Official Account</a>. You create and manage your own account.</p>
     <details>
       <summary style="cursor:pointer;color:#58a6ff;font-size:0.875rem;margin-bottom:0.75rem;">Setup guide</summary>
@@ -320,9 +324,9 @@ function renderWizardPage(data: WizardData): string {
       </ol>
     </details>
     <label for="line-secret">Channel Secret</label>
-    <input type="text" id="line-secret" placeholder="Paste your LINE channel secret" value="${lineSecretVal}" maxlength="200" style="margin-bottom:0.75rem;">
+    <input type="text" id="line-secret" placeholder="${data.lineConfigured ? "Leave blank to keep existing secret" : "Paste your LINE channel secret"}" maxlength="200" style="margin-bottom:0.75rem;">
     <label for="line-access-token">Channel Access Token</label>
-    <input type="text" id="line-access-token" placeholder="Paste your LINE channel access token" value="${lineAccessVal}" maxlength="200">
+    <input type="text" id="line-access-token" placeholder="${data.lineConfigured ? "Leave blank to keep existing token" : "Paste your LINE channel access token"}" maxlength="200">
   </div>
 
   <button class="btn" id="save-btn" onclick="saveConfig()">Save Changes</button>
