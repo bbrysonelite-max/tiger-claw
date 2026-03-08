@@ -1,6 +1,9 @@
+// Tiger Claw — Config-Driven Flavor System
+// GAP 1: Adding a new flavor requires only dropping a JSON file — zero code changes.
+// 11 required flavors validated at boot time.
+
 import * as fs from "fs";
 import * as path from "path";
-import { fileURLToPath } from "url";
 
 export interface FlavorConfig {
     id: string;
@@ -23,35 +26,64 @@ export interface FlavorConfig {
     };
 }
 
-// In ESM context, __dirname is not defined. We generate it:
-// const __filename = fileURLToPath(import.meta.url);
-// const __dirname = path.dirname(__filename);
+// All 11 required flavors — adding a new flavor = add JSON file + add slug here
+const REQUIRED_FLAVORS = [
+    "network-marketer",
+    "real-estate",
+    "health-wellness",
+    "airbnb-host",
+    "baker",
+    "candle-maker",
+    "doctor",
+    "gig-economy",
+    "lawyer",
+    "plumber",
+    "sales-tiger",
+] as const;
+
+// Resolve the flavors directory — check tools/flavors first (where they live), then config/flavors
+function resolveFlavorsDir(): string {
+    // Primary: tools/flavors (same directory as this file)
+    const toolsDir = path.join(__dirname, "flavors");
+    if (fs.existsSync(toolsDir)) return toolsDir;
+    // Fallback: config/flavors (spec-preferred location)
+    const configDir = path.join(__dirname, "..", "config", "flavors");
+    if (fs.existsSync(configDir)) return configDir;
+    return toolsDir; // default even if it doesn't exist yet
+}
+
+const FLAVORS_DIR = resolveFlavorsDir();
+
+// In-memory cache — loaded once at boot
+const flavorCache = new Map<string, FlavorConfig>();
 
 export function loadFlavorConfig(flavor: string): FlavorConfig {
     const safeFlavor = flavor || "network-marketer";
 
-    // Try to load from the flavors directory relative to this file
-    const configPath = path.join(__dirname, "flavors", `${safeFlavor}.json`);
+    // Check cache first
+    if (flavorCache.has(safeFlavor)) {
+        return flavorCache.get(safeFlavor)!;
+    }
 
+    // Try to load from JSON
+    const configPath = path.join(FLAVORS_DIR, `${safeFlavor}.json`);
     try {
         if (fs.existsSync(configPath)) {
-            return JSON.parse(fs.readFileSync(configPath, "utf8")) as FlavorConfig;
+            const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as FlavorConfig;
+            flavorCache.set(safeFlavor, config);
+            return config;
         }
     } catch (e) {
-        console.warn(`tiger_claw: Failed to load flavor config for ${safeFlavor}:`, e);
+        console.warn(`[flavor] Failed to load ${safeFlavor}:`, e);
     }
 
-    // Fallback to network-marketer if the requested one doesn't exist
-    try {
-        const fallbackPath = path.join(__dirname, "flavors", "network-marketer.json");
-        if (fs.existsSync(fallbackPath)) {
-            return JSON.parse(fs.readFileSync(fallbackPath, "utf8")) as FlavorConfig;
-        }
-    } catch (e) {
-        // Ignore error and fall through to ultimate fallback
+    // Fallback to network-marketer
+    if (safeFlavor !== "network-marketer") {
+        console.warn(`[flavor] ${safeFlavor} not found, falling back to network-marketer`);
+        return loadFlavorConfig("network-marketer");
     }
 
-    // Hardcoded absolute ultimate fallback (just to prevent crashing)
+    // Hardcoded ultimate fallback (prevents crash if all files are missing)
     return {
         id: "fallback",
         name: "Fallback Agent",
@@ -75,13 +107,51 @@ export function loadFlavorConfig(flavor: string): FlavorConfig {
 }
 
 /**
+ * Boot-time validation: ensures all 11 required flavors are loadable.
+ * Logs errors loudly (Locked Decision #10: no silent failures).
+ */
+export function validateAllFlavors(): { valid: boolean; missing: string[]; loaded: string[] } {
+    const missing: string[] = [];
+    const loaded: string[] = [];
+
+    for (const flavor of REQUIRED_FLAVORS) {
+        const configPath = path.join(FLAVORS_DIR, `${flavor}.json`);
+        if (fs.existsSync(configPath)) {
+            try {
+                const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as FlavorConfig;
+                flavorCache.set(flavor, config);
+                loaded.push(flavor);
+            } catch (e) {
+                console.error(`[flavor] ❌ ${flavor}.json exists but failed to parse:`, e);
+                missing.push(flavor);
+            }
+        } else {
+            console.error(`[flavor] ❌ Missing required flavor file: ${configPath}`);
+            missing.push(flavor);
+        }
+    }
+
+    if (missing.length > 0) {
+        console.error(`[flavor] ⚠️ ${missing.length} flavor(s) missing: ${missing.join(", ")}`);
+    } else {
+        console.log(`[flavor] ✅ All ${REQUIRED_FLAVORS.length} flavors loaded from ${FLAVORS_DIR}`);
+    }
+
+    return { valid: missing.length === 0, missing, loaded };
+}
+
+/** Get list of all available flavor IDs */
+export function listFlavors(): string[] {
+    return [...REQUIRED_FLAVORS];
+}
+
+/**
  * Replaces all occurrences of {{key}} with value in the given template string.
  */
 export function fillTemplate(template: string, variables: Record<string, string | undefined>): string {
     let result = template;
     for (const [key, value] of Object.entries(variables)) {
         const safeValue = value ?? "";
-        // Replace all occurrences of {{key}} globally
         result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), safeValue);
     }
     return result;

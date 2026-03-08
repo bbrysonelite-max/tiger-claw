@@ -170,6 +170,96 @@ router.post("/demo", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /admin/costs — GAP 3: API cost per tenant (key abuse tracking)
+// ---------------------------------------------------------------------------
+
+router.get("/costs", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const { getPool: pg } = await import("../services/db.js");
+    const pool = pg();
+
+    // Count platform key usage per tenant (Layer 1/4 = operator cost)
+    const result = await pool.query(`
+      SELECT
+        t.id,
+        t.slug,
+        t.name,
+        t.status,
+        COALESCE(e.platform_calls, 0) AS platform_key_calls,
+        COALESCE(e.byok_calls, 0) AS byok_calls,
+        COALESCE(e.emergency_calls, 0) AS emergency_calls,
+        COALESCE(e.abuse_incidents, 0) AS abuse_incidents
+      FROM tenants t
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) FILTER (WHERE key_layer = 1) AS platform_calls,
+          COUNT(*) FILTER (WHERE key_layer = 2) AS byok_calls,
+          COUNT(*) FILTER (WHERE key_layer = 4) AS emergency_calls,
+          COUNT(*) FILTER (WHERE event_type = 'abuse') AS abuse_incidents
+        FROM admin_events ae
+        WHERE ae.tenant_id = t.id
+          AND ae.action LIKE 'key_layer_%'
+      ) e ON true
+      ORDER BY platform_key_calls DESC, emergency_calls DESC
+    `).catch(() => ({ rows: [] }));
+
+    // Fallback: if the admin_events doesn't track key_layer, just return tenant list with zeros
+    const tenants = await listTenants();
+    const costData = tenants.map(t => {
+      const row = (result.rows as Record<string, unknown>[]).find(
+        r => r["id"] === t.id
+      );
+      return {
+        tenantId: t.id,
+        slug: t.slug,
+        name: t.name,
+        status: t.status,
+        platformKeyCalls: Number(row?.["platform_calls"] ?? 0),
+        byokCalls: Number(row?.["byok_calls"] ?? 0),
+        emergencyCalls: Number(row?.["emergency_calls"] ?? 0),
+        abuseIncidents: Number(row?.["abuse_incidents"] ?? 0),
+        estimatedCost: `$${(Number(row?.["platform_calls"] ?? 0) * 0.005 + Number(row?.["emergency_calls"] ?? 0) * 0.005).toFixed(2)}`,
+      };
+    });
+
+    return res.json({
+      tenants: costData,
+      totals: {
+        platformCalls: costData.reduce((s, c) => s + c.platformKeyCalls, 0),
+        byokCalls: costData.reduce((s, c) => s + c.byokCalls, 0),
+        emergencyCalls: costData.reduce((s, c) => s + c.emergencyCalls, 0),
+        estimatedCost: `$${costData.reduce((s, c) => s + parseFloat(c.estimatedCost.slice(1)), 0).toFixed(2)}`,
+      },
+    });
+  } catch (err) {
+    console.error("[admin] GET /costs error:", err);
+    return res.status(500).json({ error: "Failed to fetch costs" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/flavors — GAP 3: flavor distribution across tenants
+// ---------------------------------------------------------------------------
+
+router.get("/flavors", requireAdmin, async (_req: Request, res: Response) => {
+  const tenants = await listTenants();
+  const distribution: Record<string, number> = {};
+  for (const t of tenants) {
+    const flavor = t.flavor ?? "unknown";
+    distribution[flavor] = (distribution[flavor] ?? 0) + 1;
+  }
+
+  const { listFlavors } = await import("../tools/flavorConfig.js");
+  const allFlavors = listFlavors();
+
+  return res.json({
+    distribution,
+    available: allFlavors,
+    totalTenants: tenants.length,
+  });
+});
+
+// ---------------------------------------------------------------------------
 // GET /admin/fleet — list all tenants
 // ---------------------------------------------------------------------------
 

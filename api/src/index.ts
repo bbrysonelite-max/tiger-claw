@@ -39,6 +39,7 @@ import wizardRouter from "./routes/wizard.js";
 import keysRouter from "./routes/keys.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
 import dashboardRouter from "./routes/dashboard.js";
+import { validateAllFlavors } from "./tools/flavorConfig.js";
 import "./services/queue.js"; // Initialize BullMQ Background Workers
 
 const app = express();
@@ -187,6 +188,9 @@ async function runHealthMonitor(): Promise<void> {
 async function main(): Promise<void> {
   // Initialize PostgreSQL schema
   await initSchema();
+
+  // Validate all 11 flavor JSON files (GAP 1)
+  validateAllFlavors();
 
   // Start HTTP server
   app.listen(PORT, () => {
