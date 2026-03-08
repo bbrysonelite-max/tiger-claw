@@ -6,6 +6,7 @@ import { Router, type Request, type Response } from "express";
 import { execSync } from "child_process";
 import { createClient } from "redis";
 import { getPool } from "../services/db.js";
+import { getPoolStatus } from "../services/pool.js";
 import * as os from "os";
 
 const router = Router();
@@ -34,10 +35,19 @@ router.get("/", async (_req: Request, res: Response) => {
     checks["redis"] = `error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
-  // Docker
-  let containerCount = 0;
-  let runningCount = 0;
-  checks["docker"] = "ok";
+  // Bot pool status (GAP-6 requirement: warn if below 50)
+  let poolAvailable = 0;
+  try {
+    const poolStatus = await getPoolStatus();
+    poolAvailable = poolStatus.available ?? 0;
+    checks["pool"] = poolAvailable < 10
+      ? `critical: ${poolAvailable} tokens`
+      : poolAvailable < 50
+        ? `low: ${poolAvailable} tokens`
+        : `ok: ${poolAvailable} tokens`;
+  } catch (err) {
+    checks["pool"] = `error: ${err instanceof Error ? err.message : String(err)}`;
+  }
 
   // Disk usage
   let diskUsagePercent = 0;
@@ -61,20 +71,20 @@ router.get("/", async (_req: Request, res: Response) => {
   const usedMemPercent = Math.round(((totalMemMb - freeMemMb) / totalMemMb) * 100);
   const loadAvg = os.loadavg()[0];
 
+  // Healthy = Postgres + Redis up. Pool low is a warning, not a hard failure.
   const healthy =
     checks["postgres"] === "ok" &&
-    checks["redis"] === "ok" &&
-    checks["docker"] === "ok";
+    checks["redis"] === "ok";
 
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded",
     uptimeSec: Math.round(process.uptime()),
     responseMs: Date.now() - startMs,
     checks,
-    fleet: {
-      total: containerCount,
-      running: runningCount,
-      stopped: containerCount - runningCount,
+    pool: {
+      available: poolAvailable,
+      warning: poolAvailable < 50,
+      critical: poolAvailable < 10,
     },
     system: {
       totalMemMb,

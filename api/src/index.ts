@@ -27,6 +27,7 @@
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { initSchema, listTenants, updateTenantStatus, logAdminEvent } from "./services/db.js";
+import { runMigrations } from "./services/migrate.js";
 import { getPoolStatus } from "./services/pool.js";
 import { sendAdminAlert } from "./routes/admin.js";
 import healthRouter from "./routes/health.js";
@@ -186,7 +187,10 @@ async function runHealthMonitor(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  // Initialize PostgreSQL schema
+  // Run versioned SQL migrations first (GAP-8 — must run before schema init)
+  await runMigrations();
+
+  // Initialize PostgreSQL schema (legacy CREATE TABLE IF NOT EXISTS fallback)
   await initSchema();
 
   // Validate all 11 flavor JSON files (GAP 1)
