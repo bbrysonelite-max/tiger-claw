@@ -9,7 +9,6 @@
 //   admin_events  — audit log for admin actions
 
 import { Pool, PoolClient } from "pg";
-import { runMigrations } from "./migrate.js";
 
 // ---------------------------------------------------------------------------
 // Connection pool
@@ -47,7 +46,8 @@ export async function withClient<T>(fn: (client: PoolClient) => Promise<T>): Pro
 // ---------------------------------------------------------------------------
 
 export async function initSchema(): Promise<void> {
-  await runMigrations();
+  // runMigrations() is called explicitly in index.ts main() before this function.
+  // Do NOT call it here — it would run migrations twice.
   console.log("[db] Schema ready.");
 }
 

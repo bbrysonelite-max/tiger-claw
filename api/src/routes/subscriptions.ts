@@ -10,7 +10,23 @@ const stripe = process.env["STRIPE_SECRET_KEY"] ? new Stripe(process.env["STRIPE
 // Only the botId is passed in Stripe metadata — NEVER the raw API key.
 router.post("/checkout", async (req: Request, res: Response) => {
     try {
-        const { email, name, niche, botName, connectionType, aiProvider, aiModel, botId } = req.body;
+        const { email, name, niche, botName, aiProvider, aiModel, botId } = req.body as {
+            email?: string;
+            name?: string;
+            niche?: string;
+            botName?: string;
+            aiProvider?: string;
+            aiModel?: string;
+            botId?: string;
+        };
+
+        // Validate required fields
+        if (!email || !name || !niche) {
+            return res.status(400).json({ error: "email, name, and niche are required" });
+        }
+        if (!botId) {
+            return res.status(400).json({ error: "botId is required — complete Step 3 (AI Connection) first" });
+        }
 
         if (!stripe) {
             // Mock mode for local dev without a real Stripe Key
@@ -18,7 +34,7 @@ router.post("/checkout", async (req: Request, res: Response) => {
             return res.json({ url: "http://localhost:3000/success?session_id=mock_session" });
         }
 
-        // BYOK only — connectionType is always "byok" (Locked Decision #12: no Tiger Credits)
+        // BYOK only — connectionType is ALWAYS "byok" (Locked Decision: no Tiger Credits)
         const priceId = process.env["STRIPE_PRICE_BYOK"];
 
         if (!priceId) {
@@ -33,14 +49,14 @@ router.post("/checkout", async (req: Request, res: Response) => {
             metadata: {
                 name,
                 niche,
-                botName,
-                connectionType: connectionType ?? "byok",
+                botName: botName ?? name,
+                connectionType: "byok",         // LOCKED — never accept from client
                 aiProvider: aiProvider ?? "google",
                 aiModel: aiModel ?? "gemini-2.5-flash",
                 // Pass only the botId — key was already encrypted and stored
                 // in Step 3 via POST /wizard/validate-key (GAP 7).
                 // Raw API key is NEVER passed through Stripe metadata.
-                botId: botId ?? "",
+                botId,
             },
             line_items: [
                 {
