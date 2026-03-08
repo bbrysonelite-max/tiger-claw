@@ -273,3 +273,51 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
 ## GitHub Repository
 
 `https://github.com/bbrysonelite-max/tiger-claw`
+
+---
+
+## Session Decisions — 2026-03-07 (LOCKED)
+
+### Customer Journey
+- On payment: provisioning email sent with activation link. Customer clicks it → bot activates.
+- A web dashboard is required. Telegram alone is not sufficient UX.
+- The tiger_onboard 5-phase interview triggers automatically on first bot interaction.
+
+### Key System (4-Layer — Non-Negotiable)
+- Layer 1 (Platform): embedded free key, provisioning only, 72h expiry, 50 messages.
+- After 72h or 50 messages: bot prompts customer to add their own API key via wizard.
+- The wizard must be so good customers want to add their key BEFORE the 72h expires.
+- Layer 4 (Emergency): bot is NEVER brain dead. Always has enough compute to guide
+  the customer through re-entering a key. Tiger Claw must always be able to speak.
+- The 4-layer rotation system is in tiger_keys.ts (1313 lines). It is complete.
+  The gap is the wizard never collects and stores the customer's key. Fix the wizard.
+- "Tiger Credits" — HALLUCINATION. Never in any spec. Delete from codebase entirely.
+
+### Language
+- Tiger Claw speaks all 130 languages via Gemini. This is not partial. This is all.
+- Language is set per tenant at provisioning and respected throughout.
+
+### Tiger Hive — Self-Improving Agents
+- Agents have memory. They get better every single interaction.
+- Hive = agents share what works anonymously across the fleet.
+- Every agent self-improves from its own history AND from fleet-wide patterns.
+- This is not just pattern sharing. This is continuous autonomous improvement.
+
+### Flavors
+- 11 flavors exist. Config-driven. New flavor = new JSON file, zero code changes.
+
+### Sales / Provisioning
+- Stripe is primary self-serve channel (website wizard → Stripe Checkout → provision).
+- Stan Store and other manual sales use POST /admin/provision/manual (operator-triggered).
+- Every signup webhook triggers provisioning AND customer care email sequence.
+- "Tiger Credits" connection type is deleted. Only: byok | managed.
+
+### Channels
+- Telegram is the DEFAULT. Auto-provisioned from bot_pool. Zero steps for customer.
+- LINE wizard: guided setup, Thailand priority.
+- Telegram BYO bot: optional wizard to swap platform bot for custom-named bot.
+- WhatsApp: future, via Baileys.
+- UX standard: simple enough for an 8-year-old. Hand-holding. Always.
+
+### IDE Rule
+- All development in Anti-Gravity (Project IDX). No Desktop path. Ever.
