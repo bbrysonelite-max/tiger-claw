@@ -19,6 +19,7 @@ import TelegramBot from "node-telegram-bot-api";
 import {
   listTenants,
   getTenant,
+  getTenantBotUsername,
   logAdminEvent,
   setCanaryGroup,
   listCanaryTenants,
@@ -81,6 +82,91 @@ router.post("/provision", async (req: Request, res: Response) => {
 
   const result = await provisionTenant(body as ProvisionInput);
   return res.status(result.success ? 201 : 500).json(result);
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/demo — GAP 2: 72-hour trial tenant for demos
+// No payment required. Layer 1 key: 50 messages, 72h expiry.
+// Bot auto-suspends when Layer 1 expires.
+// ---------------------------------------------------------------------------
+
+router.post("/demo", async (req: Request, res: Response) => {
+  const { name, email, flavor, language } = req.body as {
+    name?: string;
+    email?: string;
+    flavor?: string;
+    language?: string;
+  };
+
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
+  }
+
+  // Auto-generate slug from name + timestamp
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 20) + "-demo-" + Date.now().toString(36);
+
+  const resolvedFlavor = flavor ?? "network-marketer";
+  const resolvedLanguage = language ?? "en";
+  const resolvedRegion = resolvedLanguage === "th" ? "th-th" : "us-en";
+
+  console.log(`[admin] Demo provisioning: ${name} (${slug}) — flavor: ${resolvedFlavor}`);
+
+  const result = await provisionTenant({
+    slug,
+    name,
+    email,
+    flavor: resolvedFlavor,
+    region: resolvedRegion,
+    language: resolvedLanguage,
+    preferredChannel: "telegram",
+  });
+
+  if (!result.success) {
+    console.error(`[admin] Demo provisioning failed for ${slug}:`, result.error);
+    return res.status(500).json({
+      error: result.error ?? "Provisioning failed",
+      steps: result.steps,
+    });
+  }
+
+  if (result.waitlisted) {
+    return res.status(202).json({
+      message: "Demo tenant created but waitlisted — bot pool is empty. Add tokens first.",
+      slug,
+      tenantId: result.tenant?.id,
+    });
+  }
+
+  // Look up the assigned bot's username
+  const tenantId = result.tenant!.id;
+  const botUsername = await getTenantBotUsername(tenantId);
+
+  await logAdminEvent("demo_provision", tenantId, {
+    name,
+    email,
+    flavor: resolvedFlavor,
+    type: "72h_trial",
+  });
+
+  console.log(`[admin] Demo bot live: @${botUsername} for ${name}`);
+
+  return res.status(201).json({
+    ok: true,
+    slug,
+    tenantId,
+    botUsername: botUsername ? `@${botUsername}` : null,
+    telegramLink: botUsername ? `https://t.me/${botUsername}` : null,
+    trial: {
+      duration: "72h",
+      messageLimit: 50,
+      layer: 1,
+      note: "Bot auto-suspends when Layer 1 key expires",
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
