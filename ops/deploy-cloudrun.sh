@@ -1,6 +1,6 @@
 #!/bin/bash
-# Tiger Claw — Deploy to Cloud Run
-# Run this from the IDX terminal (gcloud must be authenticated)
+# Tiger Claw — Deploy to Cloud Run (v4 Multi-Tenant)
+# Run from project root (gcloud must be authenticated)
 #
 # Usage: ./ops/deploy-cloudrun.sh
 
@@ -14,9 +14,19 @@ IMAGE="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
 echo "==> Building and pushing Docker image..."
 gcloud builds submit ./api \
   --tag "$IMAGE" \
-  --project "$PROJECT_ID"
+  --project "$PROJECT_ID" \
+  --timeout=600
 
 echo "==> Deploying to Cloud Run..."
+
+# Get current Cloud Run URL (if already deployed) for TIGER_CLAW_API_URL
+CURRENT_URL=$(gcloud run services describe "$SERVICE_NAME" \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --format "value(status.url)" 2>/dev/null || echo "")
+
+TIGER_CLAW_API_URL="${CURRENT_URL:-https://tiger-claw-api.run.app}"
+
 gcloud run deploy "$SERVICE_NAME" \
   --image "$IMAGE" \
   --region "$REGION" \
@@ -29,7 +39,9 @@ gcloud run deploy "$SERVICE_NAME" \
   --min-instances 1 \
   --max-instances 10 \
   --timeout 300 \
-  --set-env-vars "NODE_ENV=production,PORT=4000" \
+  --vpc-connector "tiger-claw-connector" \
+  --vpc-egress all-traffic \
+  --set-env-vars "NODE_ENV=production,PORT=4000,TIGER_CLAW_API_URL=${TIGER_CLAW_API_URL}" \
   --update-secrets \
     "DATABASE_URL=tiger-claw-database-url:latest,\
 REDIS_URL=tiger-claw-redis-url:latest,\
@@ -48,7 +60,12 @@ SERPER_KEY_3=tiger-claw-serper-key-3:latest"
 
 echo ""
 echo "==> Deployment complete!"
-gcloud run services describe "$SERVICE_NAME" \
+LIVE_URL=$(gcloud run services describe "$SERVICE_NAME" \
   --region "$REGION" \
   --project "$PROJECT_ID" \
-  --format "value(status.url)"
+  --format "value(status.url)")
+echo "    URL: $LIVE_URL"
+echo ""
+echo "==> Verifying health..."
+curl -s "${LIVE_URL}/health" || echo "(health check pending — may take a few seconds)"
+echo ""

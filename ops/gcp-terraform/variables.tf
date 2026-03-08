@@ -1,18 +1,19 @@
 variable "project_id" {
   description = "Google Cloud Project ID"
   type        = string
+  default     = "hybrid-matrix-472500-k5"
+}
+
+variable "project_hash" {
+  description = "Cloud Run URL hash suffix (found after first deploy)"
+  type        = string
+  default     = "uc" # placeholder — will be known after first deploy
 }
 
 variable "region" {
-  description = "GCP Region for the cluster and database"
+  description = "GCP Region for Cloud Run, SQL, and Redis"
   type        = string
   default     = "us-central1"
-}
-
-variable "zone" {
-  description = "GCP Zone for the GKE cluster"
-  type        = string
-  default     = "us-central1-a"
 }
 
 variable "db_password" {
