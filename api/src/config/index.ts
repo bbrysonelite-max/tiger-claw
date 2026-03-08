@@ -14,6 +14,14 @@ import { TH_TH_CONFIG } from "./regions/th-th.js";
 import { NETWORK_MARKETER_FLAVOR } from "./flavors/network-marketer.js";
 import { REAL_ESTATE_FLAVOR } from "./flavors/real-estate.js";
 import { HEALTH_WELLNESS_FLAVOR } from "./flavors/health-wellness.js";
+import { AIRBNB_HOST_FLAVOR } from "./flavors/airbnb-host.js";
+import { BAKER_FLAVOR } from "./flavors/baker.js";
+import { CANDLE_MAKER_FLAVOR } from "./flavors/candle-maker.js";
+import { DOCTOR_FLAVOR } from "./flavors/doctor.js";
+import { GIG_ECONOMY_FLAVOR } from "./flavors/gig-economy.js";
+import { LAWYER_FLAVOR } from "./flavors/lawyer.js";
+import { PLUMBER_FLAVOR } from "./flavors/plumber.js";
+import { SALES_TIGER_FLAVOR } from "./flavors/sales-tiger.js";
 
 // ---------------------------------------------------------------------------
 // Registries
@@ -28,6 +36,14 @@ const FLAVORS: Record<string, FlavorConfig> = {
   "network-marketer": NETWORK_MARKETER_FLAVOR,
   "real-estate": REAL_ESTATE_FLAVOR,
   "health-wellness": HEALTH_WELLNESS_FLAVOR,
+  "airbnb-host": AIRBNB_HOST_FLAVOR,
+  "baker": BAKER_FLAVOR,
+  "candle-maker": CANDLE_MAKER_FLAVOR,
+  "doctor": DOCTOR_FLAVOR,
+  "gig-economy": GIG_ECONOMY_FLAVOR,
+  "lawyer": LAWYER_FLAVOR,
+  "plumber": PLUMBER_FLAVOR,
+  "sales-tiger": SALES_TIGER_FLAVOR,
 };
 
 // ---------------------------------------------------------------------------
@@ -242,3 +258,5 @@ export function generateSoulMd(config: ResolvedConfig, tenant: TenantData): stri
 export type { ResolvedConfig, FlavorConfig, RegionalConfig };
 export { BASE_CONFIG, US_EN_CONFIG, TH_TH_CONFIG };
 export { NETWORK_MARKETER_FLAVOR, REAL_ESTATE_FLAVOR, HEALTH_WELLNESS_FLAVOR };
+export { AIRBNB_HOST_FLAVOR, BAKER_FLAVOR, CANDLE_MAKER_FLAVOR, DOCTOR_FLAVOR };
+export { GIG_ECONOMY_FLAVOR, LAWYER_FLAVOR, PLUMBER_FLAVOR, SALES_TIGER_FLAVOR };
