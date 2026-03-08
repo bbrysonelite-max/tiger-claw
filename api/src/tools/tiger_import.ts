@@ -205,7 +205,7 @@ function rowToLead(row: Record<string, string>, importId: string): LeadRecord | 
     engagement: 0,
     intentScore: 0,
     builderScore: Math.round(profileFit * (oar === "customer" ? 0.25 : 0.30)),
-    customerScore: Math.round(profileFit * (oar === "builder" ? 0.25 : 0.25)),
+    customerScore: Math.round(profileFit * (oar === "builder" ? 0.25 : 0.30)),
     oar,
     primaryOar: oar === "both" ? "builder" : (oar === "builder" ? "builder" : "customer"),
     isUnicorn: oar === "both",

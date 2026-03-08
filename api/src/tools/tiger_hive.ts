@@ -144,7 +144,7 @@ async function saveJson<T>(context: ToolContext, key: string, data: unknown): Pr
 
 async function loadCache(context: ToolContext): Promise<HiveCache> {
   const data = await context.storage.get("cache.json");
-  return data ?? ([]);
+  return data ?? { patterns: [], submitted: [] };
 }
 
 async function saveCache(context: ToolContext, cache: HiveCache): Promise<void> {
