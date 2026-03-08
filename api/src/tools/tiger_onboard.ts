@@ -87,6 +87,7 @@ interface ToolContext {
   sessionKey: string;
   agentId: string;
   tenantId: string;
+  workdir?: string;
   config: Record<string, unknown>;
   abortSignal: AbortSignal;
   logger: {
@@ -171,6 +172,14 @@ function professionLabel(flavor: string): string {
     "network-marketer": "network marketing",
     "real-estate": "real estate",
     "health-wellness": "health & wellness",
+    "airbnb-host": "Airbnb hosting",
+    "baker": "baking",
+    "candle-maker": "candle making",
+    "doctor": "medicine",
+    "gig-economy": "gig work",
+    "lawyer": "law",
+    "plumber": "plumbing",
+    "sales-tiger": "sales",
   };
   return labels[flavor] ?? "your profession";
 }
@@ -187,6 +196,7 @@ function oarLabel(flavor: string, oar: "builder" | "customer" | "single"): "recr
 // ---------------------------------------------------------------------------
 
 import { getBotState, setBotState } from "../services/db.js";
+import { encryptToken } from "../services/pool.js";
 
 async function loadState(tenantId: string): Promise<OnboardState | null> {
   return await getBotState<OnboardState>(tenantId, "onboard_state");
@@ -421,25 +431,26 @@ function buildKeySetupIntro(): string {
   return [
     `Your profiles are set. Now let's power up your AI brain.`,
     ``,
-    `You need an API key from an LLM provider. I recommend starting with Anthropic (Claude):`,
-    `• Get your key here: https://console.anthropic.com/settings/keys`,
-    `• Sign up is free. You only pay for what you use.`,
+    `You need a Google AI API key. Here's how to get one (takes 2 minutes):`,
     ``,
-    `Alternatively, you can use OpenAI:`,
-    `• https://platform.openai.com/api-keys`,
+    `1. Go to https://aistudio.google.com/apikey`,
+    `2. Click "Create API key"`,
+    `3. Copy the key — it starts with "AIza"`,
+    `4. Paste it here and I'll validate it instantly.`,
     ``,
-    `Once you have your key, paste it here and I'll validate it.`,
+    `Google AI has a generous free tier. Paste your key when ready.`,
   ].join("\n");
 }
 
 // Detects the provider from the key prefix
-function detectProvider(key: string): "anthropic" | "openai" | "unknown" {
+function detectProvider(key: string): "google" | "anthropic" | "openai" | "unknown" {
+  if (key.startsWith("AIza")) return "google";
   if (key.startsWith("sk-ant-")) return "anthropic";
   if (key.startsWith("sk-")) return "openai";
   return "unknown";
 }
 
-// Makes a minimal HTTP POST to validate an API key
+// Makes a minimal HTTP request to validate an API key
 // Returns { valid: boolean, error?: string }
 async function validateApiKey(
   key: string
@@ -450,12 +461,14 @@ async function validateApiKey(
     return {
       valid: false,
       error:
-        "I don't recognize that key format. Anthropic keys start with 'sk-ant-', OpenAI keys start with 'sk-'. Please double-check and try again.",
+        "I don't recognize that key format. Google AI keys start with 'AIza'. Go to https://aistudio.google.com/apikey to get yours.",
     };
   }
 
   try {
-    if (provider === "anthropic") {
+    if (provider === "google") {
+      return await validateGoogleKey(key);
+    } else if (provider === "anthropic") {
       return await validateAnthropicKey(key);
     } else {
       return await validateOpenAIKey(key);
@@ -466,6 +479,45 @@ async function validateApiKey(
       error: `Validation failed with a network error: ${String(err)}. Please try again.`,
     };
   }
+}
+
+function validateGoogleKey(key: string): Promise<{ valid: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    // List models — zero-cost read endpoint, sufficient to confirm key validity
+    const req = https.request(
+      {
+        hostname: "generativelanguage.googleapis.com",
+        path: `/v1beta/models?key=${encodeURIComponent(key)}&pageSize=1`,
+        method: "GET",
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          if (res.statusCode === 200) {
+            resolve({ valid: true });
+          } else if (res.statusCode === 400) {
+            resolve({ valid: false, error: "That key is not valid. Please check it and try again." });
+          } else if (res.statusCode === 403) {
+            resolve({ valid: false, error: "That key doesn't have access to the Generative Language API. Make sure the API is enabled in your Google Cloud project." });
+          } else {
+            resolve({ valid: false, error: `Validation returned status ${res.statusCode}. Please try again.` });
+          }
+        });
+      }
+    );
+
+    req.on("error", (err) => {
+      resolve({ valid: false, error: `Network error during validation: ${err.message}` });
+    });
+
+    req.setTimeout(15000, () => {
+      req.destroy();
+      resolve({ valid: false, error: "Validation timed out. Please check your internet connection and try again." });
+    });
+
+    req.end();
+  });
 }
 
 function validateAnthropicKey(key: string): Promise<{ valid: boolean; error?: string }> {
@@ -631,9 +683,9 @@ async function handleKeysPrimary(
     };
   }
 
-  // Primary key valid — persist the key value and move to fallback
+  // Primary key valid — encrypt and persist the key value, move to fallback
   state.primaryKeyValidated = true;
-  state.primaryKey = key;
+  state.primaryKey = encryptToken(key);
   state.phase = "keys_fallback";
   await saveState(tenantId, state);
 
@@ -658,7 +710,8 @@ async function handleKeysPrimary(
 async function handleKeysFallback(
   state: OnboardState,
   response: string | undefined,
-  tenantId: string
+  tenantId: string,
+  workdir: string
 ): Promise<ToolResult> {
   if (response === undefined) {
     await saveState(tenantId, state);
@@ -685,9 +738,9 @@ async function handleKeysFallback(
     };
   }
 
-  // Both keys validated — persist fallback key value
+  // Both keys validated — encrypt and persist fallback key value
   state.fallbackKeyValidated = true;
-  state.fallbackKey = key;
+  state.fallbackKey = encryptToken(key);
 
   // Write key_state.json so the entrypoint can resolve Layer 2/3 keys on restart.
   // Uses the same shape as tiger_keys.ts KeyState — kept in sync manually.
@@ -714,8 +767,9 @@ async function handleKeysFallback(
     lastUpdated: new Date().toISOString(),
   };
   try {
+    fs.mkdirSync(workdir, { recursive: true });
     fs.writeFileSync(
-      path.join(tenantId, "key_state.json"),
+      path.join(workdir, "key_state.json"),
       JSON.stringify(keyStateData, null, 2),
       "utf8"
     );
@@ -822,7 +876,8 @@ async function generateSOULmd(state: OnboardState): Promise<string> {
 async function handleNaming(
   state: OnboardState,
   response: string | undefined,
-  tenantId: string
+  tenantId: string,
+  workdir: string
 ): Promise<ToolResult> {
   if (response === undefined) {
     await saveState(tenantId, state);
@@ -838,7 +893,8 @@ async function handleNaming(
 
   // Generate and write SOUL.md
   const soulContent = await generateSOULmd(state);
-  const soulPath = path.join(tenantId, "SOUL.md");
+  fs.mkdirSync(workdir, { recursive: true });
+  const soulPath = path.join(workdir, "SOUL.md");
   try {
     fs.writeFileSync(soulPath, soulContent, "utf8");
   } catch (err) {
@@ -1100,6 +1156,10 @@ async function execute(
   const action = String(params.action);
   const response = params.response as string | undefined;
   const { sessionKey: tenantId, logger } = context;
+  const workdir = context.workdir ?? path.join(
+    process.env["TENANT_DATA_DIR"] ?? "/data/tenants",
+    tenantId
+  );
 
   logger.info("tiger_onboard called", { action, phase: "loading state" });
 
@@ -1156,10 +1216,10 @@ async function execute(
 
       case "keys_fallback":
       case "keys_fallback_retry":
-        return await handleKeysFallback(state, response, tenantId);
+        return await handleKeysFallback(state, response, tenantId, workdir);
 
       case "naming":
-        return await handleNaming(state, response, tenantId);
+        return await handleNaming(state, response, tenantId, workdir);
 
       case "complete":
         return await handleComplete(state);
