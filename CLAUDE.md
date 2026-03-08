@@ -315,6 +315,14 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
   Assigns a bot from pool, activates Layer 1 key, auto-suspends when Layer 1 expires.
 - "Tiger Credits" connection type is deleted. Only: byok | managed.
 
+### Key Abuse Protection (Non-Negotiable)
+- The platform tracks how many times a tenant has consumed emergency (Layer 4) compute.
+- First incident: warning email — "Your bot ran out of compute. Here's how to add your key."
+- Second incident: stronger warning email — platform compute is not a free service.
+- Third incident: bot auto-paused. Tenant must add their own key to reactivate.
+- Operator receives an alert on every Layer 4 consumption event.
+- This protects the operator from tenants who repeatedly drain platform keys at operator cost.
+
 ### Error Handling (Non-Negotiable Principle)
 - NO silent failures. Ever.
 - Dead agents must alert the operator (admin bot / dashboard) AND notify the customer.
