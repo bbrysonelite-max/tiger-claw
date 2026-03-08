@@ -73,7 +73,7 @@ export default function Home() {
           <FeatureCard
             icon={<Lock className="w-6 h-6 text-primary" />}
             title="BYOK Enabled"
-            description="Use your own Anthropic or OpenAI API keys securely. Never share your data."
+            description="Use your own Google AI API key securely. AES-256-GCM encrypted at rest. Never shared."
           />
           <FeatureCard
             icon={<Zap className="w-6 h-6 text-primary" />}
