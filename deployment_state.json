@@ -1,6 +1,14 @@
 {
   "builds": [
     {
+      "tcVersion": "v2026.03.07.4",
+      "builtAt": "2026-03-07T22:00:00.000000Z",
+      "commitHash": "e2aff6a",
+      "gitTagged": false,
+      "gapsCompleted": ["GAP-8", "GAP-1", "GAP-7", "GAP-4"],
+      "notes": "GAP-7: BYOK key validation endpoint. GAP-4: Stripe fully wired into web wizard."
+    },
+    {
       "tcVersion": "v2026.03.07.2",
       "builtAt": "2026-03-07T21:00:00.000000Z",
       "commitHash": "8057bce",
@@ -17,15 +25,15 @@
     }
   ],
   "tigerClaw": {
-    "current": "v2026.03.07.2",
-    "previous": "v2026.03.04.1"
+    "current": "v2026.03.07.4",
+    "previous": "v2026.03.07.2"
   },
   "gapStatus": {
     "GAP-8": "✅ complete",
     "GAP-1": "✅ complete",
-    "GAP-7": "⏳ next",
-    "GAP-4": "⏳ pending",
-    "GAP-2": "⏳ pending",
+    "GAP-7": "✅ complete",
+    "GAP-4": "✅ complete",
+    "GAP-2": "⏳ next",
     "GAP-5": "⏳ pending",
     "GAP-6": "⏳ pending",
     "GAP-9": "⏳ pending",

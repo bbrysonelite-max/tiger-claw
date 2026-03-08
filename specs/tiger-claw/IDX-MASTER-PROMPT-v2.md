@@ -74,7 +74,7 @@ Tiger Claw is a **multi-tenant AI sales and recruiting SaaS platform**.
 | Provisioner | ✅ Built | `api/src/services/provisioner.ts` |
 | Stripe webhook | ✅ Built | `api/src/routes/webhooks.ts` |
 | 4-layer key system | ✅ Built (1313 lines) | `api/src/tools/tiger_keys.ts` |
-| Web wizard (5 steps) | ⚠️ UI only — Stripe not wired | `web-onboarding/src/` |
+| Web wizard (5 steps) | ✅ Stripe wired, BYOK validated | `web-onboarding/src/` |
 | 52 shadcn/ui components | ✅ Ready to use | `web-onboarding/src/components/ui/` |
 | Dashboard types | ✅ Ready to use | `web-onboarding/src/types/dashboard.ts` |
 | Dashboard PRD | ✅ Spec ready | `specs/tiger-claw/DASHBOARD-PRD.md` |
@@ -89,7 +89,7 @@ Tiger Claw is a **multi-tenant AI sales and recruiting SaaS platform**.
 
 Work through these one at a time. Do not skip. Do not reorder.
 
-### GAP 8 — Database Migrations ← START HERE
+### ✅ GAP 8 — Database Migrations — COMPLETE
 **What:** Replace `CREATE TABLE IF NOT EXISTS` in `db.ts` with a proper versioned
 migration system. Every schema change needs a numbered SQL file.
 
@@ -108,7 +108,7 @@ migration system. Every schema change needs a numbered SQL file.
 
 ---
 
-### GAP 1 — Config-Driven Flavor System
+### ✅ GAP 1 — Config-Driven Flavor System — COMPLETE
 **What:** 11 flavor JSON files in `api/src/config/flavors/`. Adding a new flavor
 requires dropping a JSON file — zero code changes.
 
@@ -149,7 +149,7 @@ requires only a new JSON file.
 
 ---
 
-### GAP 7 — Server-Side BYOK Key Validation
+### ✅ GAP 7 — Server-Side BYOK Key Validation — COMPLETE
 **What:** Before storing a customer's API key, validate it actually works.
 
 **Endpoint to add:** `POST /wizard/validate-key`
@@ -169,7 +169,7 @@ requires only a new JSON file.
 
 ---
 
-### GAP 4 — Wire Stripe Into Web Wizard
+### ✅ GAP 4 — Wire Stripe Into Web Wizard — COMPLETE
 **What:** The 5-step wizard currently has a 2-second setTimeout simulating payment.
 Real Stripe Checkout must be wired in.
 
@@ -202,7 +202,7 @@ gets their Telegram deep link.
 
 ---
 
-### GAP 2 — Demo Trial Endpoint
+### GAP 2 — Demo Trial Endpoint ← START HERE
 **What:** `POST /admin/demo` — spins up a 72-hour trial tenant for demos. No payment.
 
 **Request body:**
