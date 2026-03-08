@@ -11,7 +11,7 @@
     "test:watch": "vitest --dir src"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/generative-ai": "^0.24.1",
     "@kubernetes/client-node": "^1.4.0",
     "bullmq": "^5.70.2",
     "dockerode": "^4.0.2",
