@@ -10,11 +10,11 @@ interface NichePickerProps {
 }
 
 const niches = [
-    { id: "network_marketing", name: "Network Marketing", icon: <Briefcase /> },
-    { id: "airbnb", name: "Airbnb / STR", icon: <Building2 /> },
-    { id: "real_estate", name: "Real Estate", icon: <Home /> },
-    { id: "healthcare", name: "Healthcare", icon: <HeartPulse /> },
-    { id: "other", name: "Other", icon: <MoreHorizontal /> },
+    { id: "network-marketer", name: "Network Marketing", icon: <Briefcase /> },
+    { id: "airbnb-host", name: "Airbnb / STR", icon: <Building2 /> },
+    { id: "real-estate", name: "Real Estate", icon: <Home /> },
+    { id: "health-wellness", name: "Healthcare", icon: <HeartPulse /> },
+    { id: "sales-tiger", name: "Sales Professional", icon: <MoreHorizontal /> },
 ];
 
 export default function StepNichePicker({ selectedId, onSelect, onNext }: NichePickerProps) {

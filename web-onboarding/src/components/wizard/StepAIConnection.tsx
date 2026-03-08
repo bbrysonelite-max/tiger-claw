@@ -27,6 +27,12 @@ export default function StepAIConnection({ state, updateState, onNext }: AIConne
     const validateKey = async () => {
         if (!state.apiKey) return;
 
+        if (!state.botId) {
+            setValidationResult("error");
+            setErrorMessage("Something went wrong with account setup. Please go back to the previous step and try again.");
+            return;
+        }
+
         setIsValidating(true);
         setValidationResult(null);
         setErrorMessage("");
@@ -38,7 +44,7 @@ export default function StepAIConnection({ state, updateState, onNext }: AIConne
                 body: JSON.stringify({
                     provider: "google",
                     key: state.apiKey,
-                    botId: state.botId ?? "pending", // Will be assigned after checkout
+                    botId: state.botId,
                 }),
             });
 
