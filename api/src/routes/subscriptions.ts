@@ -78,6 +78,9 @@ router.post("/checkout", async (req: Request, res: Response) => {
             metadata: {
                 name,
                 niche,
+                // BUG FIX: webhook reads meta["flavor"] for provisioning — must match niche selected by user.
+                // Without this, all tenants get provisioned as "network-marketer" regardless of choice.
+                flavor: niche,
                 botName: botName ?? name,
                 connectionType: "byok",         // LOCKED — never accept from client
                 aiProvider: aiProvider ?? "google",

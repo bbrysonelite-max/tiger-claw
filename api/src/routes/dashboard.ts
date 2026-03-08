@@ -63,7 +63,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
                 enabled: tenant.whatsappEnabled ?? false,
             },
             line: {
-                configured: !!(tenant.lineChannelSecret || tenant.lineChannelAccessToken),
+                configured: !!(tenant.lineChannelSecret && tenant.lineChannelAccessToken),
                 webhookUrl: lineWebhookUrl,
             },
         },
