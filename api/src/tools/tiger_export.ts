@@ -350,7 +350,7 @@ async function execute(
 }
 
 // ---------------------------------------------------------------------------
-// AgentTool export (OpenClaw interface)
+// Tool export
 // ---------------------------------------------------------------------------
 
 export const tiger_export = {

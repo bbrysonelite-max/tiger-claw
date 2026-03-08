@@ -240,8 +240,8 @@ async function handleQuery(
   context: ToolContext
 ): Promise<ToolResult> {
   const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
-  const flavor = onboard?.flavor ?? process.env["BOT_FLAVOR"] ?? "network-marketer";
-  const region = (process.env["REGION"] ?? "us-en");
+  const flavor = onboard?.flavor ?? (context.config["BOT_FLAVOR"] as string) ?? "network-marketer";
+  const region = (context.config["REGION"] as string) ?? "us-en";
   const apiBase = getApiBase(context.config);
   const limit = params.limit ?? 10;
 
@@ -329,8 +329,8 @@ async function handleSubmit(
   context: ToolContext
 ): Promise<ToolResult> {
   const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
-  const flavor = onboard?.flavor ?? process.env["BOT_FLAVOR"] ?? "network-marketer";
-  const region = process.env["REGION"] ?? "us-en";
+  const flavor = onboard?.flavor ?? (context.config["BOT_FLAVOR"] as string) ?? "network-marketer";
+  const region = (context.config["REGION"] as string) ?? "us-en";
   const apiBase = getApiBase(context.config);
 
   // Validate observation is actually anonymous — warn if it contains suspicious PII patterns
@@ -426,7 +426,8 @@ async function handleGenerate(
     (context, "conversions.json") ?? {};
   const onboard = await loadJson<OnboardState>(context, "onboard_state.json");
 
-  const flavor = onboard?.flavor ?? process.env["BOT_FLAVOR"] ?? "network-marketer";
+  const flavor = onboard?.flavor ?? (context.config["BOT_FLAVOR"] as string) ?? "network-marketer";
+  const region = (context.config["REGION"] as string) ?? "us-en";
   const allLeads = Object.values(leads);
   const allNurtures = Object.values(nurtures);
   const allContacts = Object.values(contacts);
@@ -452,7 +453,7 @@ async function handleGenerate(
       if (Math.abs(rate - allRate) >= 15) {
         patterns.push({
           flavor,
-          region: process.env["REGION"] ?? "us-en",
+          region,
           category: "discovery",
           observation: `${src} leads qualify at ${rate}% vs ${allRate}% overall (${stats.total} data points).`,
           dataPoints: stats.total,
@@ -731,7 +732,7 @@ async function execute(
 }
 
 // ---------------------------------------------------------------------------
-// AgentTool export (OpenClaw interface)
+// Tool export
 // ---------------------------------------------------------------------------
 
 export const tiger_hive = {
