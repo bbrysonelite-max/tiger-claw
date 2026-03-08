@@ -8,7 +8,7 @@ This is the master briefing for any AI agent (Claude Code, Cursor, or any other)
 
 ## What Tiger Claw Is
 
-Tiger Claw is a **multi-tenant AI sales and recruiting engine** delivered as a SaaS platform. Tenants sign up through a web wizard, pay via Stripe, bring their own Anthropic API key (BYOK), and receive a dedicated AI agent that handles prospect discovery, outreach, nurture sequences, and follow-up — automatically via Telegram.
+Tiger Claw is a **multi-tenant AI sales and recruiting engine** delivered as a SaaS platform. Tenants sign up through a web wizard, pay via Stripe, and receive a dedicated AI agent — powered by Google Gemini — that handles prospect discovery, outreach, nurture sequences, and follow-up automatically via Telegram. Tenants can bring their own Google API key (BYOK) or use the platform-managed 4-layer key system.
 
 **Target market:** Network marketers, real estate agents, health & wellness professionals, and 8 other business flavors.
 
@@ -67,7 +67,7 @@ tiger-claw/
 5. Tenant's Telegram bot receives messages → Telegram webhook → `POST /webhooks/telegram/:token`
 6. Message enqueued in BullMQ `telegram-webhooks` queue
 7. `telegramWorker` picks up job → calls `processTelegramMessage()` in `ai.ts`
-8. `ai.ts` resolves tenant's Anthropic key (BYOK or platform key) → creates Anthropic client → runs tool execution loop
+8. `ai.ts` resolves tenant's Google API key (BYOK or 4-layer platform key) → creates Gemini client → runs function-calling tool execution loop
 9. All 19 tools available in the loop. Tool context includes `workdir` (per-tenant data directory), tenant config, and DB access
 10. BullMQ `global-cron` heartbeat fires every minute → enqueues `nurture_check` for all active tenants
 
@@ -76,13 +76,15 @@ tiger-claw/
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | API | Express/TypeScript | Webhook router, admin API, wizard backend |
-| AI Orchestrator | `services/ai.ts` + Anthropic SDK | Stateless tool execution loop per message |
+| AI Orchestrator | `services/ai.ts` + Google Gemini (`gemini-2.5-flash`) | Stateless function-calling tool loop per message |
 | Queues | BullMQ + Redis | `tenant-provisioning`, `telegram-webhooks`, `ai-routines`, `global-cron` |
 | Database | PostgreSQL (Cloud SQL) | Tenants, bots, ai_configs, bot_pool, admin events |
 | Cache / Queue broker | Redis (Memorystore) | Chat history (7-day TTL), BullMQ |
-| Infrastructure | GKE + Terraform | Kubernetes cluster, HA Postgres, HA Redis |
-| Web Wizard | Next.js 16 | Onboarding flow with Stripe |
-| Bot Token Pool | `services/pool.ts` | Unassigned Telegram bot tokens for new tenants |
+| Infrastructure | GKE + Terraform + GCP | Kubernetes cluster, HA Postgres, HA Redis — Google Cloud |
+| Web Wizard | Next.js 16 | 5-step onboarding flow with real Stripe Checkout (GAP 4 — in progress) |
+| Customer Dashboard | Next.js 16 | Post-login channel status, LINE wizard, bot management (GAP 9 — in progress) |
+| Admin Dashboard | TBD (spec in progress) | Fleet management, bot pool, demo provisioning, alert center |
+| Bot Token Pool | `services/pool.ts` + SMS-MAN pipeline | Unassigned Telegram bot tokens. Target: 1,000+ |
 
 ### Chat History
 
@@ -121,7 +123,7 @@ Stored in Redis as `chat_history:{tenantId}:{chatId}` with 7-day TTL. System rou
 
 ## Tools (`api/src/tools/`)
 
-All 19 tools are registered in `ai.ts` `toolsMap`. Each exports a `{ name, description, parameters, execute }` object following the Anthropic tool schema.
+All 19 tools are registered in `ai.ts` `toolsMap`. Each exports a `{ name, description, parameters, execute }` object following the Gemini function-calling schema. The AI engine is **Google Gemini (`gemini-2.5-flash`)** via `@google/generative-ai` SDK — not Anthropic.
 
 | Tool | Purpose |
 |------|---------|
@@ -229,20 +231,25 @@ Playwright E2E tests cover the full wizard flow.
 
 ---
 
-## Current Phase: PHASE 4 (E2E Verification + First Canary)
+## Current Phase: PHASE 5 (Build-Out — Gemini Architecture)
 
-See `tasks/PHASE-4.md` for the full task list.
+Phase 0-4 task docs (`tasks/`) were written for the old OpenClaw per-container architecture.
+They are **superseded**. Do not use them as guidance. The active work is defined by the GAPs below.
 
-| Task | Status | Notes |
-|------|--------|-------|
-| P4-0 | ✅ Done | Phase document created |
-| P4-1 | ❌ Pending | SecretRef E2E validation with live API key |
-| P4-2 | ❌ Pending | WhatsApp Baileys E2E test |
-| P4-3 | ⚠️ Partial | LINE wizard integrated; runtime test needed |
-| P4-4 | ❌ Blocked | First canary deployment (blocked on P4-1 + P4-5) |
-| P4-5 | ⚠️ Partial | Bot pool: 11 tokens loaded, MTProto automation ready |
+### Active GAPs (approved 2026-03-07)
 
-**Do not start Phase 5 until Phase 4 is complete.**
+| GAP | Description | Status |
+|-----|-------------|--------|
+| GAP 1 | Config-driven flavor system (JSON files per flavor, zero code changes) | Pending |
+| GAP 2 | `POST /admin/demo` — 72-hour trial tenant for demos, no payment | Pending |
+| GAP 3 | Bot pool scale to 1,000 tokens (SMS-MAN + MTProto pipeline, admin dashboard UI) | Pending |
+| GAP 4 | Wire Stripe into web wizard — real checkout, BYOK key collected + validated | Pending |
+| GAP 5 | GCP infrastructure — `terraform apply`, secrets loaded, API deployed to Cloud Run | Pending |
+| GAP 6 | Bot token auto-creation pipeline (complete MTProto → BotFather → pool import) | Pending |
+| GAP 7 | Server-side BYOK key validation before storage + loud error on failure | Pending |
+| GAP 8 | Database migrations system (`migrations/` folder, versioned SQL, auto-applied at startup) | Pending |
+| GAP 9 | Customer dashboard UI — channel cards, LINE wizard, bot status (Next.js) | Pending |
+| GAP 10 | CLAUDE.md full rewrite for Gemini architecture | ✅ Done (this file) |
 
 ---
 
@@ -254,7 +261,10 @@ See `tasks/PHASE-4.md` for the full task list.
 - Do NOT store tenant prospect/lead data in PostgreSQL — use the per-tenant `workdir` (SQLite or files)
 - Do NOT put plaintext API keys in logs, database, or environment output
 - Do NOT deploy canary without 10+ bot pool tokens
-- Do NOT modify the tool execution loop in `ai.ts` without understanding the full Anthropic `tool_use` cycle
+- Do NOT modify the tool execution loop in `ai.ts` without understanding the full Gemini function-calling cycle
+- Do NOT use the Anthropic SDK — the AI engine is Google Gemini (`@google/generative-ai`)
+- Do NOT silently swallow errors — all failures must be logged, alerted, and surfaced
+- Do NOT use "tiger_credits" anywhere — it is a hallucination, deleted from the codebase
 
 ---
 
