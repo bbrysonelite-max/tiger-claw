@@ -91,7 +91,8 @@ async function updateTenantContainer(
     // Resume flywheel even on failure (container rolled back by update.sh)
     await updateTenantStatus(tenant.id, "active");
     const now = new Date().toISOString();
-    const existing = readDeploymentState().tenants[slug];
+    let existing;
+    try { existing = readDeploymentState().tenants[slug]; } catch { /* state unreadable — use defaults */ }
     updateTenantRecord(slug, {
       lastFailedAt: now,
       failureCount: (existing?.failureCount ?? 0) + 1,
