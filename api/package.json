@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "postbuild": "mkdir -p dist/config/flavors && cp src/config/flavors/*.json dist/config/flavors/",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "vitest run --dir src",
