@@ -17,7 +17,6 @@ export default function StepReviewPayment({ state, isDeploying, onLaunch }: Revi
 
     const handleCheckout = async () => {
         setError("");
-        onLaunch(); // Sets isDeploying true in parent
 
         try {
             const res = await fetch(`${API_BASE}/subscriptions/checkout`, {
@@ -38,7 +37,9 @@ export default function StepReviewPayment({ state, isDeploying, onLaunch }: Revi
             const data = await res.json();
 
             if (data.url) {
-                // Redirect to Stripe Checkout
+                // Only lock the UI once we're guaranteed to redirect — prevents
+                // permanently disabled buttons if checkout fails
+                onLaunch();
                 window.location.href = data.url;
             } else {
                 setError(data.error ?? "Failed to create checkout session. Please try again.");

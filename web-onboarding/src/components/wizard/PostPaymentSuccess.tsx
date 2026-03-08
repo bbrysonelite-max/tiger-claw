@@ -52,8 +52,9 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
             // No session_id — simulate for dev/demo
             const timer = setTimeout(() => {
                 setStatus("live");
-                setBotUsername(state.botName?.replace(/\s/g, "_") ?? "tiger_claw_bot");
-                setTelegramLink(`https://t.me/${state.botName?.replace(/\s/g, "_") ?? "tiger_claw_bot"}`);
+                const devUsername = state.botName?.replace(/\s/g, "_") || "tiger_claw_bot";
+                setBotUsername(devUsername);
+                setTelegramLink(`https://t.me/${devUsername}`);
             }, 4000);
             return () => clearTimeout(timer);
         }
@@ -90,7 +91,7 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
 
             <p className="text-white/60 text-lg mb-8 max-w-md mx-auto relative z-10 !leading-relaxed">
                 {status === "deploying"
-                    ? `Setting up ${state.botName ?? "your agent"} on our infrastructure. This usually takes 10-30 seconds.`
+                    ? `Setting up ${state.botName || "your agent"} on our infrastructure. This usually takes 10-30 seconds.`
                     : `Your agent is live and connected via Google Gemini.`}
             </p>
 
