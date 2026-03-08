@@ -346,10 +346,10 @@ export async function processSystemRoutine(tenantId: string, routineType: string
         return;
     }
 
-    const systemChatId = 0;
-
     try {
-        const history = await getChatHistory(tenantId, systemChatId);
+        // System routines always start with a clean history. Persisting routine
+        // chat history causes the next run to start with a 'function' role message
+        // (from the previous run's tool responses), which Gemini rejects.
         const genAI = new GoogleGenerativeAI(googleKey);
         const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-flash',
@@ -363,12 +363,9 @@ export async function processSystemRoutine(tenantId: string, routineType: string
         };
         const prompt = systemPrompts[routineType] ?? `SYSTEM: Execute routine: ${routineType}`;
 
-        const chat = model.startChat({ history });
+        const chat = model.startChat({ history: [] });
         const initial = await chat.sendMessage(prompt);
         await runToolLoop(chat, initial.response, toolContext, `AI Routine:${routineType}`);
-
-        const updatedHistory = await chat.getHistory();
-        await saveChatHistory(tenantId, systemChatId, updatedHistory);
 
         console.log(`[AI Routine] ${routineType} complete for tenant ${tenantId}.`);
     } catch (err: any) {
