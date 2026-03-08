@@ -5,9 +5,21 @@
 
 ---
 
+## Site Map (Confirmed 2026-03-07)
+
+| URL | Purpose | Audience |
+|-----|---------|---------|
+| `thegoods.ai` | Public marketing site — THIS IS WHAT MANIS UPDATES | Prospects / new customers |
+| `botcraftwrks.ai` | Admin/operator dashboard — DO NOT TOUCH | Operator only |
+| `app.tigerclaw.io` | Customer dashboard — to be built (GAP 9) | Paying customers |
+
+**MANIS works on `thegoods.ai` only. `botcraftwrks.ai` is the admin site — leave it alone.**
+
+---
+
 ## Context
 
-The marketing site at `botcraftwrks.ai` was written two weeks ago for an earlier
+The marketing site at `thegoods.ai` was written two weeks ago for an earlier
 version of Tiger Claw. Tiger Claw has since been rebuilt as a fully autonomous
 multi-tenant SaaS platform on Google Gemini. The site copy must be updated to
 match the current product.
@@ -159,15 +171,17 @@ Jurisdiction: USA. Mention of data processing for Thailand customers (PDPA compl
 
 ## Domain
 
-Site is currently at `botcraftwrks.ai`.
+Site is currently at `thegoods.ai`.
 Target domain: `tigerclaw.io` (operator decision pending).
 Do not change the domain until the operator confirms — just update the copy.
+
+The admin site is `botcraftwrks.ai` — separate repo, separate deployment, not touched here.
 
 ---
 
 ## Deliverable
 
-Updated `index.html` with:
+Updated marketing site (`thegoods.ai`) with:
 1. All copy corrections above applied
 2. New feature sections added (Hive, Languages, Skills, LINE, Flavors)
 3. Score threshold corrected to 80
@@ -176,5 +190,4 @@ Updated `index.html` with:
 
 Plus: `privacy.html` and `terms.html` created.
 
-The dashboard (`dashboard.html`) is correct as-is — do not modify it.
-The Ops Center section uses real field names and will be wired to live data separately.
+**Do not touch `botcraftwrks.ai` (admin site) — it is a separate system.**

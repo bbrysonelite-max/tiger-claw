@@ -288,6 +288,16 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
 
 ---
 
+## Live Sites (Confirmed 2026-03-07)
+
+| URL | What it is | Repo |
+|-----|-----------|------|
+| `thegoods.ai` | Public marketing site (needs Tiger Claw copy update) | `tiger-bot-website` |
+| `botcraftwrks.ai` | Operator admin dashboard (fleet, Hive, Ops Center) | `tiger-claw-ops` |
+| `app.tigerclaw.io` | Customer dashboard — **not yet built** (GAP 9) | `tiger-claw` (this repo) |
+
+---
+
 ## Session Decisions — 2026-03-07 (LOCKED)
 
 ### Customer Journey
