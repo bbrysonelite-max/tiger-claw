@@ -38,6 +38,7 @@ import updateRouter from "./routes/update.js";
 import wizardRouter from "./routes/wizard.js";
 import keysRouter from "./routes/keys.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
+import dashboardRouter from "./routes/dashboard.js";
 import "./services/queue.js"; // Initialize BullMQ Background Workers
 
 const app = express();
@@ -66,6 +67,7 @@ app.use("/tenants", tenantsRouter);
 app.use("/wizard", wizardRouter);
 app.use("/keys", keysRouter);
 app.use("/subscriptions", subscriptionsRouter);
+app.use("/dashboard", dashboardRouter);
 
 // Root ping
 app.get("/", (_req: Request, res: Response) => {
