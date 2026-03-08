@@ -131,7 +131,7 @@ Each active card shows:
 ## Implementation Priority
 
 1. Dashboard channel cards UI (Telegram status for all current customers)
-2. LINE wizard (Thailand customers are active now)
+2. LINE wizard — HIGH PRIORITY (Thailand market is active; customers will land on Telegram and immediately want LINE)
 3. Telegram "bring your own bot" wizard (lower priority — platform tokens work)
 4. WhatsApp via Baileys (future)
 
