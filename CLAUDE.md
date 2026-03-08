@@ -264,6 +264,12 @@ STOP and ask. Flag with: `DECISION REQUIRED: [description]` and wait for instruc
 
 ---
 
+## IDE Rule — Non-Negotiable
+
+When the operator asks you to work on this project in an IDE or deploy it, you use **Anti-Gravity (Project IDX)** and the Anti-Gravity workspace only. You do not stay in the terminal. You do not use the Desktop path (`/Users/brentbryson/Desktop/tiger-claw`). The Anti-Gravity workspace is the source of truth for all active development. If you are not in IDX, stop and say so.
+
+---
+
 ## GitHub Repository
 
 `https://github.com/bbrysonelite-max/tiger-claw`
