@@ -13,9 +13,138 @@ import {
   getTenantBySlug,
   getTenantBotUsername,
   updateTenantChannelConfig,
+  upsertBYOKConfig,
 } from "../services/db.js";
+import { encryptToken } from "../services/pool.js";
 
 const router = Router();
+
+// ── POST /wizard/validate-key ────────────────────────────────────────────────
+// GAP 7 — Server-side BYOK key validation
+// Accepts: { provider: "google", key: "AIza...", botId: "<uuid>" }
+// Makes a minimal test call to the Gemini API (listModels).
+// On success: encrypts the key and stores it in bot_ai_config.
+// NEVER logs, echoes, or stores the raw key in plaintext.
+
+router.post("/validate-key", async (req: Request, res: Response) => {
+  const { provider, key, botId } = req.body as {
+    provider?: string;
+    key?: string;
+    botId?: string;
+  };
+
+  // --- Input validation ---
+  if (!provider || !key) {
+    return res.status(400).json({
+      valid: false,
+      error: "Both 'provider' and 'key' fields are required.",
+    });
+  }
+
+  if (provider !== "google") {
+    return res.status(400).json({
+      valid: false,
+      error: `Unsupported provider "${provider}". Currently only "google" is supported.`,
+    });
+  }
+
+  if (!key.startsWith("AIza") || key.length < 30) {
+    return res.status(400).json({
+      valid: false,
+      error: "Key format looks wrong — Google API keys start with 'AIza' and are ~39 characters. Check you copied the full key.",
+    });
+  }
+
+  if (!botId) {
+    return res.status(400).json({
+      valid: false,
+      error: "Missing 'botId' — the bot to associate this key with.",
+    });
+  }
+
+  // --- Test the key against Gemini API ---
+  // Minimal call: GET https://generativelanguage.googleapis.com/v1beta/models?key=...
+  // This validates the key without consuming any quota.
+  try {
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(testUrl, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      const googleError = (body as any)?.error;
+
+      if (response.status === 400) {
+        return res.json({
+          valid: false,
+          error: "Google rejected the key — it may be malformed. Double-check you copied the entire key from Google AI Studio.",
+        });
+      }
+
+      if (response.status === 403) {
+        return res.json({
+          valid: false,
+          error: "Key is valid but the Generative Language API is not enabled for this project. Go to Google Cloud Console → APIs & Services → enable 'Generative Language API'.",
+        });
+      }
+
+      if (response.status === 401) {
+        return res.json({
+          valid: false,
+          error: "Key rejected by Google — it may be revoked or expired. Generate a new key at https://aistudio.google.com/apikey",
+        });
+      }
+
+      return res.json({
+        valid: false,
+        error: `Google API returned HTTP ${response.status}: ${googleError?.message ?? "Unknown error"}. Try generating a new key.`,
+      });
+    }
+
+    // Key is valid — Google returned a list of models
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      return res.json({
+        valid: false,
+        error: "Timed out connecting to Google API. Check your network and try again.",
+      });
+    }
+    return res.json({
+      valid: false,
+      error: `Could not reach Google API: ${err.message ?? "unknown error"}. Try again in a moment.`,
+    });
+  }
+
+  // --- Key is valid — encrypt and store ---
+  try {
+    const encrypted = encryptToken(key);
+    const preview = `${key.slice(0, 4)}...${key.slice(-4)}`; // "AIza...xY9z"
+
+    await upsertBYOKConfig({
+      botId,
+      connectionType: "byok",
+      provider: "google",
+      model: "gemini-2.5-flash",
+      encryptedKey: encrypted,
+      keyPreview: preview,
+    });
+
+    console.log(`[wizard] BYOK key validated and stored for bot ${botId}`);
+    return res.json({ valid: true });
+  } catch (err: any) {
+    console.error(`[wizard] Failed to store BYOK key for bot ${botId}:`, err.message);
+    return res.status(500).json({
+      valid: false,
+      error: "Key is valid but we failed to save it. Please try again.",
+    });
+  }
+});
 
 // ── GET /wizard/:slug ────────────────────────────────────────────────────────
 

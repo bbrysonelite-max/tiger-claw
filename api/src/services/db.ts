@@ -642,3 +642,32 @@ export async function setBotState(tenantId: string, stateKey: string, value: any
     [tenantId, stateKey, value]
   );
 }
+
+export async function upsertBYOKConfig(data: {
+  botId: string;
+  connectionType: string;
+  provider: string;
+  model?: string;
+  encryptedKey: string;
+  keyPreview: string;
+}): Promise<void> {
+  await getPool().query(
+    `INSERT INTO bot_ai_config (bot_id, connection_type, provider, model, encrypted_key, key_preview, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+     ON CONFLICT (bot_id)
+     DO UPDATE SET connection_type = EXCLUDED.connection_type,
+                   provider = EXCLUDED.provider,
+                   model = EXCLUDED.model,
+                   encrypted_key = EXCLUDED.encrypted_key,
+                   key_preview = EXCLUDED.key_preview,
+                   updated_at = NOW()`,
+    [
+      data.botId,
+      data.connectionType,
+      data.provider,
+      data.model ?? null,
+      data.encryptedKey,
+      data.keyPreview,
+    ]
+  );
+}
