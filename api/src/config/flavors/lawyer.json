@@ -1,0 +1,29 @@
+{
+    "id": "lawyer",
+    "name": "Legal Services Agent",
+    "professionLabel": "legal framework and advisory",
+    "defaultKeywords": [
+        "need a lawyer",
+        "personal injury attorney",
+        "sued",
+        "legal advice",
+        "contract review",
+        "lawsuit",
+        "hire an attorney",
+        "legal dispute"
+    ],
+    "nurtureTemplates": {
+        "value_drop": "Hi {{name}},\n\nI'm {{botName}}, assisting the office of {{tenantName}}.\n\nI noticed you were asking about legal challenges. One quick insight from seeing cases unfold: Many people wait until a dispute escalates into litigation before seeking counsel. Getting advice an hour earlier often saves tens of thousands in court fees.\n\nJust food for thought! No pitch here.\n\n— {{botName}}",
+        "testimonial": "Hey {{name}},\n\nBrief story — {{tenantName}} just closed a matter for a client who was incredibly stressed about a very similar situation.\n\nThey reviewed the documents, found a leverage point the opposing side missed, and settled it quietly out of court.\n\nHaving the right set of eyes on the problem completely shifts the outcome.\n\n— {{botName}}",
+        "authority_transfer": "Hi {{name}},\n\nI want to properly introduce you to {{tenantName}}.\n\nThey have been practicing in {{profession}} for {{years}}. Their most notable recent outcome: {{biggestWin}}. What makes their counsel different: {{differentiator}}.\n\nThey don't take every case. They specifically represent {{icp}}.\n\nIf that describes your situation, a quick consultation is worth your time.\n\n— {{botName}}",
+        "personal_checkin": "Hi {{name}},\n\nJust a quick check-in — how is the situation progressing?\n\nNo agenda. {{tenantName}} just asked me to follow up with a few folks we've connected with recently to make sure things haven't escalated.\n\n— {{botName}}",
+        "one_to_ten_part1": "Hi {{name}},\n\nQuick question.\n\nOn a scale of 1-10, how urgent is resolving this legal matter right now? (1 = Just exploring options, 10 = I need representation today).\n\nJust reply with a number.\n\n— {{botName}}",
+        "one_to_ten_part2": "Understood, thank you.\n\nWhat would it take to make that a 10? Are you waiting on documents, gathering funds, or just unsure if you actually have a case?\n\nI want to make sure I get you the right resources.\n\n— {{botName}}",
+        "gap_closing": "Got it — {{answer}}.\n\nThat is incredibly common. {{tenantName}} actually resolves that specific hesitation frequently. \n\nDoes knowing that we are highly equipped to navigate that bump up your 1-10 urgency at all?\n\n— {{botName}}",
+        "scarcity_takeaway": "Hi {{name}},\n\nI'll be direct — {{tenantName}} limits their active caseload to ensure every client gets partner-level attention.\n\nIf you need counsel, let me know. If you've handled it or decided to hold off, totally fine. I just don't want to keep reaching out unnecessarily.\n\n— {{botName}}",
+        "pattern_interrupt": "Hi {{name}},\n\nBefore I close my file on our end, consider this.\n\nIn legal matters, the cost of doing nothing is rarely zero. The statute of limitations might be running, or the opposing party might be building their case while you wait.\n\nIf you want to review the actual facts instead of just worrying about them, say \"Let's review.\"\n\n— {{botName}}",
+        "final_takeaway": "Hi {{name}},\n\nThis is my final message. I'm removing you from my active follow-ups.\n\n{{tenantName}} remains completely focused on their active clients. Best of luck with your situation!\n\n— {{botName}}",
+        "slow_drip_value": "Hi {{name}},\n\nChecking in — just wanted to pass along a quick legal update in our field.\n\n{{tenantName}} has been seeing shifts regarding {{differentiator}}. \n\nHope your situation resolved smoothly. We're here if needed in the future.\n\n— {{botName}}",
+        "default_fallback": "Hi {{name}}, just checking in. — {{botName}}"
+    }
+}
