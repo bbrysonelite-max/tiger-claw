@@ -44,7 +44,8 @@ tiger-claw/
 │   ├── botpool/                     ← BotFather token pool scripts (MTProto + manual import)
 │   ├── gcp-terraform/               ← GKE, Cloud SQL, Memorystore (Terraform)
 │   └── k8s/                         ← Kubernetes manifests
-├── skill/                           ← Legacy OpenClaw skills (not active in v4)
+├── skills/                          ← Tiger agent skill system (ACTIVE)
+│   └── tiger-capabilities/          ← Skill discovery, vetting, install, flavor profiles
 ├── docker/                          ← Container definitions (legacy + dev compose)
 ├── specs/
 │   ├── tiger-claw/                  ← TIGERCLAW-MASTER-SPEC-v2.md, BLUEPRINT-v3.md, PRD-v3.md
@@ -85,6 +86,7 @@ tiger-claw/
 | Customer Dashboard | Next.js 16 | Post-login channel status, LINE wizard, bot management (GAP 9 — in progress) |
 | Admin Dashboard | TBD (spec in progress) | Fleet management, bot pool, demo provisioning, alert center |
 | Bot Token Pool | `services/pool.ts` + SMS-MAN pipeline | Unassigned Telegram bot tokens. Target: 1,000+ |
+| Skill System | `skills/tiger-capabilities/` | Agents discover, vet, and install capabilities from the OpenClaw ecosystem. Flavor-scoped. |
 
 ### Chat History
 
@@ -255,7 +257,7 @@ They are **superseded**. Do not use them as guidance. The active work is defined
 
 ## What NOT To Do
 
-- Do NOT add tools to `skill/tools/` — that is the legacy OpenClaw path, not active in v4
+- Do NOT confuse `skills/` (active tiger-capabilities system) with `api/src/tools/` (the 19 Gemini function-calling tools). They are separate systems.
 - Do NOT skip registering a new tool in `ai.ts` `toolsMap` — unregistered tools cause infinite loops
 - Do NOT set the scoring threshold to anything other than 80
 - Do NOT store tenant prospect/lead data in PostgreSQL — use the per-tenant `workdir` (SQLite or files)
