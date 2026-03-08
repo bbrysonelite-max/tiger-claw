@@ -271,7 +271,7 @@ async function execute(
   // ── Execute the move ──
   if (targetStatus === "do-not-contact") {
     // Permanent — remove from all sequences and zero out scores
-    removeFromAllSequences(context, lead.id, workdir, logger);
+    await removeFromAllSequences(context, lead.id, workdir, logger);
 
     const msgEn = `${lead.displayName} has been permanently moved to do-not-contact. Removed from all active sequences. Scores zeroed.`;
     const msgTh = `${lead.displayName} ถูกย้ายไปยัง do-not-contact อย่างถาวร ลบออกจากลำดับที่ใช้งานอยู่ทั้งหมด คะแนนถูกรีเซ็ตเป็น 0 แล้ว`;

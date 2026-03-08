@@ -1058,7 +1058,9 @@ async function runHunt(
   mode: "scheduled" | "burst",
   sourceOverride: SourceName[] | undefined,
   limit: number,
-  logger: ToolContext["logger"]
+  logger: ToolContext["logger"],
+  region: string,
+  flavor: string
 ): Promise<{
   discovered: number;
   qualified: number;
@@ -1066,8 +1068,6 @@ async function runHunt(
   below: number;
   sources: string[];
 }> {
-  const region = process.env.REGION ?? "us-en";
-  const flavor = process.env.BOT_FLAVOR ?? "network-marketer";
   const oar: OarType = flavor === "network-marketer" ? "both" : "customer";
 
   // Load ICP
@@ -1186,7 +1186,9 @@ function getFlavorDefaultKeywords(flavor: string): string[] {
 async function handleHunt(
   params: HuntParams,
   workdir: string,
-  logger: ToolContext["logger"]
+  logger: ToolContext["logger"],
+  region: string,
+  flavor: string
 ): Promise<ToolResult> {
   const mode = params.mode ?? "scheduled";
   const limit = params.limit ?? 50;
@@ -1206,7 +1208,7 @@ async function handleHunt(
 
   logger.info("tiger_scout: starting hunt", { mode, limit });
 
-  const result = await runHunt(workdir, mode, sourceOverride, limit, logger);
+  const result = await runHunt(workdir, mode, sourceOverride, limit, logger, region, flavor);
 
   // Update scout state
   const today = new Date().toISOString().slice(0, 10);
@@ -1332,13 +1334,15 @@ async function execute(
 ): Promise<ToolResult> {
   const { workdir, logger } = context;
   const action = params.action as string;
+  const region = (context.config["REGION"] as string) ?? "us-en";
+  const flavor = (context.config["BOT_FLAVOR"] as string) ?? "network-marketer";
 
   logger.info("tiger_scout called", { action });
 
   try {
     switch (action) {
       case "hunt":
-        return await handleHunt(params as unknown as HuntParams, workdir, logger);
+        return await handleHunt(params as unknown as HuntParams, workdir, logger, region, flavor);
 
       case "status":
         return handleStatus(workdir);

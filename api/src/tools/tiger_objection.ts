@@ -773,7 +773,8 @@ interface ClassifyParams {
 function handleClassify(
   params: ClassifyParams,
   workdir: string,
-  logger: ToolContext["logger"]
+  logger: ToolContext["logger"],
+  region: string
 ): ToolResult {
   const onboard = loadOnboard(workdir);
   if (!onboard || onboard.phase !== "complete") {
@@ -781,7 +782,6 @@ function handleClassify(
   }
 
   const flavor = onboard.flavor ?? "network-marketer";
-  const region = onboard.region ?? process.env["REGION"] ?? "us-en";
   const bucket = classifyBucket(params.prospectText, flavor);
   const def = getBucketResponse(bucket, flavor, region);
 
@@ -839,7 +839,8 @@ interface RespondParams {
 function handleRespond(
   params: RespondParams,
   workdir: string,
-  logger: ToolContext["logger"]
+  logger: ToolContext["logger"],
+  region: string
 ): ToolResult {
   const onboard = loadOnboard(workdir);
   if (!onboard || onboard.phase !== "complete") {
@@ -847,7 +848,6 @@ function handleRespond(
   }
 
   const flavor = onboard.flavor ?? "network-marketer";
-  const region = onboard.region ?? process.env["REGION"] ?? "us-en";
   const def = getBucketResponse(params.bucket, flavor, region);
 
   if (!def) {
@@ -893,7 +893,8 @@ interface PatternInterruptParams {
 function handlePatternInterrupt(
   params: PatternInterruptParams,
   workdir: string,
-  logger: ToolContext["logger"]
+  logger: ToolContext["logger"],
+  region: string
 ): ToolResult {
   const onboard = loadOnboard(workdir);
   if (!onboard || onboard.phase !== "complete") {
@@ -901,7 +902,6 @@ function handlePatternInterrupt(
   }
 
   const flavor = onboard.flavor ?? "network-marketer";
-  const region = onboard.region ?? process.env["REGION"] ?? "us-en";
 
   // Prefer regional stories, fall back to default
   const regionalStories = REGIONAL_PATTERN_INTERRUPTS[region]?.[flavor];
@@ -941,10 +941,9 @@ function handlePatternInterrupt(
 // Action: list_buckets
 // ---------------------------------------------------------------------------
 
-function handleListBuckets(workdir: string): ToolResult {
+function handleListBuckets(workdir: string, region: string): ToolResult {
   const onboard = loadOnboard(workdir);
   const flavor = onboard?.flavor ?? "network-marketer";
-  const region = onboard?.region ?? process.env["REGION"] ?? "us-en";
 
   const bucketMaps: Record<string, Record<string, ObjectionResponse>> = {
     "network-marketer": NM_BUCKETS as unknown as Record<string, ObjectionResponse>,
@@ -1023,22 +1022,23 @@ async function execute(
 ): Promise<ToolResult> {
   const { workdir, logger } = context;
   const action = params.action as string;
+  const region = (context.config["REGION"] as string) ?? "us-en";
 
   logger.info("tiger_objection called", { action });
 
   try {
     switch (action) {
       case "classify":
-        return handleClassify(params as unknown as ClassifyParams, workdir, logger);
+        return handleClassify(params as unknown as ClassifyParams, workdir, logger, region);
 
       case "respond":
-        return handleRespond(params as unknown as RespondParams, workdir, logger);
+        return handleRespond(params as unknown as RespondParams, workdir, logger, region);
 
       case "pattern_interrupt":
-        return handlePatternInterrupt(params as unknown as PatternInterruptParams, workdir, logger);
+        return handlePatternInterrupt(params as unknown as PatternInterruptParams, workdir, logger, region);
 
       case "list_buckets":
-        return handleListBuckets(workdir);
+        return handleListBuckets(workdir, region);
 
       case "log":
         return handleLog(params as unknown as LogParams, workdir);
