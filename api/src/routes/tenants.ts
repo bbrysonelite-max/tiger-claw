@@ -20,6 +20,7 @@ import {
   logAdminEvent,
   type TenantStatus,
 } from "../services/db.js";
+import { encryptToken } from "../services/pool.js";
 
 const router = Router();
 
@@ -195,9 +196,17 @@ router.post("/:slug/channels/line", async (req: Request, res: Response) => {
       }
     }
 
+    // Encrypt LINE credentials before storage (AES-256-GCM — same as BYOK keys)
+    const encryptedSecret = channelSecret == null
+      ? channelSecret                  // null or undefined — pass through
+      : encryptToken(channelSecret);
+    const encryptedToken = channelAccessToken == null
+      ? channelAccessToken
+      : encryptToken(channelAccessToken);
+
     await updateTenantChannelConfig(tenant.id, {
-      lineChannelSecret: channelSecret === null ? null : (channelSecret ?? undefined),
-      lineChannelAccessToken: channelAccessToken === null ? null : (channelAccessToken ?? undefined),
+      lineChannelSecret: encryptedSecret,
+      lineChannelAccessToken: encryptedToken,
     });
 
     const adding = channelSecret && channelAccessToken;
