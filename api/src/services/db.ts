@@ -671,3 +671,42 @@ export async function upsertBYOKConfig(data: {
     ]
   );
 }
+
+/** Look up BYOK key status for a tenant (via bot_pool → bot_ai_config). Never returns the raw/encrypted key. */
+export async function getBYOKStatus(tenantId: string): Promise<{
+  configured: boolean;
+  provider: string | null;
+  model: string | null;
+  keyPreview: string | null;
+  connectionType: string | null;
+  updatedAt: string | null;
+}> {
+  try {
+    const result = await getPool().query(
+      `SELECT c.provider, c.model, c.key_preview, c.connection_type, c.updated_at
+       FROM bot_ai_config c
+       JOIN bot_pool b ON b.id = c.bot_id
+       WHERE b.tenant_id = $1 AND b.status = 'assigned'
+       LIMIT 1`,
+      [tenantId],
+    );
+
+    if (!result.rows[0]) {
+      return { configured: false, provider: null, model: null, keyPreview: null, connectionType: null, updatedAt: null };
+    }
+
+    const row = result.rows[0] as Record<string, unknown>;
+    return {
+      configured: true,
+      provider: (row["provider"] as string) ?? null,
+      model: (row["model"] as string) ?? null,
+      keyPreview: (row["key_preview"] as string) ?? null,
+      connectionType: (row["connection_type"] as string) ?? null,
+      updatedAt: row["updated_at"] ? (row["updated_at"] as Date).toISOString() : null,
+    };
+  } catch (err) {
+    console.error("[db] getBYOKStatus error:", err instanceof Error ? err.message : err);
+    return { configured: false, provider: null, model: null, keyPreview: null, connectionType: null, updatedAt: null };
+  }
+}
+

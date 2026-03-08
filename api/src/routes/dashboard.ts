@@ -1,11 +1,12 @@
 // Tiger Claw — Customer Dashboard Route
 // GAP 9: Customer-facing dashboard endpoint
-// GET /dashboard/:slug — returns bot status, usage, subscription info
+// GET /dashboard/:slug — returns bot status, usage, channels, API key status, subscription
 
 import { Router, type Request, type Response } from "express";
 import {
     getTenantBySlug,
     getTenantBotUsername,
+    getBYOKStatus,
 } from "../services/db.js";
 
 const router = Router();
@@ -20,6 +21,11 @@ router.get("/:slug", async (req: Request, res: Response) => {
     }
 
     const botUsername = await getTenantBotUsername(tenant.id);
+    const keyStatus = await getBYOKStatus(tenant.id);
+
+    // Build LINE webhook URL for the 5-step wizard
+    const apiBase = process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000";
+    const lineWebhookUrl = `${apiBase}/webhooks/line/${tenant.id}`;
 
     // Build dashboard data
     const dashboard = {
@@ -40,6 +46,14 @@ router.get("/:slug", async (req: Request, res: Response) => {
             telegramLink: botUsername ? `https://t.me/${botUsername}` : null,
             isLive: tenant.status === "active" || tenant.status === "onboarding",
         },
+        apiKey: {
+            configured: keyStatus?.configured ?? false,
+            provider: keyStatus?.provider ?? null,
+            model: keyStatus?.model ?? null,
+            keyPreview: keyStatus?.keyPreview ?? null,
+            connectionType: keyStatus?.connectionType ?? null,
+            lastUpdated: keyStatus?.updatedAt ?? null,
+        },
         channels: {
             telegram: {
                 enabled: true,
@@ -50,12 +64,16 @@ router.get("/:slug", async (req: Request, res: Response) => {
             },
             line: {
                 configured: !!(tenant.lineChannelSecret || tenant.lineChannelAccessToken),
+                webhookUrl: lineWebhookUrl,
             },
         },
         subscription: {
             plan: "byok_basic",
             status: tenant.status === "active" ? "active" : tenant.status,
         },
+        // URLs for wizard integrations
+        wizardUrl: `/wizard/${tenant.slug}`,
+        channelConfigUrl: `${apiBase}/wizard/${tenant.slug}`,
     };
 
     return res.json(dashboard);
