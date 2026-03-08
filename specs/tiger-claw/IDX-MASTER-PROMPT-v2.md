@@ -238,29 +238,12 @@ gets their Telegram deep link.
 
 ---
 
-### GAP 9 — Customer Dashboard ← START HERE
-**What:** The customer web dashboard at `app.tigerclaw.io`. Post-login. Shows the
-customer their bot status, channel cards, LINE wizard, and pipeline.
-
-**Use the existing assets:**
-- Components: `web-onboarding/src/components/ui/` (52 shadcn/ui components, ready)
-- Types: `web-onboarding/src/types/dashboard.ts`
-- PRD: `specs/tiger-claw/DASHBOARD-PRD.md`
-- Visual reference: `specs/tiger-claw/dashboard-reference.html`
-
-**Minimum viable screens:**
-1. **Bot Status** — Telegram bot username, deep link, last message timestamp, status indicator
-2. **Channel Cards** — Telegram (active), LINE (connect wizard), WhatsApp (coming soon)
-3. **LINE Wizard** — 5-step guided setup with screenshots, 1-click copy, "Ask my agent" button
-4. **API Key Status** — which layer is active, how many messages remaining, add/update key
-
-**Auth:** JWT issued at login, stored in httpOnly cookie. Verify on every API call.
-
-**Done when:** Customer can log in, see their bot, and connect LINE.
+### ✅ GAP 9 — Customer Dashboard — COMPLETE
+**What:** Customer dashboard at `app.tigerclaw.io` — bot status, channel cards, LINE wizard, API key status.
 
 ---
 
-### GAP 3 — Admin Dashboard Wired to Live Data
+### GAP 3 — Admin Dashboard Wired to Live Data ← START HERE
 **What:** `botcraftwrks.ai/dashboard.html` is a working prototype with mocked data.
 Wire every section to the Tiger Claw API.
 

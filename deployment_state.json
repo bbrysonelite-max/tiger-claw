@@ -1,6 +1,14 @@
 {
   "builds": [
     {
+      "tcVersion": "v2026.03.07.9",
+      "builtAt": "2026-03-08T00:30:00.000000Z",
+      "commitHash": "bc3de5b",
+      "gitTagged": false,
+      "gapsCompleted": ["GAP-8", "GAP-1", "GAP-7", "GAP-4", "GAP-2", "GAP-5", "GAP-6", "GAP-9"],
+      "notes": "GAP-9: Customer dashboard — bot status, channel cards, LINE wizard, API key status."
+    },
+    {
       "tcVersion": "v2026.03.07.8",
       "builtAt": "2026-03-07T23:59:00.000000Z",
       "commitHash": "e0402ce",
@@ -57,8 +65,8 @@
     }
   ],
   "tigerClaw": {
-    "current": "v2026.03.07.8",
-    "previous": "v2026.03.07.7"
+    "current": "v2026.03.07.9",
+    "previous": "v2026.03.07.8"
   },
   "gapStatus": {
     "GAP-8": "✅ complete",
@@ -68,8 +76,8 @@
     "GAP-2": "✅ complete",
     "GAP-5": "✅ complete",
     "GAP-6": "✅ complete",
-    "GAP-9": "⏳ next",
-    "GAP-3": "⏳ pending"
+    "GAP-9": "✅ complete",
+    "GAP-3": "⏳ next"
   },
   "buildOrder": "GAP-8 → GAP-1 → GAP-7 → GAP-4 → GAP-2 → GAP-5 → GAP-6 → GAP-9 → GAP-3"
 }
