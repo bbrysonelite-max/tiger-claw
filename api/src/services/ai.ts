@@ -129,13 +129,13 @@ async function resolveGoogleKey(tenantId: string, workdir: string): Promise<stri
                     if (!state.layer2Key) {
                         console.error(`[AI] [ALERT] Tenant ${tenantId} is on Layer 2 but layer2Key is missing from key_state.json.`);
                     }
-                    return state.layer2Key;
+                    return state.layer2Key ? decryptToken(state.layer2Key) : undefined;
 
                 case 3:
                     if (!state.layer3Key) {
                         console.error(`[AI] [ALERT] Tenant ${tenantId} is on Layer 3 but layer3Key is missing from key_state.json.`);
                     }
-                    return state.layer3Key;
+                    return state.layer3Key ? decryptToken(state.layer3Key) : undefined;
 
                 case 4:
                     console.warn(`[AI] [ALERT] Tenant ${tenantId} on Layer 4 (platform emergency key). Operator action required.`);

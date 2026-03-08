@@ -480,124 +480,6 @@ async function validateApiKey(key: string): Promise<{ valid: boolean; error?: st
 }
 
 // ---------------------------------------------------------------------------
-// SecretRef key rotation (ADR-0007)
-//
-// Writes the active key to ~/.openclaw/secrets.json and triggers
-// OpenClaw's secrets.reload RPC. The gateway atomically swaps to the
-// new in-memory snapshot. On failure, the gateway keeps the last-known-good
-// snapshot — no crash, no data loss.
-//
-// Layer rules:
-//   Layer 1/4 (env-var-sourced): write to secrets.json only (best-effort).
-//   Layer 2/3 (tenant keys):     write → reload → poll /readyz.
-// ---------------------------------------------------------------------------
-
-const SECRETS_FILE_PATH = "/root/.openclaw/secrets.json";
-const OPENCLAW_GATEWAY_PORT = parseInt(process.env["OPENCLAW_PORT"] ?? "18789", 10);
-const SECRETS_RELOAD_TIMEOUT_MS = 10_000;
-
-function resolveKeyForLayer(layer: LayerNumber, state: KeyState): string {
-  switch (layer) {
-    case 1: return process.env["PLATFORM_ONBOARDING_KEY"] ?? "";
-    case 2: return state.layer2Key ?? process.env["TENANT_PRIMARY_KEY"] ?? "";
-    case 3: return state.layer3Key ?? process.env["TENANT_FALLBACK_KEY"] ?? "";
-    case 4: return process.env["PLATFORM_EMERGENCY_KEY"] ?? "";
-  }
-}
-
-function writeSecretsFile(key: string): void {
-  const dir = path.dirname(SECRETS_FILE_PATH);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    SECRETS_FILE_PATH,
-    JSON.stringify({ active: { apiKey: key } }, null, 2),
-    "utf8"
-  );
-}
-
-function triggerSecretsReload(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const token = process.env["OPENCLAW_GATEWAY_TOKEN"] ?? "";
-    const body = JSON.stringify({ method: "secrets.reload" });
-    const req = http.request(
-      {
-        hostname: "localhost",
-        port: OPENCLAW_GATEWAY_PORT,
-        path: "/rpc",
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(body),
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        timeout: 5000,
-      },
-      (res) => { resolve(res.statusCode === 200); }
-    );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => { req.destroy(); resolve(false); });
-    req.write(body);
-    req.end();
-  });
-}
-
-function checkReadyz(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const req = http.get(
-      { hostname: "localhost", port: OPENCLAW_GATEWAY_PORT, path: "/readyz", timeout: 5000 },
-      (res) => { resolve(res.statusCode === 200); }
-    );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => { req.destroy(); resolve(false); });
-  });
-}
-
-async function pollReadyz(timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await checkReadyz()) return true;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  return false;
-}
-
-async function rotateViaSecretRef(
-  layer: LayerNumber,
-  state: KeyState,
-  logger: ToolContext["logger"]
-): Promise<void> {
-  const key = resolveKeyForLayer(layer, state);
-  if (!key) {
-    logger.warn("tiger_keys: no key available for SecretRef write", { layer });
-    return;
-  }
-
-  try {
-    writeSecretsFile(key);
-  } catch (err) {
-    logger.error("tiger_keys: failed to write secrets.json", { err: String(err) });
-    return;
-  }
-
-  // Layer 1: never rotated at runtime — write-only best-effort
-  if (layer === 1) return;
-
-  // Layer 2/3/4: full reload + readyz confirmation
-  const reloaded = await triggerSecretsReload();
-  if (!reloaded) {
-    logger.error("tiger_keys: secrets.reload RPC failed — gateway keeps last-known-good key");
-    return;
-  }
-
-  const ready = await pollReadyz(SECRETS_RELOAD_TIMEOUT_MS);
-  if (ready) {
-    state.secretsReloadedAt = new Date().toISOString();
-    logger.info("tiger_keys: SecretRef reload confirmed, /readyz passed");
-  } else {
-    logger.error("tiger_keys: /readyz did not pass within 10s after secrets.reload");
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Rotation — perform a layer switch
 // ---------------------------------------------------------------------------
@@ -625,9 +507,8 @@ async function performRotation(
     });
 
     saveKeyState(workdir, state);
-    // No key rewrite on pause — OpenClaw will reject calls via the skill's
-    // record_message check (tenantPaused: true). The key in openclaw.json
-    // is irrelevant at this point since the agent won't proceed past that check.
+    // No key rotation on pause — ai.ts resolveGoogleKey() returns undefined when
+    // tenantPaused=true, preventing any further Gemini calls.
     notifyAdmin(tenantId, `🔴 Tenant ${tenantId} auto-paused — Emergency key exhausted. Reason: ${reason}`);
 
     return {
@@ -661,9 +542,6 @@ async function performRotation(
   });
 
   saveKeyState(workdir, state);
-
-  // Write key to secrets.json and trigger SecretRef reload (ADR-0007).
-  await rotateViaSecretRef(toLayer, state, logger);
 
   const requiresAdminAlert = toLayer === 3 || toLayer === 4;
   if (requiresAdminAlert) {
@@ -891,11 +769,6 @@ async function handleRestoreKey(
   });
 
   saveKeyState(workdir, state);
-
-  // Write key to secrets.json and trigger SecretRef reload (ADR-0007).
-  if (shouldSwitch) {
-    await rotateViaSecretRef(state.activeLayer, state, logger);
-  }
 
   logger.info("tiger_keys: key restored", {
     restoredLayer,
@@ -1262,7 +1135,7 @@ async function execute(
 }
 
 // ---------------------------------------------------------------------------
-// AgentTool export (OpenClaw interface)
+// Tool export
 // ---------------------------------------------------------------------------
 
 export const tiger_keys = {
