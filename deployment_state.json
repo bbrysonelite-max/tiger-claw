@@ -1,12 +1,28 @@
 {
   "builds": [
     {
+      "tcVersion": "v2026.03.07.7",
+      "builtAt": "2026-03-07T23:30:00.000000Z",
+      "commitHash": "254a721",
+      "gitTagged": false,
+      "gapsCompleted": ["GAP-8", "GAP-1", "GAP-7", "GAP-4", "GAP-2", "GAP-5"],
+      "notes": "Fix .env.example: Google API key format (AIza...), not Anthropic (sk-ant-...). Added GOOGLE_API_KEY, STRIPE_PRICE_MANAGED, STRIPE_PRICE_BYOK, FRONTEND_URL."
+    },
+    {
+      "tcVersion": "v2026.03.07.6",
+      "builtAt": "2026-03-07T23:00:00.000000Z",
+      "commitHash": "e6485dc",
+      "gitTagged": false,
+      "gapsCompleted": ["GAP-8", "GAP-1", "GAP-7", "GAP-4", "GAP-2", "GAP-5"],
+      "notes": "GAP-5: GCP infrastructure deployed — Terraform, Cloud Run, Secret Manager."
+    },
+    {
       "tcVersion": "v2026.03.07.5",
       "builtAt": "2026-03-07T22:30:00.000000Z",
       "commitHash": "11beb6e",
       "gitTagged": false,
       "gapsCompleted": ["GAP-8", "GAP-1", "GAP-7", "GAP-4", "GAP-2"],
-      "notes": "GAP-2: Demo trial endpoint POST /admin/demo — 72h trial bots, no payment."
+      "notes": "GAP-2: Demo trial endpoint POST /admin/demo."
     },
     {
       "tcVersion": "v2026.03.07.4",
@@ -33,8 +49,8 @@
     }
   ],
   "tigerClaw": {
-    "current": "v2026.03.07.5",
-    "previous": "v2026.03.07.4"
+    "current": "v2026.03.07.7",
+    "previous": "v2026.03.07.6"
   },
   "gapStatus": {
     "GAP-8": "✅ complete",
@@ -42,8 +58,8 @@
     "GAP-7": "✅ complete",
     "GAP-4": "✅ complete",
     "GAP-2": "✅ complete",
-    "GAP-5": "⏳ next",
-    "GAP-6": "⏳ pending",
+    "GAP-5": "✅ complete",
+    "GAP-6": "⏳ next",
     "GAP-9": "⏳ pending",
     "GAP-3": "⏳ pending"
   },

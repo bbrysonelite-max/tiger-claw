@@ -16,7 +16,7 @@ Tiger Claw is a **multi-tenant AI sales and recruiting engine** delivered as a S
 
 **Architecture:** Stateless multi-tenancy. One API process handles all tenants. Tenant context is resolved per-request via slug/ID. No per-tenant containers.
 
-**Current version:** `v2026.03.07.5` (see `deployment_state.json`)
+**Current version:** `v2026.03.07.7` (see `deployment_state.json`)
 
 ---
 
@@ -242,15 +242,15 @@ They are **superseded**. Do not use them as guidance. The active work is defined
 
 | GAP | Description | Status |
 |-----|-------------|--------|
-| GAP 1 | Config-driven flavor system (JSON files per flavor, zero code changes) | Pending |
-| GAP 2 | `POST /admin/demo` — 72-hour trial tenant for demos, no payment | Pending |
-| GAP 3 | Bot pool scale to 1,000 tokens (SMS-MAN + MTProto pipeline, admin dashboard UI) | Pending |
-| GAP 4 | Wire Stripe into web wizard — real checkout, BYOK key collected + validated | Pending |
-| GAP 5 | GCP infrastructure — `terraform apply`, secrets loaded, API deployed to Cloud Run | Pending |
-| GAP 6 | Bot token auto-creation pipeline (complete MTProto → BotFather → pool import) | Pending |
-| GAP 7 | Server-side BYOK key validation before storage + loud error on failure | Pending |
-| GAP 8 | Database migrations system (`migrations/` folder, versioned SQL, auto-applied at startup) | Pending |
-| GAP 9 | Customer dashboard UI — channel cards, LINE wizard, bot status (Next.js) | Pending |
+| GAP 8 | Database migrations system (`migrations/` folder, versioned SQL, auto-applied at startup) | ✅ Complete |
+| GAP 1 | Config-driven flavor system (JSON files per flavor, zero code changes) | ✅ Complete |
+| GAP 7 | Server-side BYOK key validation before storage + loud error on failure | ✅ Complete |
+| GAP 4 | Wire Stripe into web wizard — real checkout, BYOK key collected + validated | ✅ Complete |
+| GAP 2 | `POST /admin/demo` — 72-hour trial tenant for demos, no payment | ✅ Complete |
+| GAP 5 | GCP infrastructure — `terraform apply`, secrets loaded, API deployed to Cloud Run | ✅ Complete |
+| GAP 6 | Bot token auto-creation pipeline (complete MTProto → BotFather → pool import) | ⏳ Next |
+| GAP 9 | Customer dashboard UI — channel cards, LINE wizard, bot status (Next.js) | ⏳ Pending |
+| GAP 3 | Admin dashboard wired to live data (`GET /admin/fleet`, `/admin/costs`, `/hive/patterns`) | ⏳ Pending |
 | GAP 10 | CLAUDE.md full rewrite for Gemini architecture | ✅ Done (this file) |
 
 ---

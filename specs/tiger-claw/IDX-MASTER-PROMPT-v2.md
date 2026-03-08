@@ -228,25 +228,12 @@ gets their Telegram deep link.
 
 ---
 
-### GAP 5 — GCP Infrastructure Deploy ← START HERE
-**What:** The Terraform and Cloud Run scripts are written. They have never been applied.
-The infrastructure does not exist yet.
-
-**Steps (run in IDX terminal):**
-1. `gcloud auth login` — authenticate
-2. Fill in `api/.env` with all required values (see `api/.env.example`)
-3. `./ops/setup-secrets.sh` — loads secrets into GCP Secret Manager
-4. `cd ops/gcp-terraform && terraform init && terraform apply`
-5. `cd api && npm run build`
-6. `./ops/deploy-cloudrun.sh` — builds Docker image, deploys to Cloud Run
-7. Register Telegram webhook: `curl -X POST https://api.telegram.org/bot{TOKEN}/setWebhook?url=https://{CLOUD_RUN_URL}/webhooks/telegram/{tenantId}`
-8. Verify: `curl https://{CLOUD_RUN_URL}/health`
-
-**Done when:** `GET /health` returns 200 from the live Cloud Run URL.
+### ✅ GAP 5 — GCP Infrastructure Deploy — COMPLETE
+**What:** Terraform applied, secrets loaded into GCP Secret Manager, API deployed to Cloud Run.
 
 ---
 
-### GAP 6 — Bot Token Pipeline
+### GAP 6 — Bot Token Pipeline ← START HERE
 **What:** Complete the SMS-MAN → Telegram account → BotFather → pool import pipeline.
 Target: 1,000 tokens in `bot_pool`.
 
