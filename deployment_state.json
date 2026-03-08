@@ -1,21 +1,35 @@
 {
   "builds": [
     {
+      "tcVersion": "v2026.03.07.2",
+      "builtAt": "2026-03-07T21:00:00.000000Z",
+      "commitHash": "8057bce",
+      "gitTagged": false,
+      "gapsCompleted": ["GAP-8", "GAP-1"],
+      "notes": "GAP-8: DB migrations system. GAP-1: 11 config-driven flavor JSON files."
+    },
+    {
       "tcVersion": "v2026.03.04.1",
-      "ocVersion": "2026.3.2",
-      "imageTag": "ghcr.io/bbrysonelite-max/tiger-claw:v2026.03.04.1-oc2026.3.2",
       "builtAt": "2026-03-05T04:25:20.581650Z",
       "commitHash": "080afbc",
-      "gitTagged": true
+      "gitTagged": true,
+      "notes": "Initial Gemini migration build."
     }
   ],
   "tigerClaw": {
-    "current": "v2026.03.04.1",
-    "previous": ""
+    "current": "v2026.03.07.2",
+    "previous": "v2026.03.04.1"
   },
-  "openClaw": {
-    "current": "2026.3.2",
-    "previous": ""
+  "gapStatus": {
+    "GAP-8": "✅ complete",
+    "GAP-1": "✅ complete",
+    "GAP-7": "⏳ next",
+    "GAP-4": "⏳ pending",
+    "GAP-2": "⏳ pending",
+    "GAP-5": "⏳ pending",
+    "GAP-6": "⏳ pending",
+    "GAP-9": "⏳ pending",
+    "GAP-3": "⏳ pending"
   },
-  "imageTag": "ghcr.io/bbrysonelite-max/tiger-claw:v2026.03.04.1-oc2026.3.2"
+  "buildOrder": "GAP-8 → GAP-1 → GAP-7 → GAP-4 → GAP-2 → GAP-5 → GAP-6 → GAP-9 → GAP-3"
 }

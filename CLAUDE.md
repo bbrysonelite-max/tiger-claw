@@ -16,7 +16,7 @@ Tiger Claw is a **multi-tenant AI sales and recruiting engine** delivered as a S
 
 **Architecture:** Stateless multi-tenancy. One API process handles all tenants. Tenant context is resolved per-request via slug/ID. No per-tenant containers.
 
-**Current version:** `v2026.03.04.1` (see `deployment_state.json`)
+**Current version:** `v2026.03.07.2` (see `deployment_state.json`)
 
 ---
 
