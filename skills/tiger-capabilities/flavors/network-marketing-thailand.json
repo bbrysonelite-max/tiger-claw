@@ -1,0 +1,39 @@
+{
+  "name": "network-marketing-thailand",
+  "version": "1.0.0",
+  "description": "Thailand market overlay — LINE priority, Thai PDPA compliance, Southeast Asia platforms",
+  "priorities": {
+    "boost": [
+      "line", "line-messaging", "line-bot", "line-notify",
+      "thai", "thailand", "bangkok", "southeast-asia", "asean",
+      "lazada", "shopee", "grab",
+      "wechat", "kakao",
+      "translation", "translate", "multilingual",
+      "pdpa", "privacy", "consent", "compliance"
+    ],
+    "suppress": [
+      "twitter", "x-api", "reddit",
+      "slack", "discord",
+      "venmo", "cashapp", "zelle"
+    ]
+  },
+  "compliance": {
+    "regions": ["TH", "SEA"],
+    "rules": [
+      "Thai PDPA: Obtain explicit consent before collecting personal data",
+      "Thai PDPA: Provide clear privacy notice in Thai language",
+      "Thai PDPA: Allow data subjects to withdraw consent at any time",
+      "Thai PDPA: Appoint Data Protection Officer if processing sensitive data",
+      "Thai PDPA: Cross-border transfer requires adequate protection",
+      "Thai Computer Crime Act: No unauthorized access to computer systems",
+      "Thai Direct Sales Act: Register with Office of Consumer Protection Board",
+      "Thai Direct Sales Act: 7-day cooling-off period for consumers",
+      "No messaging before 8am or after 8pm local time"
+    ]
+  },
+  "channels": {
+    "primary": ["line", "whatsapp", "email"],
+    "secondary": ["facebook", "instagram", "telegram"]
+  },
+  "aggression": "high"
+}

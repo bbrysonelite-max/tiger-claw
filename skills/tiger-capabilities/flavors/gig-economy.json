@@ -1,0 +1,38 @@
+{
+  "name": "gig-economy",
+  "version": "1.0.0",
+  "description": "Gig workers and freelancers — platform integrations, scheduling, client communication",
+  "priorities": {
+    "boost": [
+      "freelance", "gig", "contractor", "client",
+      "upwork", "fiverr", "toptal", "freelancer",
+      "invoice", "payment", "stripe", "paypal",
+      "scheduling", "calendar", "booking", "appointment",
+      "proposal", "pitch", "portfolio", "resume",
+      "project", "task", "kanban", "trello", "asana",
+      "time-tracking", "timesheet", "hours",
+      "email", "messaging", "communication",
+      "contract", "agreement", "scope",
+      "review", "testimonial", "rating"
+    ],
+    "suppress": [
+      "crypto", "nft", "defi", "blockchain",
+      "gaming", "steam", "twitch",
+      "iot", "smart-home",
+      "mlm", "downline", "upline"
+    ]
+  },
+  "compliance": {
+    "regions": ["global"],
+    "rules": [
+      "Respect platform terms of service",
+      "No fake reviews or testimonials",
+      "Transparent pricing in all proposals"
+    ]
+  },
+  "channels": {
+    "primary": ["email", "linkedin", "whatsapp"],
+    "secondary": ["telegram", "slack"]
+  },
+  "aggression": "medium"
+}

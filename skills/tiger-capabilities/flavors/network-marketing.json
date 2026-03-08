@@ -1,0 +1,42 @@
+{
+  "name": "network-marketing",
+  "version": "1.0.0",
+  "description": "Mission profile for network marketing distributors — prospecting, messaging, CRM, lead nurture",
+  "priorities": {
+    "boost": [
+      "prospecting", "prospect", "lead-gen", "lead", "crm", "contact",
+      "messaging", "message", "whatsapp", "telegram", "line", "sms",
+      "social-media", "linkedin", "facebook", "instagram",
+      "outreach", "nurture", "follow-up", "followup", "drip",
+      "script", "template", "email", "voice", "call",
+      "calendar", "scheduling", "appointment", "booking",
+      "pipeline", "funnel", "conversion", "engagement",
+      "profile", "enrichment", "scraper", "search",
+      "analytics", "dashboard", "report", "tracker",
+      "automation", "workflow", "sequence", "campaign",
+      "referral", "network", "team", "downline", "upline",
+      "training", "onboarding", "presentation", "pitch"
+    ],
+    "suppress": [
+      "crypto", "nft", "defi", "blockchain", "solana", "ethereum", "wallet",
+      "gaming", "steam", "twitch", "minecraft", "roblox",
+      "iot", "smart-home", "hue", "sonos", "arduino", "raspberry",
+      "devops", "kubernetes", "docker", "terraform", "ansible",
+      "compiler", "kernel", "firmware", "embedded"
+    ]
+  },
+  "compliance": {
+    "regions": ["global"],
+    "rules": [
+      "No income claims or earnings guarantees",
+      "No spam or unsolicited bulk messaging",
+      "Respect platform terms of service",
+      "Include opt-out mechanism in all outreach"
+    ]
+  },
+  "channels": {
+    "primary": ["linkedin", "whatsapp", "email", "sms"],
+    "secondary": ["facebook", "telegram", "instagram"]
+  },
+  "aggression": "high"
+}

@@ -1,0 +1,38 @@
+{
+  "name": "real-estate",
+  "version": "1.0.0",
+  "description": "Real estate agents — lead gen, property data, scheduling, local search",
+  "priorities": {
+    "boost": [
+      "real-estate", "property", "listing", "mls", "zillow", "redfin",
+      "lead-gen", "lead", "prospect", "buyer", "seller",
+      "scheduling", "calendar", "appointment", "showing",
+      "crm", "contact", "follow-up", "nurture", "drip",
+      "email", "sms", "call", "voicemail",
+      "map", "location", "neighborhood", "local",
+      "mortgage", "loan", "financing", "closing",
+      "document", "contract", "esign", "docusign",
+      "photo", "virtual-tour", "staging", "video",
+      "market-analysis", "comps", "valuation", "appraisal"
+    ],
+    "suppress": [
+      "crypto", "nft", "defi", "blockchain",
+      "gaming", "steam", "twitch",
+      "iot", "smart-home",
+      "devops", "kubernetes", "docker"
+    ]
+  },
+  "compliance": {
+    "regions": ["global"],
+    "rules": [
+      "Fair Housing Act compliance required",
+      "No discriminatory targeting in outreach",
+      "Include license number in communications where required"
+    ]
+  },
+  "channels": {
+    "primary": ["email", "sms", "linkedin"],
+    "secondary": ["facebook", "instagram", "whatsapp"]
+  },
+  "aggression": "medium"
+}
