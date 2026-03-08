@@ -307,10 +307,23 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
 - 11 flavors exist. Config-driven. New flavor = new JSON file, zero code changes.
 
 ### Sales / Provisioning
+- Everything auto-provisions. There is no manual provisioning.
 - Stripe is primary self-serve channel (website wizard → Stripe Checkout → provision).
-- Stan Store and other manual sales use POST /admin/provision/manual (operator-triggered).
-- Every signup webhook triggers provisioning AND customer care email sequence.
+- Stan Store integrates with Stripe — same webhook, same auto-provisioning path.
+- Every signup triggers provisioning AND customer care email sequence automatically.
+- ONE exception: POST /admin/demo — creates a 72-hour trial tenant for demos. No payment.
+  Assigns a bot from pool, activates Layer 1 key, auto-suspends when Layer 1 expires.
 - "Tiger Credits" connection type is deleted. Only: byok | managed.
+
+### Error Handling (Non-Negotiable Principle)
+- NO silent failures. Ever.
+- Dead agents must alert the operator (admin bot / dashboard) AND notify the customer.
+- Key failures are loud: customer sees a clear message, operator gets an alert.
+- Webhook failures are logged, alerted, and retried with exponential backoff.
+- Tool failures are logged with full context. No swallowed errors.
+- BYOK keys are validated before storage. A bad key never reaches the bot.
+- The admin dashboard surfaces all failure states in real time.
+- "If something is going to break, it breaks loud." — Operator directive, 2026-03-07.
 
 ### Channels
 - Telegram is the DEFAULT. Auto-provisioned from bot_pool. Zero steps for customer.
