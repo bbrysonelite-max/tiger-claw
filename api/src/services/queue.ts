@@ -30,7 +30,7 @@ export interface ProvisionJobData {
     region: string;
     language: string;
     preferredChannel: string;
-    botToken: string;
+    botToken?: string; // optional — provisioner assigns from pool if not provided
     timezone?: string;
 }
 

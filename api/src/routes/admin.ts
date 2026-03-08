@@ -525,23 +525,21 @@ async function triggerContainerWebhook(
   _skill: string,
   _payload: unknown
 ): Promise<boolean> {
-  // The container's OpenClaw agent doesn't expose a direct skill-call webhook
-  // in the current architecture. Instead, cron jobs inside the container handle
-  // scheduled actions. For manual report triggering, we send a Telegram message
-  // to the bot's admin context if available — the agent then invokes tiger_briefing.
-  //
-  // This is a lightweight approach consistent with the spec's "conversational interface"
-  // principle. A future iteration could add a /tiger-claw/run-skill internal endpoint.
-  if (!tenant.botToken) return false;
-
+  // BUG FIX: previous implementation called bot.getUpdates() (polling) which conflicts
+  // with webhook mode — Telegram rejects polling when a webhook is registered.
+  // Correct approach: enqueue a daily_scout routine via the routine queue.
   try {
-    const bot = new TelegramBot(tenant.botToken);
-    const updates = await bot.getUpdates({ limit: 1, timeout: 1 });
-    const chatId = updates[0]?.message?.chat?.id;
-    if (!chatId) return false;
-    await bot.sendMessage(chatId, "🐯 Generate daily briefing now.");
+    const { routineQueue } = await import("../services/queue.js");
+    await routineQueue.add('daily_scout', {
+      tenantId: tenant.id,
+      routineType: 'daily_scout',
+    }, {
+      jobId: `manual_scout_${tenant.id}_${Date.now()}`,
+      removeOnComplete: true,
+    });
     return true;
-  } catch {
+  } catch (err) {
+    console.error(`[admin] Failed to enqueue manual report for tenant ${tenant.id}:`, err);
     return false;
   }
 }
