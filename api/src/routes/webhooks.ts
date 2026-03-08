@@ -67,11 +67,12 @@ router.post("/stripe", async (req: Request, res: Response) => {
   // Extract provisioning params from session
   const slug = meta["slug"] ?? slugify(customer?.name ?? "tenant");
   const name = customer?.name ?? meta["name"] ?? slug;
-  const email = customer?.email ?? undefined;
+  // BUG FIX: email can be undefined — never use non-null assertion downstream
+  const email = customer?.email ?? `${slug}@noemail.tigerclaw.io`;
   const language = ((customer as any)?.preferred_locales?.[0] ?? meta["language"] ?? "en").split("-")[0] ?? "en";
   const flavor = meta["flavor"] ?? "network-marketer";
   const region = meta["region"] ?? (language === "th" ? "th-th" : "us-en");
-  const botToken = meta["bot_token"];
+  // BUG FIX: bot token is never passed through Stripe metadata — assigned from pool during provisioning
   const timezone = meta["timezone"] ?? "UTC";
   const preferredChannel = meta["channel"] ?? "telegram";
 
@@ -84,33 +85,25 @@ router.post("/stripe", async (req: Request, res: Response) => {
   setImmediate(async () => {
     try {
       // 1. Create User
-      const userId = await createBYOKUser(email!, name, typeof session.customer === "string" ? session.customer : undefined);
+      const userId = await createBYOKUser(email, name, typeof session.customer === "string" ? session.customer : undefined);
 
-      // 2. Extract BYOK Config / Keys from Stripe Session
-      let finalKeyToStore: string | null = null;
-      let finalKeyPreview: string | null = null;
-      let finalProvider = meta["aiProvider"];
-      let finalModel = meta["aiModel"];
+      // 2. BYOK key was validated and stored in DB during wizard Step 3 (POST /wizard/validate-key).
+      //    It is identified by meta["botId"] if the wizard pre-created the bot record.
+      //    LOCKED DECISION: Raw API keys are NEVER passed through Stripe metadata.
+      const finalProvider = meta["aiProvider"] ?? "google";
+      const finalModel = meta["aiModel"] ?? "gemini-2.5-flash";
 
-      // If bypassing stripe keys and passing them over direct API (production mode)
-      // Usually webhook shouldn't have raw keys, but for MVP validation we'll fall back safely
-      if (meta["hasAiKey"] === "true" && meta["rawKey"]) {
-        const { encryptToken } = await import("../services/pool.js");
-        finalKeyToStore = encryptToken(meta["rawKey"]);
-        finalKeyPreview = meta["rawKey"].slice(0, 8) + "...";
-      }
-
-      // 3. Create Bot Record
+      // 3. Create Bot Record (or link to pre-created record from wizard)
       const botId = await createBYOKBot(userId, meta["botName"] ?? name, flavor, "deploying");
 
-      // 4. Create AI Config
+      // 4. Create AI Config — key already stored in DB from wizard Step 3; no key data here
       await createBYOKConfig({
         botId,
         connectionType: meta["connectionType"] ?? "managed",
         provider: finalProvider,
         model: finalModel,
-        encryptedKey: finalKeyToStore ?? undefined,
-        keyPreview: finalKeyPreview ?? undefined
+        encryptedKey: undefined,
+        keyPreview: undefined,
       });
 
       // 5. Create Subscription
@@ -123,7 +116,7 @@ router.post("/stripe", async (req: Request, res: Response) => {
         });
       }
 
-      // 6. trigger Kubernetes provisioning
+      // 6. Enqueue provisioning job — bot token assigned from pool inside provisioner
       await provisionQueue.add('tenant-provisioning', {
         userId,
         botId,
@@ -134,14 +127,16 @@ router.post("/stripe", async (req: Request, res: Response) => {
         region,
         language,
         preferredChannel,
-        botToken,
         timezone,
       });
 
       console.log(`[webhooks] Pushed provisioning job to BullMQ for ${slug}`);
     } catch (err) {
-      console.error("[webhooks] Unexpected provisioning error:", err);
-      // Wait to alert
+      // BUG FIX: was silently logged — now loud with admin alert
+      console.error("[webhooks] [ALERT] Provisioning setup failed for session:", session.id, err);
+      await sendAdminAlert(
+        `❌ Stripe webhook provisioning FAILED\nSession: ${session.id}\nCustomer: ${name} (${email})\nError: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   });
 });

@@ -131,9 +131,13 @@ export const telegramWorker = new Worker(
             // Extract the message text and chat id
             if (payload.message && payload.message.chat) {
                 const chatId = payload.message.chat.id;
-                const text = payload.message.text ?? "";
+                const text = (payload.message.text ?? "").trim();
 
-                console.log(`[Worker] Received message from ${chatId}: ${text}`);
+                // BUG FIX: do not waste an API call on empty/non-text messages
+                if (!text) {
+                    console.log(`[Worker] Skipping non-text message from chat ${chatId} for tenant ${tenantId}`);
+                    return { success: true, skipped: true };
+                }
 
                 // Delegate to the Stateless AI engine
                 const { processTelegramMessage } = await import('./ai.js');
@@ -205,17 +209,26 @@ export const cronWorker = new Worker(
             // Fetch all active tenants
             const { rows: tenants } = await pool.query("SELECT id FROM tenants WHERE status = 'active'");
 
-            // In a production scenario, we evaluate the last_scout_at timestamp here
-            // For now, push the payload safely to the routineQueue for execution
+            const nowHour = new Date().getUTCHours();
+            const today = new Date().toISOString().split('T')[0];
+
             for (const tenant of tenants) {
-                // We use deduplication IDs so BullMQ prevents duplicate routines running simultaneously
+                // Nurture check — runs every cron cycle (dedup prevents parallel runs)
                 await routineQueue.add('nurture_check', {
                     tenantId: tenant.id,
-                    routineType: 'nurture_check'
+                    routineType: 'nurture_check',
                 }, { jobId: `nurture_${tenant.id}`, removeOnComplete: true });
+
+                // BUG FIX: daily_scout was never scheduled — runs once per day at 7 AM UTC
+                if (nowHour === 7) {
+                    await routineQueue.add('daily_scout', {
+                        tenantId: tenant.id,
+                        routineType: 'daily_scout',
+                    }, { jobId: `scout_${tenant.id}_${today}`, removeOnComplete: true });
+                }
             }
 
-            console.log(`[Cron] Enqueued routine checks for ${tenants.length} active tenants.`);
+            console.log(`[Cron] Enqueued routine checks for ${tenants.length} active tenants (hour: ${nowHour} UTC).`);
         } catch (err) {
             console.error(`[Cron] Heartbeat check failed:`, err);
             throw err;
