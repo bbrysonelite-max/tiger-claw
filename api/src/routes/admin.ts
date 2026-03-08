@@ -19,6 +19,7 @@ import TelegramBot from "node-telegram-bot-api";
 import {
   listTenants,
   getTenant,
+  getTenantBySlug,
   getTenantBotUsername,
   logAdminEvent,
   setCanaryGroup,
@@ -45,6 +46,7 @@ import {
   retireBot,
   getPoolStatus,
   getBotPoolEntryByUsername,
+  encryptToken,
 } from "../services/pool.js";
 
 const router = Router();
@@ -512,12 +514,11 @@ function tenantSummary(t: Tenant) {
 }
 
 async function resolveTenant(idOrSlug: string): Promise<Tenant | null> {
-  // Accept both UUID and slug
+  // Accept both UUID and slug — use targeted queries, not full table scan
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(idOrSlug)) {
     return getTenant(idOrSlug);
   }
-  const tenants = await listTenants();
-  return tenants.find((t) => t.slug === idOrSlug) ?? null;
+  return getTenantBySlug(idOrSlug);
 }
 
 async function triggerContainerWebhook(
@@ -587,13 +588,14 @@ router.get("/pool/health", async (_req: Request, res: Response) => {
 });
 
 // POST /admin/pool/add — simple token insert (no Telegram validation)
+// Token is encrypted via AES-256-GCM before storage (Locked Decision #9).
 router.post("/pool/add", async (req: Request, res: Response) => {
   const { botToken, botUsername } = req.body as { botToken?: string; botUsername?: string };
   if (!botToken || !botUsername) {
     return res.status(400).json({ error: "botToken and botUsername are required." });
   }
   try {
-    await addTokenToPool(botToken, botUsername);
+    await addTokenToPool(encryptToken(botToken), botUsername);
     return res.json({ ok: true, botUsername });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
