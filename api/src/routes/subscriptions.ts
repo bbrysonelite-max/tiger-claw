@@ -15,12 +15,11 @@ router.post("/checkout", async (req: Request, res: Response) => {
             return res.json({ url: "http://localhost:3000/success?mock=true" });
         }
 
-        // Determine price id (dummy pricing for BYOK blueprint)
-        // TIGERCLAW-BLUEPRINT states $97/mo for Tiger Credits, $47/mo for BYOK. 
-        // In production we would map these to real Stripe Price IDs.
-        const priceId = connectionType === "tiger_credits"
-            ? process.env["STRIPE_PRICE_TIGER"]
-            : process.env["STRIPE_PRICE_BYOK"];
+        // Determine price id based on connection type.
+        // managed = platform-managed 4-layer key system. byok = customer's own key.
+        const priceId = connectionType === "byok"
+            ? process.env["STRIPE_PRICE_BYOK"]
+            : process.env["STRIPE_PRICE_MANAGED"];
 
         if (!priceId) {
             console.warn("[subscriptions] Missing STRIPE_PRICE_ env vars. Returning mock success.");

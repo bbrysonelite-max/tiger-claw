@@ -106,7 +106,7 @@ router.post("/stripe", async (req: Request, res: Response) => {
       // 4. Create AI Config
       await createBYOKConfig({
         botId,
-        connectionType: meta["connectionType"] ?? "tiger_credits",
+        connectionType: meta["connectionType"] ?? "managed",
         provider: finalProvider,
         model: finalModel,
         encryptedKey: finalKeyToStore ?? undefined,
