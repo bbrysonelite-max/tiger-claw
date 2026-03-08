@@ -153,6 +153,14 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
   return result.rows[0] ? rowToTenant(result.rows[0]) : null;
 }
 
+export async function getTenantByEmail(email: string): Promise<Tenant | null> {
+  const result = await getPool().query(
+    "SELECT * FROM tenants WHERE email = $1 ORDER BY created_at DESC LIMIT 1",
+    [email]
+  );
+  return result.rows[0] ? rowToTenant(result.rows[0]) : null;
+}
+
 export async function listTenants(status?: TenantStatus): Promise<Tenant[]> {
   const result = status
     ? await getPool().query("SELECT * FROM tenants WHERE status = $1 ORDER BY created_at DESC", [status])

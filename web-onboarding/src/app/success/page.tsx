@@ -13,6 +13,7 @@ function SuccessContent() {
                         nicheName: "",
                         botName: "",
                         yourName: "",
+                        email: "",
                         connectionType: "byok",
                         aiProvider: "google",
                         apiKey: "",

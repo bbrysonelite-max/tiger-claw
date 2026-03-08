@@ -9,8 +9,10 @@
 //   POST /wizard/:slug/save  — save channel config changes
 
 import { Router, type Request, type Response } from "express";
+import Stripe from "stripe";
 import {
   getTenantBySlug,
+  getTenantByEmail,
   getTenantBotUsername,
   updateTenantChannelConfig,
   upsertBYOKConfig,
@@ -18,6 +20,55 @@ import {
 import { encryptToken } from "../services/pool.js";
 
 const router = Router();
+
+const stripe = process.env["STRIPE_SECRET_KEY"]
+  ? new Stripe(process.env["STRIPE_SECRET_KEY"])
+  : null;
+
+// ── GET /wizard/status ───────────────────────────────────────────────────────
+// Polled by PostPaymentSuccess after Stripe redirect.
+// Returns provisioning status so the UI can show "live" when the bot is ready.
+
+router.get("/status", async (req: Request, res: Response) => {
+  const sessionId = req.query["session_id"] as string | undefined;
+  if (!sessionId) {
+    return res.status(400).json({ error: "session_id is required" });
+  }
+
+  // Retrieve session from Stripe to get the customer's email
+  if (!stripe) {
+    return res.status(503).json({ error: "Stripe not configured" });
+  }
+
+  let customerEmail: string | null = null;
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    customerEmail = session.customer_details?.email ?? null;
+  } catch (err) {
+    console.error("[wizard] Failed to retrieve Stripe session:", err);
+    return res.status(400).json({ error: "Invalid session_id" });
+  }
+
+  if (!customerEmail) {
+    return res.json({ status: "pending", botUsername: null, telegramLink: null });
+  }
+
+  // Look up tenant by email
+  const tenant = await getTenantByEmail(customerEmail);
+  if (!tenant || tenant.status === "pending") {
+    return res.json({ status: "pending", botUsername: null, telegramLink: null });
+  }
+
+  const botUsername = await getTenantBotUsername(tenant.id);
+  const isLive = tenant.status === "active" || tenant.status === "onboarding";
+
+  return res.json({
+    status: isLive ? "live" : "pending",
+    botUsername: botUsername ?? null,
+    telegramLink: botUsername ? `https://t.me/${botUsername}` : null,
+    tenantSlug: tenant.slug,
+  });
+});
 
 // ── POST /wizard/validate-key ────────────────────────────────────────────────
 // GAP 7 — Server-side BYOK key validation
