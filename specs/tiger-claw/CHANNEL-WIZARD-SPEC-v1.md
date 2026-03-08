@@ -1,6 +1,6 @@
 # Tiger Claw — Channel Wizard Spec v1
-# Authored: 2026-03-03 (Birdie session), committed 2026-03-07
-# Status: APPROVED — implement next after web wizard Stripe gap is closed
+# Status: APPROVED
+# Aligns with: TIGERCLAW-MASTER-SPEC-v2.md, PHASE-3.md
 
 ---
 
@@ -8,7 +8,8 @@
 
 UX must be simple enough that an 8-year-old can complete it.
 Hand-holding all the way. No assumed technical knowledge.
-Inline screenshots, 1-click copy buttons, and an "Ask my agent" escape hatch at every step.
+Inline screenshots, 1-click copy buttons, and an "Ask my agent"
+escape hatch at every step.
 
 ---
 
@@ -16,141 +17,130 @@ Inline screenshots, 1-click copy buttons, and an "Ask my agent" escape hatch at 
 
 | Channel | Status | Notes |
 |---|---|---|
-| WhatsApp | ✅ LIVE — no steps required | Pre-provisioned from Telnyx number pool. Auto-assigned at signup. |
-| Telegram | Optional — guided wizard | Customer creates bot via BotFather with our step-by-step help |
-| LINE | Optional — guided wizard | Customer creates LINE Messaging API channel with our help |
+| Telegram | ✅ LIVE — no steps required | Pre-assigned from bot_pool at provisioning. Webhook registered automatically. |
+| LINE | Optional — guided wizard | Thailand-market priority. Guided setup with screenshots and test connection. |
+| WhatsApp | Optional — guided wizard | Via Baileys. Future priority. |
 
 ---
 
-## WhatsApp — Heavy Lift Once, Easy Forever
+## Telegram — Default Channel (Zero Steps)
 
-### Tiger Claw Internal Setup (one-time, operator does this)
+Every tenant receives a Telegram bot automatically when provisioned.
+The bot is assigned from the platform `bot_pool`, the webhook is registered
+to `https://api.tigerclaw.io/webhooks/telegram/{tenantId}`, and the agent
+is live immediately.
 
-1. Complete Meta Business verification for Tiger Claw (the platform, not per-customer)
-2. Register a WABA (WhatsApp Business Account) under Tiger Claw
-3. Set up Telnyx as BSP (Business Service Provider)
-4. Pre-provision a pool of WhatsApp numbers via Telnyx API
-5. Pre-load approved message templates
-6. Build admin UI: operator can assign a number to a new customer in one click
-
-### Customer Experience (zero steps)
-
-- Customer completes signup → WhatsApp number auto-assigned from pool
-- Dashboard shows "WhatsApp ✅ Ready" badge immediately
-- Messaging, automations, and analytics work from minute one
-- Customer never touches Meta, Telnyx, or any configuration
-
-### Engineering Requirements
-
-- `services/whatsapp.ts` — Telnyx API client: number pool management, template management, health monitoring
-- `routes/whatsapp.ts` — webhook receiver for inbound WhatsApp messages
-- `services/provisioner.ts` — extend `provisionTenant()` to auto-assign WhatsApp number from pool
-- Admin UI: number pool status dashboard, manual reassignment
-- Health monitoring: 24h message windows, template approval status, error alerts
-- Database: `whatsapp_pool` table (number, waba_id, status, tenant_id, assigned_at)
+The customer sees their bot username (e.g. `@Tiger_Theera_bot`) on the
+dashboard with a "Start chatting" deep link. Nothing to configure.
 
 ---
 
-## LINE — Optional, Guided Wizard (Thailand market priority)
+## LINE — Optional, Guided Wizard (Thailand Market Priority)
 
 ### Why
+Thailand customers expect LINE as their primary channel.
 
-Thailand customers expect LINE as the primary channel. It must be available and simple.
+### Wizard Flow
 
-### Wizard Flow (tab in channel settings modal)
-
-**Step 1** — "Click this link → LINE Developers" (button auto-opens developers.line.biz)
+**Step 1** — Button: "Open LINE Developers" (auto-opens developers.line.biz in new tab)
 
 **Step 2** — Checklist with inline screenshots:
-- Create Provider (e.g. "My Tiger Claw Agent")
-- Create Messaging API Channel
+- Create a Provider (e.g. "My Tiger Claw Agent")
+- Create a Messaging API Channel under that Provider
 
-**Step 3** — Three input boxes:
-- Channel ID (with copy-ready example + screenshot)
-- Channel Secret (with inline help tooltip)
-- Channel Access Token (with "click here to generate" script link)
+**Step 3** — Three input fields, each with 1-click copy example and screenshot:
+- Channel ID
+- Channel Secret
+- Channel Access Token (with "How to generate" link)
 
-**Step 4** — We display the callback URL for them to paste back into LINE console (1-click copy)
+**Step 4** — We display the callback URL they must paste back into the LINE console.
+1-click copy button. Screenshot showing exactly where to paste it.
 
 **Step 5** — "Test Connection" button
-- We ping LINE with the credentials
-- Show green checkmark on success, specific error message on failure
+- Backend verifies credentials with LINE API
+- Green checkmark on success
+- Specific error message on failure (wrong token, wrong webhook URL, etc.)
 
-**"Ask my agent" button** — triggers a pre-written WhatsApp message so their Tiger Claw agent walks them through the flow in real time.
+**"Ask my agent" button** on every step — sends a pre-written message to their
+Telegram bot so Tiger Claw walks them through the step in real time.
 
 ### Engineering Requirements
 
-- Store: `line_channel_id`, `line_channel_secret`, `line_channel_access_token` on tenant record (already in schema)
-- Endpoint: `POST /wizard/channels/line/connect` — validate credentials + register webhook
-- Endpoint: `POST /wizard/channels/line/test` — send test message to confirm
-- Token expiry monitoring + alert when LINE token needs renewal
+- Credentials stored on tenant: `line_channel_secret`, `line_channel_access_token`
+  (schema already exists in `db.ts`)
+- `POST /wizard/channels/line/connect` — validate credentials + register webhook
+- `POST /wizard/channels/line/test` — send test message to confirm live
+- Token expiry monitoring + dashboard alert when LINE token needs renewal
 
 ---
 
-## Telegram — Optional, Guided Wizard
+## Telegram — "Bring Your Own Bot" Wizard (Optional Add-On)
 
-### Wizard Flow (tab in channel settings modal)
+For customers who want a custom-named Telegram bot instead of the platform-assigned one.
 
-**Step 1** — "Open BotFather" button (opens t.me/botfather in new tab)
+### Wizard Flow
+
+**Step 1** — Button: "Open BotFather" (opens t.me/botfather in new tab)
 
 **Step 2** — Pre-written commands shown with 1-click copy:
 ```
 /newbot
-[Your bot name]
-[Your bot username]_bot
 ```
+Prompts for bot name and username. Screenshots for each step.
 
-**Step 3** — Token input field (we validate format before submission)
+**Step 3** — Token input field. Format validated before submission.
 
 **Step 4** — "Test Connection" button
-- We call Telegram getMe with the token
-- Show bot username + green checkmark on success
+- Backend calls `getMe` with the token
+- Shows bot username + green checkmark on success
 
-**"Need help?" button** — triggers WhatsApp chat where the agent guides them live.
+**Step 5** — Old platform bot released back to the pool. New custom bot registered.
+
+**"Ask my agent" button** on every step.
 
 ### Engineering Requirements
 
 - Validate token via `GET https://api.telegram.org/bot{token}/getMe`
-- Store token in `bot_pool` table (same as platform-assigned tokens)
-- Register Telegram webhook to `https://api.tigerclaw.io/webhooks/telegram/{tenantId}`
-- Already implemented in `services/provisioner.ts` — wizard just needs to call it
+- Store in `bot_pool` (same pattern as platform tokens)
+- Register webhook via `services/provisioner.ts` (already implemented)
 
 ---
 
 ## Dashboard Channel Cards
 
-Every tenant sees a channel dashboard with status cards:
+Every tenant sees a channel status dashboard:
 
 ```
 ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
-│  WhatsApp           │  │  LINE               │  │  Telegram           │
-│  ✅ Active          │  │  [ Connect ]        │  │  ✅ Active          │
-│  Last msg: 2h ago   │  │  Thailand market    │  │  @Tiger_Theera_bot  │
-│  Templates: 3 active│  │  Guided setup →     │  │  Last msg: 1h ago   │
+│  Telegram           │  │  LINE               │  │  WhatsApp           │
+│  ✅ Active          │  │  [ Connect ]        │  │  [ Coming Soon ]    │
+│  @Tiger_Theera_bot  │  │  Thailand market    │  │                     │
+│  Last msg: 1h ago   │  │  Guided setup →     │  │                     │
 └─────────────────────┘  └─────────────────────┘  └─────────────────────┘
 ```
 
-Each card shows:
-- Connection status (green/yellow/red)
+Each active card shows:
+- Connection status (green / yellow / red)
+- Bot username or channel name
 - Last message timestamp
-- Error alerts (token expired, webhook down, template rejected)
-- Quick action button (Reconnect / Test / Settings)
+- Error alert if webhook is down or token has expired
+- Quick actions: Test / Reconnect / Settings
 
 ---
 
 ## Implementation Priority
 
-1. WhatsApp Telnyx integration (requires Meta verification first — operator action)
-2. Channel dashboard UI with status cards
-3. LINE wizard (Thailand customers are paying now)
-4. Telegram wizard (simpler, lower priority since platform tokens cover this)
+1. Dashboard channel cards UI (Telegram status for all current customers)
+2. LINE wizard (Thailand customers are active now)
+3. Telegram "bring your own bot" wizard (lower priority — platform tokens work)
+4. WhatsApp via Baileys (future)
 
 ---
 
 ## Locked Decisions
 
-- WhatsApp is the DEFAULT channel. Every customer gets it automatically. Not optional.
-- LINE is Thailand-first priority for the optional wizard.
+- Telegram is the DEFAULT channel. Every customer gets it automatically at provisioning.
+- LINE is the priority optional wizard for the Thailand market.
 - "Ask my agent" help button is required on every wizard step — not optional UX polish.
-- Telnyx is the BSP. No other WhatsApp provider.
-- Token/credential storage follows the same encryption pattern as bot_pool (AES-256-GCM via encryptToken/decryptToken in pool.ts).
+- All credential storage uses AES-256-GCM via `encryptToken`/`decryptToken` in `pool.ts`.
+- Webhook registration for all channels goes through `services/provisioner.ts`.
