@@ -1,6 +1,14 @@
 {
   "builds": [
     {
+      "tcVersion": "v2026.03.07.10",
+      "builtAt": "2026-03-08T01:00:00.000000Z",
+      "commitHash": "6a0d7de",
+      "gitTagged": false,
+      "gapsCompleted": ["GAP-8", "GAP-1", "GAP-7", "GAP-4", "GAP-2", "GAP-5", "GAP-6", "GAP-9"],
+      "notes": "GAP-9 full implementation: Customer Dashboard complete with all screens wired."
+    },
+    {
       "tcVersion": "v2026.03.07.9",
       "builtAt": "2026-03-08T00:30:00.000000Z",
       "commitHash": "bc3de5b",
@@ -65,8 +73,8 @@
     }
   ],
   "tigerClaw": {
-    "current": "v2026.03.07.9",
-    "previous": "v2026.03.07.8"
+    "current": "v2026.03.07.10",
+    "previous": "v2026.03.07.9"
   },
   "gapStatus": {
     "GAP-8": "✅ complete",
