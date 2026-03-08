@@ -71,7 +71,13 @@ export function resolveConfig(
   flavorKey: string,
   regionCode?: string
 ): ResolvedConfig {
-  const flavor = FLAVORS[flavorKey] ?? FLAVORS["network-marketer"];
+  const flavorTs = FLAVORS[flavorKey];
+  if (!flavorTs) {
+    // Only 3 of 11 flavors have TypeScript soul configs. The other 8 fall back to network-marketer
+    // for SOUL.md generation. To fix: add api/src/config/flavors/${flavorKey}.ts.
+    console.warn(`[config] No TypeScript soul config for flavor "${flavorKey}" — SOUL.md will use network-marketer persona. Add api/src/config/flavors/${flavorKey}.ts to fix.`);
+  }
+  const flavor = flavorTs ?? FLAVORS["network-marketer"]!;
   const region = REGIONS[regionCode ?? "us-en"] ?? REGIONS["us-en"];
 
   // Merge discovery: base → regional → flavor (later wins)

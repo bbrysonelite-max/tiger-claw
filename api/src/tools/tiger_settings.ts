@@ -433,8 +433,10 @@ async function handleChannels(
   context: ToolContext,
   logger: ToolContext["logger"],
 ): Promise<ToolResult> {
-  const slug = process.env["TENANT_SLUG"] ?? process.env["TENANT_ID"] ?? "";
-  const apiBase = process.env["TIGER_CLAW_API_URL"] ?? "http://host.docker.internal:4000";
+  // BUG FIX: In multi-tenant single-process architecture, TENANT_SLUG env var is never set.
+  // Slug comes from context.config (populated by buildToolContext in ai.ts).
+  const slug = (context.config["TIGER_CLAW_TENANT_SLUG"] as string) ?? process.env["TENANT_SLUG"] ?? "";
+  const apiBase = (context.config["TIGER_CLAW_API_URL"] as string) ?? process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000";
 
   if (!slug) {
     return { ok: false, error: "TENANT_SLUG env var is not set — cannot manage channels." };

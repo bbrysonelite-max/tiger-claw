@@ -190,6 +190,7 @@ function buildToolContext(tenantId: string, tenant: any) {
         workdir,
         config: {
             TIGER_CLAW_TENANT_ID: tenantId,
+            TIGER_CLAW_TENANT_SLUG: tenant.slug,   // slug for tools that build API URLs
             BOT_FLAVOR: tenant.flavor,
             REGION: tenant.region,
             PREFERRED_LANGUAGE: tenant.language,

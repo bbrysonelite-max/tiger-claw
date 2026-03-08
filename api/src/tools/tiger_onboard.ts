@@ -931,7 +931,7 @@ async function handleNaming(
       ``,
       `My identity has been updated. Here's who I am:`,
       ``,
-      `"I'm ${botName}, built on Tiger Claw technology, powered by OpenClaw. I work for ${state.identity.name ?? "you"}."`,
+      `"I'm ${botName}, your Tiger Claw sales agent. I work for ${state.identity.name ?? "you"}."`,
       ``,
       `Starting your flywheel now...`,
     ].join("\n"),
@@ -1049,14 +1049,16 @@ function triggerFirstScout(tenantId: string): Promise<void> {
   });
 }
 
-async function handleComplete(state: OnboardState): Promise<ToolResult> {
+async function handleComplete(state: OnboardState, context: ToolContext): Promise<ToolResult> {
   // Fire API calls — non-blocking, failures are non-fatal
   await Promise.all([
     setTenantActive(state.tenantId),
     triggerFirstScout(state.tenantId),
   ]);
 
-  const slug = process.env["TENANT_SLUG"] ?? "";
+  // BUG FIX: In multi-tenant single-process architecture, TENANT_SLUG env var is never set.
+  // Slug comes from context.config (populated by buildToolContext in ai.ts).
+  const slug = (context.config["TIGER_CLAW_TENANT_SLUG"] as string) ?? process.env["TENANT_SLUG"] ?? "";
   const wizardBlock = slug
     ? [
       ``,
@@ -1222,7 +1224,7 @@ async function execute(
         return await handleNaming(state, response, tenantId, workdir);
 
       case "complete":
-        return await handleComplete(state);
+        return await handleComplete(state, context);
 
       default:
         return {
