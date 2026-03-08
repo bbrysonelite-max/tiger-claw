@@ -704,7 +704,7 @@ export async function upsertBYOKConfig(data: {
   );
 }
 
-/** Look up BYOK key status for a tenant (via bot_pool → bot_ai_config). Never returns the raw/encrypted key. */
+/** Look up BYOK key status for a tenant (tenants → users → bots → bot_ai_config). Never returns the raw/encrypted key. */
 export async function getBYOKStatus(tenantId: string): Promise<{
   configured: boolean;
   provider: string | null;
@@ -714,11 +714,16 @@ export async function getBYOKStatus(tenantId: string): Promise<{
   updatedAt: string | null;
 }> {
   try {
+    // BUG FIX: Previous query joined bot_pool.id with bot_ai_config.bot_id which references bots.id —
+    // different tables, different UUIDs. The join always produced zero rows.
+    // Correct path: tenants.email → users.email → users.id → bots.user_id → bots.id → bot_ai_config.bot_id
     const result = await getPool().query(
       `SELECT c.provider, c.model, c.key_preview, c.connection_type, c.updated_at
        FROM bot_ai_config c
-       JOIN bot_pool b ON b.id = c.bot_id
-       WHERE b.tenant_id = $1 AND b.status = 'assigned'
+       JOIN bots b ON b.id = c.bot_id
+       JOIN users u ON u.id = b.user_id
+       WHERE u.email = (SELECT email FROM tenants WHERE id = $1)
+       ORDER BY c.updated_at DESC
        LIMIT 1`,
       [tenantId],
     );
