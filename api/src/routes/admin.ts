@@ -299,8 +299,8 @@ router.post("/fleet/:tenantId/report", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Tenant is not active" });
   }
 
-  // Signal the container to generate a briefing by POSTing to its internal
-  // OpenClaw webhook endpoint (the tiger_briefing tool handles "generate" action)
+  // Signal the bot to generate a briefing via the AI tool loop
+  // (the tiger_briefing tool handles "generate" action)
   const triggered = await triggerContainerWebhook(tenant, "tiger_briefing", { action: "generate" });
   await logAdminEvent("manual_report", tenant.id, { triggered });
 

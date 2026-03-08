@@ -50,21 +50,25 @@ router.get("/patterns", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "flavor is required" });
   }
 
-  const patterns = await queryHivePatterns({ flavor, region, category, limit });
-
-  return res.json({
-    count: patterns.length,
-    patterns: patterns.map((p) => ({
-      id: p.id,
-      flavor: p.flavor,
-      region: p.region,
-      category: p.category,
-      observation: p.observation,
-      dataPoints: p.dataPoints,
-      confidence: p.confidence,
-      submittedAt: p.submittedAt.toISOString(),
-    })),
-  });
+  try {
+    const patterns = await queryHivePatterns({ flavor, region, category, limit });
+    return res.json({
+      count: patterns.length,
+      patterns: patterns.map((p) => ({
+        id: p.id,
+        flavor: p.flavor,
+        region: p.region,
+        category: p.category,
+        observation: p.observation,
+        dataPoints: p.dataPoints,
+        confidence: p.confidence,
+        submittedAt: p.submittedAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    console.error("[hive] GET /patterns error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -106,20 +110,24 @@ router.post("/patterns", async (req: Request, res: Response) => {
     ? crypto.createHash("sha256").update(body["tenantId"]).digest("hex").slice(0, 16)
     : undefined;
 
-  const pattern = await insertHivePattern({
-    flavor: body["flavor"]!,
-    region: body["region"]!,
-    category: body["category"]!,
-    observation,
-    dataPoints: body["dataPoints"] ?? 1,
-    confidence: Math.min(Math.max(body["confidence"] ?? 50, 0), 100),
-    tenantHash,
-  });
-
-  return res.status(201).json({
-    id: pattern.id,
-    submittedAt: pattern.submittedAt.toISOString(),
-  });
+  try {
+    const pattern = await insertHivePattern({
+      flavor: body["flavor"]!,
+      region: body["region"]!,
+      category: body["category"]!,
+      observation,
+      dataPoints: body["dataPoints"] ?? 1,
+      confidence: Math.min(Math.max(body["confidence"] ?? 50, 0), 100),
+      tenantHash,
+    });
+    return res.status(201).json({
+      id: pattern.id,
+      submittedAt: pattern.submittedAt.toISOString(),
+    });
+  } catch (err) {
+    console.error("[hive] POST /patterns error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // ---------------------------------------------------------------------------
