@@ -363,9 +363,9 @@ export const tiger_export = {
     properties: {
       filter: {
         type: "string",
-        enum: ["", "new", "contacted", "nurture", "converted", "archived", "do-not-contact"],
+        enum: ["all", "new", "contacted", "nurture", "converted", "archived", "do-not-contact"],
         description:
-          "Optional status filter. Leave empty for all contacts. Values: new | contacted | nurture | converted | archived | do-not-contact",
+          "Optional status filter. Use 'all' for all contacts. Values: all | new | contacted | nurture | converted | archived | do-not-contact",
       },
     },
     required: [],

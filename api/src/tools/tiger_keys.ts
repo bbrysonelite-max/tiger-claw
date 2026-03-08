@@ -1291,8 +1291,8 @@ export const tiger_keys = {
         description: "Value from Retry-After header on 429 responses (for report_error).",
       },
       layer: {
-        type: "number",
-        enum: [2, 3],
+        type: "string",
+        enum: ["2", "3"],
         description: "Which layer to restore — 2 (primary) or 3 (fallback). For restore_key only.",
       },
       apiKey: {
