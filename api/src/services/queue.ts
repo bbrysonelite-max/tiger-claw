@@ -257,14 +257,14 @@ export const cronWorker = new Worker(
                 await routineQueue.add('nurture_check', {
                     tenantId: tenant.id,
                     routineType: 'nurture_check',
-                }, { jobId: `nurture_${tenant.id}`, removeOnComplete: true });
+                }, { jobId: `nurture_${tenant.id}`, removeOnComplete: true, removeOnFail: true });
 
                 // BUG FIX: daily_scout was never scheduled — runs once per day at 7 AM UTC
                 if (nowHour === 7) {
                     await routineQueue.add('daily_scout', {
                         tenantId: tenant.id,
                         routineType: 'daily_scout',
-                    }, { jobId: `scout_${tenant.id}_${today}`, removeOnComplete: true });
+                    }, { jobId: `scout_${tenant.id}_${today}`, removeOnComplete: true, removeOnFail: true });
                 }
             }
 
