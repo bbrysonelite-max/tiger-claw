@@ -113,8 +113,7 @@ router.post("/:tenantId/scout", async (req: Request, res: Response) => {
       return;
     }
 
-    // In Multi-Tenancy, we trigger the bot by sending an invisible /scout command
-    // or enqueuing a job. For now, we simulate success as the scheduler handles it.
+    // In multi-tenancy, scout is triggered by the central BullMQ scheduler — no per-tenant containers.
     console.log(`[tenants] Scout bypassed for ${tenant.slug} — using central scheduler.`);
 
     await logAdminEvent({
@@ -127,6 +126,30 @@ router.post("/:tenantId/scout", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("[tenants] POST scout error:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /tenants/:slug/channels
+// Returns current channel configuration status for a tenant.
+// Called by tiger_settings channels list to show real DB state.
+// ---------------------------------------------------------------------------
+
+router.get("/:slug/channels", async (req: Request, res: Response) => {
+  try {
+    const tenant = await getTenantBySlug(req.params["slug"]!);
+    if (!tenant) {
+      return res.status(404).json({ error: "Tenant not found" });
+    }
+
+    return res.json({
+      telegram: true,
+      whatsapp: tenant.whatsappEnabled,
+      line: !!(tenant.lineChannelSecret && tenant.lineChannelAccessToken),
+    });
+  } catch (err) {
+    console.error("[tenants] GET channels error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -358,7 +358,7 @@ function settingImpactNote(key: SettingKey, value: unknown): string | null {
     case "contactWindowEnd":
       return "This affects when the bot schedules first-contact messages relative to the prospect's timezone.";
     case "preferredChannel":
-      return `Briefings and alerts will now be sent via ${value}. Ensure the channel is connected in OpenClaw.`;
+      return `Briefings and alerts will now be sent via ${value}. Ensure the channel is connected in Tiger Claw.`;
     case "timezone":
       return "Affects cron scheduling for scout (5 AM), briefing (7 AM), and contact timing windows.";
     default:
@@ -442,8 +442,20 @@ async function handleChannels(
 
   switch (params.subAction) {
     case "list": {
-      const waEnabled = process.env["WHATSAPP_ENABLED"] === "true";
-      const lineConfigured = !!(process.env["LINE_CHANNEL_SECRET"] && process.env["LINE_CHANNEL_ACCESS_TOKEN"]);
+      // BUG FIX: old code read per-tenant env vars that don't exist in multi-tenant architecture.
+      // Channel credentials are stored encrypted in PostgreSQL — query the API for real status.
+      let waEnabled = false;
+      let lineConfigured = false;
+      try {
+        const resp = await fetch(`${apiBase}/tenants/${slug}/channels`);
+        if (resp.ok) {
+          const data = await resp.json() as { telegram?: boolean; whatsapp?: boolean; line?: boolean };
+          waEnabled = !!data.whatsapp;
+          lineConfigured = !!data.line;
+        }
+      } catch {
+        // If API is unreachable, fall through with defaults (false)
+      }
       const lines = [
         "Channel status:",
         "",
