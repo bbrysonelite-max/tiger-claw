@@ -202,7 +202,7 @@ gets their Telegram deep link.
 
 ---
 
-### GAP 2 — Demo Trial Endpoint ← START HERE
+### ✅ GAP 2 — Demo Trial Endpoint — COMPLETE
 **What:** `POST /admin/demo` — spins up a 72-hour trial tenant for demos. No payment.
 
 **Request body:**
@@ -228,7 +228,7 @@ gets their Telegram deep link.
 
 ---
 
-### GAP 5 — GCP Infrastructure Deploy
+### GAP 5 — GCP Infrastructure Deploy ← START HERE
 **What:** The Terraform and Cloud Run scripts are written. They have never been applied.
 The infrastructure does not exist yet.
 
