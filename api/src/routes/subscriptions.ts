@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
-import { createBYOKUser, createBYOKBot } from "../services/db.js";
+import { createBYOKUser, findOrCreateBYOKBot } from "../services/db.js";
 
 const router = Router();
 const stripe = process.env["STRIPE_SECRET_KEY"] ? new Stripe(process.env["STRIPE_SECRET_KEY"], { apiVersion: "2023-10-16" }) : null;
@@ -23,7 +23,7 @@ router.post("/register", async (req: Request, res: Response) => {
         }
 
         const userId = await createBYOKUser(email, name);
-        const botId = await createBYOKBot(userId, botName ?? name, niche, "pending");
+        const botId = await findOrCreateBYOKBot(userId, botName ?? name, niche);
 
         console.log(`[subscriptions] Pre-registered user ${userId} / bot ${botId} for ${email}`);
         return res.json({ userId, botId });

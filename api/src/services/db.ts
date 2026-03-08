@@ -597,6 +597,30 @@ export async function createBYOKBot(
   return result.rows[0]["id"] as string;
 }
 
+/**
+ * Returns an existing pending bot for this user+niche if one exists,
+ * otherwise creates a new one. Prevents duplicate bot records when the
+ * wizard's Step 2 is submitted more than once (e.g. user goes back).
+ */
+export async function findOrCreateBYOKBot(
+  userId: string,
+  name: string,
+  niche: string
+): Promise<string> {
+  const existing = await getPool().query(
+    `SELECT id FROM bots WHERE user_id = $1 AND niche = $2 AND status = 'pending'
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId, niche]
+  );
+  if (existing.rows[0]) return existing.rows[0]["id"] as string;
+
+  const result = await getPool().query(
+    `INSERT INTO bots (user_id, name, niche, status) VALUES ($1, $2, $3, 'pending') RETURNING id`,
+    [userId, name, niche]
+  );
+  return result.rows[0]["id"] as string;
+}
+
 export async function createBYOKConfig(data: {
   botId: string;
   connectionType: string;

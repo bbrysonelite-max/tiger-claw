@@ -11,11 +11,11 @@ interface IdentityProps {
 }
 
 const defaultBotNames: Record<string, string> = {
-    network_marketing: "Prospect Scout",
-    airbnb: "Guest Welcome Bot",
-    real_estate: "Lead Qualifier",
-    healthcare: "Patient Assistant",
-    other: "Support Bot",
+    "network-marketer": "Prospect Scout",
+    "airbnb-host": "Guest Welcome Bot",
+    "real-estate": "Lead Qualifier",
+    "health-wellness": "Wellness Assistant",
+    "sales-tiger": "Sales Scout",
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
