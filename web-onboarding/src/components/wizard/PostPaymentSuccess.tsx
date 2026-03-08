@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle2, Zap, ArrowRight, Loader2, MessageCircle } from "lucide-react";
+import { CheckCircle2, ArrowRight, Loader2, MessageCircle } from "lucide-react";
 import type { WizardState } from "../OnboardingModal";
 import { motion } from "framer-motion";
 
@@ -10,16 +10,47 @@ interface PostPaymentSuccessProps {
     onClose: () => void;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
 export default function PostPaymentSuccess({ state, onClose }: PostPaymentSuccessProps) {
     const [status, setStatus] = useState<"deploying" | "live">("deploying");
+    const [botUsername, setBotUsername] = useState<string | null>(null);
+    const [telegramLink, setTelegramLink] = useState<string | null>(null);
 
-    // Simulate deployment polling
+    // On mount, check for session_id from Stripe redirect and poll for bot status
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setStatus("live");
-        }, 4000); // 4 sec fake deploy
-        return () => clearTimeout(timer);
-    }, []);
+        const params = new URLSearchParams(window.location.search);
+        const sessionId = params.get("session_id");
+
+        if (sessionId) {
+            // Poll the API for provisioning status
+            const poll = async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/wizard/status?session_id=${sessionId}`);
+                    const data = await res.json();
+                    if (data.status === "live" && data.botUsername) {
+                        setBotUsername(data.botUsername);
+                        setTelegramLink(data.telegramLink ?? `https://t.me/${data.botUsername}`);
+                        setStatus("live");
+                        return; // Stop polling
+                    }
+                } catch {
+                    // Keep polling
+                }
+                // Retry in 3 seconds
+                setTimeout(poll, 3000);
+            };
+            poll();
+        } else {
+            // No session_id — simulate for dev/demo
+            const timer = setTimeout(() => {
+                setStatus("live");
+                setBotUsername(state.botName?.replace(/\s/g, "_") ?? "tiger_claw_bot");
+                setTelegramLink(`https://t.me/${state.botName?.replace(/\s/g, "_") ?? "tiger_claw_bot"}`);
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [state.botName]);
 
     return (
         <div className="flex flex-col items-center justify-center p-12 text-center relative overflow-hidden">
@@ -52,8 +83,8 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
 
             <p className="text-white/60 text-lg mb-8 max-w-md mx-auto relative z-10 !leading-relaxed">
                 {status === "deploying"
-                    ? `Setting up a dedicated infrastructure node for ${state.botName}. This usually takes 5-10 seconds.`
-                    : `Your agent is now live on our enterprise network, connected via ${state.connectionType === 'byok' ? state.aiProvider : 'Tiger Claw AI'}.`}
+                    ? `Setting up ${state.botName ?? "your agent"} on our infrastructure. This usually takes 10-30 seconds.`
+                    : `Your agent is live and connected via Google Gemini.`}
             </p>
 
             {status === "live" && (
@@ -74,11 +105,14 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-[#22c55e]"></span>
                                 </span>
                             </h4>
+                            <p className="text-sm text-white/60 mb-1">
+                                <span className="font-mono text-[#22c55e]">@{botUsername}</span>
+                            </p>
                             <p className="text-sm text-white/60 mb-4">
-                                {state.botName} is online and waiting for your first message. Click below to open Telegram and start chatting.
+                                Your agent is online and waiting for the first message. Click below to open Telegram.
                             </p>
                             <a
-                                href="https://t.me/tiger_claw_demo_bot"
+                                href={telegramLink ?? "#"}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white text-sm"

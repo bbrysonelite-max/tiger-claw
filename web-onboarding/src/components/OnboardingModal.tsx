@@ -16,10 +16,11 @@ export interface WizardState {
     nicheName: string;
     botName: string;
     yourName: string;
-    connectionType: "tiger_credits" | "byok";
+    connectionType: "byok";
     aiProvider: string;
     apiKey: string;
     aiModel: string;
+    botId?: string;
     stripeSessionId?: string;
 }
 
@@ -28,10 +29,10 @@ const initialState: WizardState = {
     nicheName: "",
     botName: "",
     yourName: "",
-    connectionType: "tiger_credits",
-    aiProvider: "openai",
+    connectionType: "byok",
+    aiProvider: "google",
     apiKey: "",
-    aiModel: "gpt-4o",
+    aiModel: "gemini-2.5-flash",
 };
 
 export default function OnboardingModal({ onClose }: { onClose: () => void }) {
@@ -55,12 +56,9 @@ export default function OnboardingModal({ onClose }: { onClose: () => void }) {
     };
 
     const handleLaunch = async () => {
-        // Phase 2 MVP: Simulate Stripe Checkout / API logic
+        // StepReviewPayment handles the Stripe redirect internally.
+        // This just sets the deploying state for the loading UI.
         setIsDeploying(true);
-        setTimeout(() => {
-            setIsDeploying(false);
-            setDeploymentComplete(true);
-        }, 2000);
     };
 
     if (deploymentComplete) {
