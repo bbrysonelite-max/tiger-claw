@@ -1,6 +1,14 @@
 {
   "builds": [
     {
+      "tcVersion": "v2026.03.07.8",
+      "builtAt": "2026-03-07T23:59:00.000000Z",
+      "commitHash": "e0402ce",
+      "gitTagged": false,
+      "gapsCompleted": ["GAP-8", "GAP-1", "GAP-7", "GAP-4", "GAP-2", "GAP-5", "GAP-6"],
+      "notes": "GAP-6: Bot token pipeline complete — SMS-MAN → Telegram accounts → BotFather → bot_pool. Target 1,000 tokens."
+    },
+    {
       "tcVersion": "v2026.03.07.7",
       "builtAt": "2026-03-07T23:30:00.000000Z",
       "commitHash": "254a721",
@@ -49,8 +57,8 @@
     }
   ],
   "tigerClaw": {
-    "current": "v2026.03.07.7",
-    "previous": "v2026.03.07.6"
+    "current": "v2026.03.07.8",
+    "previous": "v2026.03.07.7"
   },
   "gapStatus": {
     "GAP-8": "✅ complete",
@@ -59,8 +67,8 @@
     "GAP-4": "✅ complete",
     "GAP-2": "✅ complete",
     "GAP-5": "✅ complete",
-    "GAP-6": "⏳ next",
-    "GAP-9": "⏳ pending",
+    "GAP-6": "✅ complete",
+    "GAP-9": "⏳ next",
     "GAP-3": "⏳ pending"
   },
   "buildOrder": "GAP-8 → GAP-1 → GAP-7 → GAP-4 → GAP-2 → GAP-5 → GAP-6 → GAP-9 → GAP-3"

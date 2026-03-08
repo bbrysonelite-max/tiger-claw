@@ -16,7 +16,7 @@ Tiger Claw is a **multi-tenant AI sales and recruiting engine** delivered as a S
 
 **Architecture:** Stateless multi-tenancy. One API process handles all tenants. Tenant context is resolved per-request via slug/ID. No per-tenant containers.
 
-**Current version:** `v2026.03.07.7` (see `deployment_state.json`)
+**Current version:** `v2026.03.07.8` (see `deployment_state.json`)
 
 ---
 
@@ -248,8 +248,8 @@ They are **superseded**. Do not use them as guidance. The active work is defined
 | GAP 4 | Wire Stripe into web wizard — real checkout, BYOK key collected + validated | ✅ Complete |
 | GAP 2 | `POST /admin/demo` — 72-hour trial tenant for demos, no payment | ✅ Complete |
 | GAP 5 | GCP infrastructure — `terraform apply`, secrets loaded, API deployed to Cloud Run | ✅ Complete |
-| GAP 6 | Bot token auto-creation pipeline (complete MTProto → BotFather → pool import) | ⏳ Next |
-| GAP 9 | Customer dashboard UI — channel cards, LINE wizard, bot status (Next.js) | ⏳ Pending |
+| GAP 6 | Bot token auto-creation pipeline (complete MTProto → BotFather → pool import) | ✅ Complete |
+| GAP 9 | Customer dashboard UI — channel cards, LINE wizard, bot status (Next.js) | ⏳ Next |
 | GAP 3 | Admin dashboard wired to live data (`GET /admin/fleet`, `/admin/costs`, `/hive/patterns`) | ⏳ Pending |
 | GAP 10 | CLAUDE.md full rewrite for Gemini architecture | ✅ Done (this file) |
 

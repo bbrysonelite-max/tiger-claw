@@ -233,26 +233,12 @@ gets their Telegram deep link.
 
 ---
 
-### GAP 6 — Bot Token Pipeline ← START HERE
-**What:** Complete the SMS-MAN → Telegram account → BotFather → pool import pipeline.
-Target: 1,000 tokens in `bot_pool`.
-
-**Steps:**
-1. `export SMSMAN_API_KEY="your_key"` (get key from sms-man.com)
-2. `python3 ops/botpool/Smsman_number_buyer.py --count 50 --country 4 --output numbers.csv`
-   — buys 50 phone numbers, polls for Telegram verification codes, saves to CSV
-3. Use GramJS MTProto in `ops/botpool/create_bots.ts` to:
-   - Register 50 Telegram accounts (one per verified number)
-   - For each account: open BotFather, create 20 bots → 1,000 tokens
-4. Import tokens: `npx ts-node ops/botpool/create_bots.ts --tokens-file tokens.txt`
-
-**Pool health alert:** Add to `/health` endpoint: warn if pool drops below 50 unassigned tokens.
-
-**Done when:** `bot_pool` table has 1,000+ unassigned tokens. `/health` shows pool count.
+### ✅ GAP 6 — Bot Token Pipeline — COMPLETE
+**What:** SMS-MAN → Telegram accounts → BotFather → pool import pipeline complete. Target: 1,000 tokens in `bot_pool`.
 
 ---
 
-### GAP 9 — Customer Dashboard
+### GAP 9 — Customer Dashboard ← START HERE
 **What:** The customer web dashboard at `app.tigerclaw.io`. Post-login. Shows the
 customer their bot status, channel cards, LINE wizard, and pipeline.
 
