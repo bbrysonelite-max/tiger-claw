@@ -843,11 +843,13 @@ async function handleRestoreKey(
   workdir: string,
   logger: ToolContext["logger"]
 ): Promise<ToolResult> {
-  if (![2, 3].includes(params.layer)) {
+  // Coerce layer to number — Gemini may send it as a string even though schema says number.
+  const restoredLayer = Number(params.layer) as LayerNumber;
+  if (![2, 3].includes(restoredLayer)) {
     return { ok: false, error: "Only Layer 2 (primary) or Layer 3 (fallback) can be restored by the tenant." };
   }
 
-  logger.info("tiger_keys: validating restored key", { layer: params.layer });
+  logger.info("tiger_keys: validating restored key", { layer: restoredLayer });
 
   const validation = await validateApiKey(params.apiKey);
   if (!validation.valid) {
@@ -857,7 +859,6 @@ async function handleRestoreKey(
     };
   }
 
-  const restoredLayer = params.layer as LayerNumber;
   const previousLayer = state.activeLayer;
 
   // Persist the validated key value so container restarts can resolve it
@@ -1222,7 +1223,7 @@ async function execute(
 ): Promise<ToolResult> {
   const { workdir, logger } = context;
   const action = params.action as string;
-  const tenantId = process.env.TIGER_CLAW_TENANT_ID ?? "unknown";
+  const tenantId = (context.config["TIGER_CLAW_TENANT_ID"] as string) ?? "unknown";
 
   logger.info("tiger_keys called", { action });
 
@@ -1291,8 +1292,8 @@ export const tiger_keys = {
         description: "Value from Retry-After header on 429 responses (for report_error).",
       },
       layer: {
-        type: "string",
-        enum: ["2", "3"],
+        type: "number",
+        enum: [2, 3],
         description: "Which layer to restore — 2 (primary) or 3 (fallback). For restore_key only.",
       },
       apiKey: {

@@ -509,7 +509,7 @@ async function handleCheck(context: ToolContext, logger: ToolContext["logger"]):
           messageText: finalMsg,
           isSlowDrip: false,
         });
-        transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
+        await transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
         continue;
       }
     }
@@ -797,7 +797,7 @@ async function handleRecordResponse(
 
         // Classify prospect's gap answer through objection buckets
         const flavor = onboard.flavor ?? "network-marketer";
-        const region = process.env["REGION"] ?? "us-en";
+        const region = (context.config["REGION"] as string) ?? "us-en";
         const bucket = classifyBucket(params.responseText, flavor);
         const bucketDef = getBucketResponse(bucket, flavor, region);
 
