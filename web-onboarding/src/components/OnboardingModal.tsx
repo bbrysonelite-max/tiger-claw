@@ -16,6 +16,7 @@ export interface WizardState {
     nicheName: string;
     botName: string;
     yourName: string;
+    email: string;
     connectionType: "byok";
     aiProvider: string;
     apiKey: string;
@@ -29,6 +30,7 @@ const initialState: WizardState = {
     nicheName: "",
     botName: "",
     yourName: "",
+    email: "",
     connectionType: "byok",
     aiProvider: "google",
     apiKey: "",

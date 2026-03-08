@@ -93,18 +93,23 @@ router.post("/stripe", async (req: Request, res: Response) => {
       const finalProvider = meta["aiProvider"] ?? "google";
       const finalModel = meta["aiModel"] ?? "gemini-2.5-flash";
 
-      // 3. Create Bot Record (or link to pre-created record from wizard)
-      const botId = await createBYOKBot(userId, meta["botName"] ?? name, flavor, "deploying");
+      // 3. Create or reuse Bot Record
+      // If the wizard pre-registered a bot (POST /subscriptions/register at Step 2 → 3),
+      // meta["botId"] contains that UUID — use it so the BYOK key stored at Step 3 stays linked.
+      const preBotId = meta["botId"] && meta["botId"] !== "pending" ? meta["botId"] : null;
+      const botId = preBotId ?? await createBYOKBot(userId, meta["botName"] ?? name, flavor, "deploying");
 
-      // 4. Create AI Config — key already stored in DB from wizard Step 3; no key data here
-      await createBYOKConfig({
-        botId,
-        connectionType: meta["connectionType"] ?? "managed",
-        provider: finalProvider,
-        model: finalModel,
-        encryptedKey: undefined,
-        keyPreview: undefined,
-      });
+      // 4. Create AI Config only if no pre-registration (wizard already stored key via /wizard/validate-key)
+      if (!preBotId) {
+        await createBYOKConfig({
+          botId,
+          connectionType: "byok",
+          provider: finalProvider,
+          model: finalModel,
+          encryptedKey: undefined,
+          keyPreview: undefined,
+        });
+      }
 
       // 5. Create Subscription
       if (session.subscription) {

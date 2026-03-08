@@ -1,8 +1,37 @@
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
+import { createBYOKUser, createBYOKBot } from "../services/db.js";
 
 const router = Router();
 const stripe = process.env["STRIPE_SECRET_KEY"] ? new Stripe(process.env["STRIPE_SECRET_KEY"], { apiVersion: "2023-10-16" }) : null;
+
+// POST /register
+// Called at Step 2 → Step 3 transition in the web wizard.
+// Creates a user + bot record early so we have a valid botId before key storage.
+// The wizard must call this before POST /wizard/validate-key.
+router.post("/register", async (req: Request, res: Response) => {
+    try {
+        const { email, name, niche, botName } = req.body as {
+            email?: string;
+            name?: string;
+            niche?: string;
+            botName?: string;
+        };
+
+        if (!email || !name || !niche) {
+            return res.status(400).json({ error: "email, name, and niche are required" });
+        }
+
+        const userId = await createBYOKUser(email, name);
+        const botId = await createBYOKBot(userId, botName ?? name, niche, "pending");
+
+        console.log(`[subscriptions] Pre-registered user ${userId} / bot ${botId} for ${email}`);
+        return res.json({ userId, botId });
+    } catch (err) {
+        console.error("[subscriptions] Register error:", err);
+        return res.status(500).json({ error: "failed_to_register" });
+    }
+});
 
 // POST /checkout
 // GAP 4: Wire Stripe into Web Wizard

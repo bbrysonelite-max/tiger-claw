@@ -24,14 +24,14 @@ export default function StepReviewPayment({ state, isDeploying, onLaunch }: Revi
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    email: state.yourName, // Will be replaced with actual email field
+                    email: state.email,
                     name: state.yourName,
                     niche: state.nicheId,
                     botName: state.botName,
                     connectionType: "byok",
                     aiProvider: "google",
                     aiModel: "gemini-2.5-flash",
-                    botId: state.botId ?? "pending",
+                    botId: state.botId,   // Set by StepIdentity via /subscriptions/register
                 }),
             });
 
