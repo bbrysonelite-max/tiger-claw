@@ -466,6 +466,38 @@ router.get("/pool/status", async (_req: Request, res: Response) => {
   return res.json(stats);
 });
 
+// GET /admin/pool/health — GAP 6: pool health check with action recommendation
+router.get("/pool/health", async (_req: Request, res: Response) => {
+  const stats = await getPoolStats();
+  const available = stats.unassigned ?? 0;
+  const total = (stats.total ?? 0);
+
+  let status: string;
+  let action: string;
+
+  if (available === 0) {
+    status = "empty";
+    action = "URGENT: Run 'npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50' immediately. New signups will be waitlisted.";
+  } else if (available < 10) {
+    status = "critical";
+    action = "Create at least 20 bots. Run: npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 20";
+  } else if (available < 50) {
+    status = "low";
+    action = "Schedule a pool refill soon. Run: npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50";
+  } else {
+    status = "healthy";
+    action = "No action needed.";
+  }
+
+  return res.json({
+    status,
+    available,
+    assigned: stats.assigned ?? 0,
+    total,
+    action,
+  });
+});
+
 // POST /admin/pool/add — simple token insert (no Telegram validation)
 router.post("/pool/add", async (req: Request, res: Response) => {
   const { botToken, botUsername } = req.body as { botToken?: string; botUsername?: string };
