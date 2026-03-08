@@ -1009,7 +1009,7 @@ async function handleRecordMessage(
     state.layer3MessageCountToday++;
     const remaining = LAYER_LIMITS[3].dailyMessages - state.layer3MessageCountToday;
 
-    if (state.layer3MessageCountToday >= LAYER_LIMITS[3].dailyMessages) {
+    if (state.layer3MessageCountToday > LAYER_LIMITS[3].dailyMessages) {
       appendEvent(state, {
         type: "limit_exceeded",
         timestamp: new Date().toISOString(),
