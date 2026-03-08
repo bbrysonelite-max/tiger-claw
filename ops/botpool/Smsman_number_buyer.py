@@ -9,12 +9,14 @@ Usage:
     python3 smsman_number_buyer.py --count 50 --country 4
 
 Country IDs (cheapest for Telegram):
-    0=Russia, 4=Indonesia, 6=India, 15=Colombia, 16=Kenya
-    1=Ukraine, 12=England, 187=USA
+    7=Indonesia, 8=Philippines, 114=Colombia, 313=Tanzania, 317=Sierra Leone
+    9=Myanmar, 219=Gabon, 5=USA, 100=UK
+    (SMS-MAN country IDs differ from ITU dial codes)
 """
 
 import os, sys, time, json, csv, argparse, logging
 from datetime import datetime
+from typing import Optional
 from pathlib import Path
 
 try:
@@ -95,7 +97,7 @@ class ApiError(Exception):
 # ---------------------------------------------------------------------------
 # Core Logic
 # ---------------------------------------------------------------------------
-def poll_for_code(client: SmsManClient, request_id: int, number: str) -> str | None:
+def poll_for_code(client: SmsManClient, request_id: int, number: str) -> Optional[str]:
     """Poll get-sms until code arrives or timeout. Returns code or None."""
     start = time.time()
     while time.time() - start < POLL_TIMEOUT:
@@ -202,7 +204,7 @@ def acquire_numbers(client: SmsManClient, count: int, country_id: int, output_pa
 def main():
     parser = argparse.ArgumentParser(description="SMS-MAN Telegram Number Buyer")
     parser.add_argument("--count", type=int, default=50, help="Number of phone numbers to acquire (default: 50)")
-    parser.add_argument("--country", type=int, default=4, help="Country ID (default: 4=Indonesia). Use 0 for random.")
+    parser.add_argument("--country", type=int, default=7, help="Country ID (default: 7=Indonesia). Use 0 for random.")
     parser.add_argument("--output", type=str, default="numbers.csv", help="Output CSV path (default: numbers.csv)")
     parser.add_argument("--check-only", action="store_true", help="Only check balance and stock, don't buy")
     args = parser.parse_args()

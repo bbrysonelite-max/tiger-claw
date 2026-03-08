@@ -25,3 +25,9 @@ build/
 
 # Logs
 *.log
+
+# Bot pool sensitive data (phone numbers, session strings, API tokens)
+ops/botpool/sms_numbers.json
+ops/botpool/sessions/
+ops/create-bot-pool/sessions/
+ops/create-bot-pool/run.sh
