@@ -199,11 +199,11 @@ import { getBotState, setBotState } from "../services/db.js";
 import { encryptToken } from "../services/pool.js";
 
 async function loadState(tenantId: string): Promise<OnboardState | null> {
-  return await getBotState<OnboardState>(tenantId, "onboard_state");
+  return await getBotState<OnboardState>(tenantId, "onboard_state.json");
 }
 
 async function saveState(tenantId: string, state: OnboardState): Promise<void> {
-  await setBotState(tenantId, "onboard_state", state);
+  await setBotState(tenantId, "onboard_state.json", state);
 }
 
 function initialState(tenantId: string): OnboardState {
