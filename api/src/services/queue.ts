@@ -161,6 +161,46 @@ telegramWorker.on('failed', (job, err) => {
 });
 
 // ---------------------------------------------------------------------------
+// LINE Webhook Queue
+// ---------------------------------------------------------------------------
+
+export const lineQueue = new Queue('line-webhooks', { connection: connection as any });
+console.log('[Queue] BullMQ LINE webhook queue configured.');
+
+export interface LineWebhookJobData {
+    tenantId: string;
+    encryptedChannelAccessToken: string;
+    userId: string;
+    text: string;
+}
+
+export const lineWorker = new Worker(
+    'line-webhooks',
+    async (job: Job<LineWebhookJobData>) => {
+        const { tenantId, encryptedChannelAccessToken, userId, text } = job.data;
+        console.log(`[Worker] Processing LINE webhook for tenant: ${tenantId}`);
+
+        try {
+            const { processLINEMessage } = await import('./ai.js');
+            await processLINEMessage(tenantId, encryptedChannelAccessToken, userId, text);
+        } catch (err) {
+            console.error(`[Worker] Error processing LINE message for tenant ${tenantId}:`, err);
+            throw err;
+        }
+
+        return { success: true };
+    },
+    {
+        connection: connection as any,
+        concurrency: 50,
+    }
+);
+
+lineWorker.on('failed', (job, err) => {
+    console.error(`[Worker] LINE Job ${job?.id} failed. Error:`, err);
+});
+
+// ---------------------------------------------------------------------------
 // Background AI Routines (Scouting, Nurture Checks, Daily Reports)
 // ---------------------------------------------------------------------------
 

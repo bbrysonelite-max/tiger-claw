@@ -5,6 +5,7 @@ import IORedis from 'ioredis';
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadFlavorConfig } from '../tools/flavorConfig.js';
+import { decryptToken } from './pool.js';
 
 // Load all 19 tools — ALL must remain registered. Missing tool = infinite loop.
 import { tiger_onboard }     from '../tools/tiger_onboard.js';
@@ -371,5 +372,77 @@ export async function processSystemRoutine(tenantId: string, routineType: string
         console.log(`[AI Routine] ${routineType} complete for tenant ${tenantId}.`);
     } catch (err: any) {
         console.error(`[AI Routine] [ALERT] ${routineType} failed for tenant ${tenantId}:`, err.message);
+    }
+}
+
+// ─── Public: process a LINE user message ─────────────────────────────────────
+// LINE Push API is used (not Reply API) because the message is processed
+// asynchronously via BullMQ — the 30-second replyToken window is too short.
+export async function processLINEMessage(
+    tenantId: string,
+    encryptedChannelAccessToken: string,
+    userId: string,
+    text: string,
+) {
+    const channelAccessToken = decryptToken(encryptedChannelAccessToken);
+
+    const sendLineMessage = async (message: string) => {
+        try {
+            const resp = await fetch('https://api.line.me/v2/bot/message/push', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${channelAccessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    to: userId,
+                    messages: [{ type: 'text', text: message.slice(0, 5000) }],
+                }),
+            });
+            if (!resp.ok) {
+                console.error(`[AI] LINE push API error ${resp.status} for tenant ${tenantId}:`, await resp.text());
+            }
+        } catch (err) {
+            console.error(`[AI] Failed to send LINE message to ${userId}:`, err);
+        }
+    };
+
+    const tenant = await getTenant(tenantId);
+    if (!tenant) throw new Error(`Tenant not found: ${tenantId}`);
+
+    const toolContext = buildToolContext(tenantId, tenant);
+    const googleKey = await resolveGoogleKey(tenantId, toolContext.workdir);
+
+    if (!googleKey) {
+        await sendLineMessage('⚠️ Your bot is paused. Please contact support or add your API key to reactivate.');
+        return;
+    }
+
+    // Use LINE userId as chatId for per-user history (stored as string in Redis key)
+    const chatId = userId as unknown as number;
+
+    try {
+        const history = await getChatHistory(tenantId, chatId);
+        const genAI = new GoogleGenerativeAI(googleKey);
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-2.5-flash',
+            systemInstruction: buildSystemPrompt(tenant),
+            tools: geminiTools as any,
+        });
+
+        const chat = model.startChat({ history });
+        const initial = await chat.sendMessage(text);
+        const finalResponse = await runToolLoop(chat, initial.response, toolContext, 'AI');
+
+        const updatedHistory = await chat.getHistory();
+        await saveChatHistory(tenantId, chatId, updatedHistory);
+
+        const replyText = finalResponse.text?.() ?? '';
+        if (replyText.trim().length > 0) {
+            await sendLineMessage(replyText);
+        }
+    } catch (err: any) {
+        console.error(`[AI] [ALERT] processLINEMessage failed for tenant ${tenantId}:`, err.message);
+        await sendLineMessage('❌ Something went wrong. The operator has been notified. Please try again in a moment.');
     }
 }

@@ -15,7 +15,8 @@
 
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
-import { provisionQueue, telegramQueue } from "../services/queue.js";
+import { createHmac } from "crypto";
+import { provisionQueue, telegramQueue, lineQueue } from "../services/queue.js";
 import {
   createBYOKUser,
   createBYOKBot,
@@ -23,6 +24,7 @@ import {
   createBYOKSubscription,
   getTenant,
 } from "../services/db.js";
+import { decryptToken } from "../services/pool.js";
 import { sendAdminAlert } from "./admin.js";
 
 const router = Router();
@@ -185,6 +187,82 @@ router.post("/telegram/:tenantId", async (req: Request, res: Response) => {
     console.error(`[webhooks] Failed to enqueue Telegram message for ${tenantId}:`, err);
     res.status(500).send("Internal Server Error");
   }
+});
+
+// ---------------------------------------------------------------------------
+// POST /webhooks/line/:tenantId
+// LINE Messaging API webhook — signature verified, events enqueued to BullMQ.
+// Raw body required for HMAC-SHA256 — index.ts must apply express.raw() before
+// express.json() for this path prefix.
+// ---------------------------------------------------------------------------
+
+router.post("/line/:tenantId", async (req: Request, res: Response) => {
+  const { tenantId } = req.params;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: "tenantId missing" });
+  }
+
+  const tenant = await getTenant(tenantId);
+  if (!tenant || !tenant.lineChannelSecret) {
+    // Return 200 to prevent LINE from retrying — tenant simply not configured for LINE
+    console.warn(`[webhooks] LINE webhook for unconfigured tenant: ${tenantId}`);
+    return res.status(200).json({ received: true });
+  }
+
+  // Verify LINE signature: HMAC-SHA256 of raw body with channel secret, base64 encoded
+  const signature = req.headers["x-line-signature"] as string;
+  if (!signature) {
+    return res.status(400).json({ error: "Missing x-line-signature" });
+  }
+
+  const channelSecret = decryptToken(tenant.lineChannelSecret);
+  const expectedSig = createHmac("sha256", channelSecret)
+    .update(req.body as Buffer)
+    .digest("base64");
+
+  if (expectedSig !== signature) {
+    console.warn(`[webhooks] LINE signature mismatch for tenant: ${tenantId}`);
+    return res.status(400).json({ error: "Invalid signature" });
+  }
+
+  // Acknowledge immediately — LINE expects 200 within 10 seconds
+  res.status(200).json({ received: true });
+
+  // Parse and enqueue events asynchronously
+  if (!tenant.lineChannelAccessToken) {
+    console.warn(`[webhooks] LINE channel access token missing for tenant: ${tenantId}`);
+    return;
+  }
+
+  const encryptedChannelAccessToken = tenant.lineChannelAccessToken;
+
+  setImmediate(async () => {
+    try {
+      const body = JSON.parse((req.body as Buffer).toString());
+      for (const event of body.events ?? []) {
+        if (event.type === "message" && event.message?.type === "text") {
+          const userId: string = event.source?.userId;
+          const text: string = (event.message.text ?? "").trim();
+
+          if (!userId || !text) continue;
+
+          await lineQueue.add("line-webhook", {
+            tenantId,
+            encryptedChannelAccessToken,
+            userId,
+            text,
+          }, {
+            removeOnComplete: true,
+            attempts: 3,
+            backoff: { type: "exponential", delay: 2000 },
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`[webhooks] LINE event processing failed for tenant ${tenantId}:`, err);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
