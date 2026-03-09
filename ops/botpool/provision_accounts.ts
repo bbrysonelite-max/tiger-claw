@@ -311,9 +311,15 @@ async function authenticateWithTelegram(
             // phoneCode fires AFTER GramJS has sent the phone to Telegram and
             // Telegram has dispatched the OTP SMS — poll SMS-MAN here, not before.
             phoneCode: async () => {
-                log(`  Telegram requested OTP — polling SMS-MAN...`);
+                // Wait 10s for SMS to route through carrier before polling
+                log(`  Telegram requested OTP — waiting 10s for SMS delivery...`);
+                await sleep(10_000);
+                log(`  Polling SMS-MAN for OTP on ${phone}...`);
                 const otp = await pollForOtp(requestId, phone);
-                if (!otp) throw new Error("OTP_TIMEOUT");
+                if (!otp) {
+                    log(`  OTP still not received — GramJS will retry`);
+                    return ""; // return empty, let GramJS surface the timeout
+                }
                 log(`  OTP received: ${otp}`);
                 return otp;
             },
@@ -340,9 +346,6 @@ async function authenticateWithTelegram(
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("2FA_REQUIRED")) {
             return { error: "2FA is enabled on this number — skipping" };
-        }
-        if (msg.includes("OTP_TIMEOUT")) {
-            return { error: "OTP timeout — Telegram sent no code within 3 minutes" };
         }
         return { error: msg };
     }
@@ -436,12 +439,12 @@ async function main(): Promise<void> {
 
         if ("error" in result) {
             logWarn(`  ${result.error}`);
-            if (result.error.includes("OTP timeout")) {
-                await rejectRequest(requestId); // get refund
-                failedCount++;
-            } else {
+            if (result.error.includes("2FA")) {
                 await closeRequest(requestId);
                 skippedCount++;
+            } else {
+                await rejectRequest(requestId); // get refund on all other failures
+                failedCount++;
             }
             await sleep(INTER_NUMBER_DELAY_MS);
             continue;
