@@ -208,7 +208,22 @@ async function getStock(): Promise<number> {
         country_id: String(COUNTRY_ID),
         application_id: String(TELEGRAM_APP_ID),
     });
-    if (Array.isArray(data) && data.length > 0) return parseInt(data[0].numbers ?? "0", 10);
+    // SMS-MAN returns either an object keyed by application_id: {"3": {numbers: N}}
+    // or an array: [{numbers: N}]. Handle both formats.
+    if (Array.isArray(data) && data.length > 0) {
+        return parseInt(data[0].numbers ?? "0", 10);
+    }
+    if (typeof data === "object" && data !== null) {
+        const appKey = String(TELEGRAM_APP_ID);
+        if (data[appKey]?.numbers != null) {
+            return parseInt(data[appKey].numbers, 10);
+        }
+        // Fallback: grab first value from object
+        const values = Object.values(data) as any[];
+        if (values.length > 0 && values[0]?.numbers != null) {
+            return parseInt(values[0].numbers, 10);
+        }
+    }
     return 0;
 }
 
