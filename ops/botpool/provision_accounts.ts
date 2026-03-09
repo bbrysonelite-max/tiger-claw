@@ -208,21 +208,13 @@ async function getStock(): Promise<number> {
         country_id: String(COUNTRY_ID),
         application_id: String(TELEGRAM_APP_ID),
     });
-    // SMS-MAN returns either an object keyed by application_id: {"3": {numbers: N}}
-    // or an array: [{numbers: N}]. Handle both formats.
+    // SMS-MAN returns {"3": {numbers: N}} (object keyed by application_id)
     if (Array.isArray(data) && data.length > 0) {
         return parseInt(data[0].numbers ?? "0", 10);
     }
     if (typeof data === "object" && data !== null) {
-        const appKey = String(TELEGRAM_APP_ID);
-        if (data[appKey]?.numbers != null) {
-            return parseInt(data[appKey].numbers, 10);
-        }
-        // Fallback: grab first value from object
-        const values = Object.values(data) as any[];
-        if (values.length > 0 && values[0]?.numbers != null) {
-            return parseInt(values[0].numbers, 10);
-        }
+        const entry = data[String(TELEGRAM_APP_ID)] ?? Object.values(data)[0];
+        if (entry?.numbers != null) return parseInt(entry.numbers, 10);
     }
     return 0;
 }
@@ -233,6 +225,10 @@ async function buyNumber(): Promise<{ phone: string; request_id: number }> {
         country_id: String(COUNTRY_ID),
         application_id: String(TELEGRAM_APP_ID),
     });
+    log(`  [debug] get-number response: ${JSON.stringify(data)}`);
+    if (!data || !data.number || !data.request_id) {
+        throw new Error(`Unexpected get-number response: ${JSON.stringify(data)}`);
+    }
     return {
         phone: `+${data.number}`,
         request_id: data.request_id,
