@@ -297,7 +297,7 @@ async function rejectRequest(requestId: number): Promise<void> {
 
 async function authenticateWithTelegram(
     phone: string,
-    otp: string,
+    requestId: number,
 ): Promise<{ sessionString: string } | { error: string }> {
     const session = new StringSession("");
     const client = new TelegramClient(session, TELEGRAM_API_ID, TELEGRAM_API_HASH, {
@@ -308,7 +308,15 @@ async function authenticateWithTelegram(
     try {
         await client.start({
             phoneNumber: async () => phone,
-            phoneCode: async () => otp,
+            // phoneCode fires AFTER GramJS has sent the phone to Telegram and
+            // Telegram has dispatched the OTP SMS — poll SMS-MAN here, not before.
+            phoneCode: async () => {
+                log(`  Telegram requested OTP — polling SMS-MAN...`);
+                const otp = await pollForOtp(requestId, phone);
+                if (!otp) throw new Error("OTP_TIMEOUT");
+                log(`  OTP received: ${otp}`);
+                return otp;
+            },
             password: async () => {
                 // 2FA password requested — we can't handle this automatically
                 throw new Error("2FA_REQUIRED");
@@ -332,6 +340,9 @@ async function authenticateWithTelegram(
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("2FA_REQUIRED")) {
             return { error: "2FA is enabled on this number — skipping" };
+        }
+        if (msg.includes("OTP_TIMEOUT")) {
+            return { error: "OTP timeout — Telegram sent no code within 3 minutes" };
         }
         return { error: msg };
     }
@@ -417,27 +428,21 @@ async function main(): Promise<void> {
             purchased_at: new Date().toISOString(),
         });
 
-        // Step 2: Poll for OTP
-        const otp = await pollForOtp(requestId, phone);
-
-        if (!otp) {
-            logWarn(`  TIMEOUT — no OTP received for ${phone}. Rejecting for refund.`);
-            await rejectRequest(requestId);
-            failedCount++;
-            await sleep(INTER_NUMBER_DELAY_MS);
-            continue;
-        }
-
-        log(`  OTP received: ${otp}`);
-
-        // Step 3: Authenticate with Telegram
-        log(`  Authenticating ${phone} with Telegram...`);
-        const result = await authenticateWithTelegram(phone, otp);
+        // Step 2: Authenticate with Telegram
+        // GramJS connects, sends phone to Telegram, Telegram dispatches OTP SMS,
+        // then our phoneCode callback polls SMS-MAN and returns the code.
+        log(`  Connecting to Telegram for ${phone}...`);
+        const result = await authenticateWithTelegram(phone, requestId);
 
         if ("error" in result) {
             logWarn(`  ${result.error}`);
-            await closeRequest(requestId);
-            skippedCount++;
+            if (result.error.includes("OTP timeout")) {
+                await rejectRequest(requestId); // get refund
+                failedCount++;
+            } else {
+                await closeRequest(requestId);
+                skippedCount++;
+            }
             await sleep(INTER_NUMBER_DELAY_MS);
             continue;
         }
