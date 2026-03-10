@@ -31,7 +31,7 @@ import { StringSession } from "telegram/sessions";
 const SMSMAN_BASE = "https://api.sms-man.com/control";
 const TELEGRAM_APP_ID = 3; // SMS-MAN application_id for Telegram
 const POLL_INTERVAL_MS = 4_000;
-const POLL_TIMEOUT_MS = 180_000; // 3 minutes
+const POLL_TIMEOUT_MS = 300_000; // 5 minutes
 const INTER_NUMBER_DELAY_MS = 2_000; // breathing room between purchases
 const HTTP_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 3;
@@ -339,8 +339,9 @@ async function authenticateWithTelegram(
         }
 
         // Step 3: Wait for SMS delivery then poll SMS-MAN
-        log(`  Waiting 10s for SMS delivery...`);
-        await sleep(10_000);
+        // 20s gives the carrier time to route the SMS after the resend
+        log(`  Waiting 20s for SMS delivery...`);
+        await sleep(20_000);
         log(`  Polling SMS-MAN for OTP on ${phone}...`);
         const otp = await pollForOtp(requestId, phone);
 
