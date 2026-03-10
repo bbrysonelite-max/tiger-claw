@@ -129,7 +129,7 @@ export async function createTenant(data: {
   language: string;
   preferredChannel: string;
   botToken?: string;
-  port: number;
+  port?: number;
 }): Promise<Tenant> {
   const containerName = `tiger-claw-${data.slug}`;
   const result = await getPool().query(
