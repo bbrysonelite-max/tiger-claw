@@ -72,7 +72,7 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
           language: input.language,
           preferredChannel: input.preferredChannel,
           botToken: undefined,
-          port: 0, // Port is deprecated in Multi-Tenancy
+          port: undefined, // Port is deprecated in Multi-Tenancy
         });
         await updateTenantStatus(waitlistTenant.id, "pending");
       } catch (err) {
@@ -106,7 +106,7 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
       language: input.language,
       preferredChannel: input.preferredChannel,
       botToken: resolvedBotToken,
-      port: 0, // Port deprecated
+      port: undefined, // Port deprecated
     });
     steps.push(`Tenant record created: ${tenant.id}`);
   } catch (err) {
