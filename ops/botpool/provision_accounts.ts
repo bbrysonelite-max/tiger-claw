@@ -21,7 +21,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { TelegramClient } from "telegram";
+import { TelegramClient, Api } from "telegram";
 import { StringSession } from "telegram/sessions";
 
 // ---------------------------------------------------------------------------
@@ -288,7 +288,7 @@ async function rejectRequest(requestId: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Telegram Authentication via GramJS (fully programmatic, no prompts)
+// Telegram Authentication via GramJS (low-level, forces SMS delivery)
 // ---------------------------------------------------------------------------
 
 async function authenticateWithTelegram(
@@ -301,74 +301,86 @@ async function authenticateWithTelegram(
         retryDelay: 2000,
     });
 
-    // Tracks whether we should abort the auth loop
-    let shouldAbort = false;
-    let abortReason = "";
-
     try {
-        await client.start({
-            phoneNumber: async () => phone,
-            phoneCode: async () => {
-                if (shouldAbort) {
-                    // Already timed out on a previous attempt — stop immediately
-                    return "";
-                }
-                log(`  Telegram requested OTP — waiting 10s for SMS delivery...`);
-                await sleep(10_000);
-                log(`  Polling SMS-MAN for OTP on ${phone}...`);
-                const otp = await pollForOtp(requestId, phone);
-                if (!otp) {
-                    logWarn(`  TIMEOUT — no OTP received for ${phone}. Rejecting for refund.`);
-                    shouldAbort = true;
-                    abortReason = "OTP_TIMEOUT";
-                    return ""; // GramJS will call onError with "Code is empty"
-                }
-                log(`  OTP received: ${otp}`);
-                return otp;
-            },
-            password: async () => {
-                shouldAbort = true;
-                abortReason = "2FA_REQUIRED";
-                throw new Error("2FA_REQUIRED");
-            },
-            onError: (err: Error) => {
-                if (shouldAbort) {
-                    // Return true to tell GramJS to stop retrying
-                    return true as any;
-                }
-                // For sign-in errors like PHONE_CODE_INVALID, abort too
-                if (err.message?.includes("PHONE_CODE_INVALID") ||
-                    err.message?.includes("PHONE_CODE_EXPIRED")) {
-                    shouldAbort = true;
-                    abortReason = err.message;
-                    return true as any;
-                }
-                logError(`  Auth error: ${err.message}`);
-                return false as any;
-            },
-        });
+        await client.connect();
+
+        // Step 1: Request code — Telegram may send to existing app if account exists
+        log(`  Requesting OTP for ${phone}...`);
+        const sendResult = await client.invoke(new Api.auth.SendCode({
+            phoneNumber: phone,
+            apiId: TELEGRAM_API_ID,
+            apiHash: TELEGRAM_API_HASH,
+            settings: new Api.CodeSettings({
+                allowFlashcall: false,
+                currentNumber: false,
+                allowAppHash: false,
+                allowMissedCall: false,
+            }),
+        }));
+
+        let phoneCodeHash = sendResult.phoneCodeHash;
+        const codeType = (sendResult.type as any)?.className ?? "unknown";
+        log(`  Initial code type: ${codeType}`);
+
+        // Step 2: If code went to the app (not SMS), force resend as SMS
+        if (!codeType.toLowerCase().includes("sms")) {
+            log(`  Code routed to Telegram app — forcing SMS resend...`);
+            try {
+                const resendResult = await client.invoke(new Api.auth.ResendCode({
+                    phoneNumber: phone,
+                    phoneCodeHash: phoneCodeHash,
+                }));
+                phoneCodeHash = resendResult.phoneCodeHash;
+                const newType = (resendResult.type as any)?.className ?? "unknown";
+                log(`  Resent as: ${newType}`);
+            } catch (resendErr) {
+                logWarn(`  Resend failed: ${resendErr} — continuing with original hash`);
+            }
+        }
+
+        // Step 3: Wait for SMS delivery then poll SMS-MAN
+        log(`  Waiting 10s for SMS delivery...`);
+        await sleep(10_000);
+        log(`  Polling SMS-MAN for OTP on ${phone}...`);
+        const otp = await pollForOtp(requestId, phone);
+
+        if (!otp) {
+            await client.disconnect();
+            return { error: "OTP_TIMEOUT — no code received" };
+        }
+
+        log(`  OTP received: ${otp} — signing in...`);
+
+        // Step 4: Sign in with code
+        try {
+            await client.invoke(new Api.auth.SignIn({
+                phoneNumber: phone,
+                phoneCodeHash: phoneCodeHash,
+                phoneCode: otp,
+            }));
+        } catch (signInErr: any) {
+            const msg = signInErr?.message ?? String(signInErr);
+            if (msg.includes("SESSION_PASSWORD_NEEDED")) {
+                await client.disconnect();
+                return { error: "2FA is enabled on this number — skipping" };
+            }
+            if (msg.includes("PHONE_CODE_INVALID") || msg.includes("PHONE_CODE_EXPIRED")) {
+                await client.disconnect();
+                return { error: `Code invalid/expired: ${msg}` };
+            }
+            throw signInErr;
+        }
 
         const sessionString = client.session.save() as unknown as string;
         await client.disconnect();
         return { sessionString };
-    } catch (err) {
-        try {
-            await client.disconnect();
-        } catch {
-            // ignore disconnect errors
-        }
 
-        if (abortReason === "OTP_TIMEOUT") {
-            return { error: "OTP_TIMEOUT — no code received, rejecting for refund" };
-        }
-        if (abortReason === "2FA_REQUIRED") {
+    } catch (err) {
+        try { await client.disconnect(); } catch { /* ignore */ }
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("SESSION_PASSWORD_NEEDED") || msg.includes("2FA")) {
             return { error: "2FA is enabled on this number — skipping" };
         }
-        if (abortReason) {
-            return { error: abortReason };
-        }
-
-        const msg = err instanceof Error ? err.message : String(err);
         return { error: msg };
     }
 }
