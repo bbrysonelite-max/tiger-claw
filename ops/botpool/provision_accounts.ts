@@ -301,35 +301,54 @@ async function authenticateWithTelegram(
         retryDelay: 2000,
     });
 
+    // Tracks whether we should abort the auth loop
+    let shouldAbort = false;
+    let abortReason = "";
+
     try {
         await client.start({
             phoneNumber: async () => phone,
-            // phoneCode fires AFTER GramJS has sent the phone to Telegram and
-            // Telegram has dispatched the OTP SMS — poll SMS-MAN here, not before.
             phoneCode: async () => {
-                // Wait 10s for SMS to route through carrier before polling
+                if (shouldAbort) {
+                    // Already timed out on a previous attempt — stop immediately
+                    return "";
+                }
                 log(`  Telegram requested OTP — waiting 10s for SMS delivery...`);
                 await sleep(10_000);
                 log(`  Polling SMS-MAN for OTP on ${phone}...`);
                 const otp = await pollForOtp(requestId, phone);
                 if (!otp) {
-                    log(`  OTP still not received — GramJS will retry`);
-                    return ""; // return empty, let GramJS surface the timeout
+                    logWarn(`  TIMEOUT — no OTP received for ${phone}. Rejecting for refund.`);
+                    shouldAbort = true;
+                    abortReason = "OTP_TIMEOUT";
+                    return ""; // GramJS will call onError with "Code is empty"
                 }
                 log(`  OTP received: ${otp}`);
                 return otp;
             },
             password: async () => {
-                // 2FA password requested — we can't handle this automatically
+                shouldAbort = true;
+                abortReason = "2FA_REQUIRED";
                 throw new Error("2FA_REQUIRED");
             },
             onError: (err: Error) => {
+                if (shouldAbort) {
+                    // Return true to tell GramJS to stop retrying
+                    return true as any;
+                }
+                // For sign-in errors like PHONE_CODE_INVALID, abort too
+                if (err.message?.includes("PHONE_CODE_INVALID") ||
+                    err.message?.includes("PHONE_CODE_EXPIRED")) {
+                    shouldAbort = true;
+                    abortReason = err.message;
+                    return true as any;
+                }
                 logError(`  Auth error: ${err.message}`);
+                return false as any;
             },
         });
 
         const sessionString = client.session.save() as unknown as string;
-
         await client.disconnect();
         return { sessionString };
     } catch (err) {
@@ -339,10 +358,17 @@ async function authenticateWithTelegram(
             // ignore disconnect errors
         }
 
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("2FA_REQUIRED")) {
+        if (abortReason === "OTP_TIMEOUT") {
+            return { error: "OTP_TIMEOUT — no code received, rejecting for refund" };
+        }
+        if (abortReason === "2FA_REQUIRED") {
             return { error: "2FA is enabled on this number — skipping" };
         }
+        if (abortReason) {
+            return { error: abortReason };
+        }
+
+        const msg = err instanceof Error ? err.message : String(err);
         return { error: msg };
     }
 }
