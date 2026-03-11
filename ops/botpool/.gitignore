@@ -1,0 +1,11 @@
+# Telegram session strings — contain auth credentials, never commit
+sessions.json
+
+# Transient auth state
+.auth_state.json
+
+# Token files — contain live bot tokens
+*.txt
+
+# Logs
+*.log

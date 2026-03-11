@@ -1,59 +1,73 @@
 #!/usr/bin/env npx tsx
-// Tiger Claw — MTProto Session String Generator (Voice Call OTP)
+// Tiger Claw — MTProto Session String Generator
 //
-// Uses the low-level GramJS MTProto API to request a code, then
-// immediately resends via voice call to bypass carrier short-code
-// blocking. Prompts the user for phone number and OTP via stdin.
+// Keeps a single live connection open. Polls /tmp/tc_auth_code.txt for the OTP
+// so the code never expires between two separate process invocations.
 //
 // Usage:
-//   npx tsx ops/botpool/auth_session.ts --api-id 12345 --api-hash abc123
-//
-// Or via env vars:
-//   TELEGRAM_API_ID=12345 TELEGRAM_API_HASH=abc123 npx tsx ops/botpool/auth_session.ts
-//
-// Output: a single session string that can be pasted into sessions.json.
+//   npx tsx auth_session.ts --phone +16024157593
+//   (In another terminal or from Claude): echo "12345" > /tmp/tc_auth_code.txt
 
 import { TelegramClient, Api } from "telegram";
 import { StringSession } from "telegram/sessions";
-import input from "input";
+import fs from "fs";
+import path from "path";
 
 const args = process.argv.slice(2);
-
-function flag(name: string, fallback: string): string {
+function flag(name: string, fallback = ""): string {
   const i = args.indexOf(name);
   return i !== -1 && args[i + 1] ? args[i + 1]! : fallback;
 }
 
-const apiId = parseInt(flag("--api-id", process.env["TELEGRAM_API_ID"] ?? ""));
-const apiHash = flag("--api-hash", process.env["TELEGRAM_API_HASH"] ?? "");
+const apiId = parseInt(process.env["TELEGRAM_API_ID"] ?? "");
+const apiHash = process.env["TELEGRAM_API_HASH"] ?? "";
+const phone = flag("--phone");
+const CODE_FILE = "/tmp/tc_auth_code.txt";
+const SESSIONS_FILE = path.join(__dirname, "sessions.json");
 
 if (!apiId || !apiHash) {
-  console.error("TELEGRAM_API_ID and TELEGRAM_API_HASH are required.");
-  console.error("Get them from https://my.telegram.org/apps");
-  console.error("");
-  console.error("Usage:");
-  console.error("  npx tsx ops/botpool/auth_session.ts --api-id 12345 --api-hash abc123");
+  console.error("TELEGRAM_API_ID and TELEGRAM_API_HASH env vars are required.");
+  process.exit(1);
+}
+if (!phone) {
+  console.error("--phone is required. Example: npx tsx auth_session.ts --phone +16024157593");
   process.exit(1);
 }
 
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+async function waitForCode(): Promise<string> {
+  // Clear any old code file first
+  if (fs.existsSync(CODE_FILE)) fs.unlinkSync(CODE_FILE);
+
+  console.log(`\nWaiting for code... Write it to ${CODE_FILE}`);
+  console.log("Example: echo \"12345\" > /tmp/tc_auth_code.txt\n");
+
+  const deadline = Date.now() + 4 * 60 * 1000; // 4 minute timeout
+  while (Date.now() < deadline) {
+    if (fs.existsSync(CODE_FILE)) {
+      const code = fs.readFileSync(CODE_FILE, "utf8").trim();
+      fs.unlinkSync(CODE_FILE);
+      if (code) return code;
+    }
+    await sleep(1000);
+  }
+  throw new Error("Timed out waiting for auth code (4 minutes)");
+}
+
 async function main(): Promise<void> {
-  const session = new StringSession("");
-  const client = new TelegramClient(session, apiId, apiHash, {
+  const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
     connectionRetries: 5,
   });
 
-  console.log("Starting Telegram authentication (voice call OTP)...\n");
-
+  console.log(`Connecting to Telegram for ${phone}...`);
   await client.connect();
 
-  const phone = await input.text("Phone number (with country code, e.g. +1234567890): ");
-
-  // Step 1: Request code via SendCode (low-level MTProto API)
-  console.log(`\nRequesting initial OTP for ${phone}...`);
+  // Send code
   const sendResult = await client.invoke(new Api.auth.SendCode({
     phoneNumber: phone,
-    apiId: apiId,
-    apiHash: apiHash,
+    apiId,
+    apiHash,
     settings: new Api.CodeSettings({
       allowFlashcall: false,
       currentNumber: false,
@@ -63,74 +77,56 @@ async function main(): Promise<void> {
   }));
 
   let phoneCodeHash = sendResult.phoneCodeHash;
-  const initialType = (sendResult.type as any)?.className ?? "unknown";
-  console.log(`Initial code delivery type: ${initialType}`);
+  const codeType = (sendResult.type as any)?.className ?? "unknown";
+  console.log(`Code sent via: ${codeType}`);
 
-  // Step 2: Force resend as voice call — always resend to switch to voice
-  console.log("Requesting voice call resend...");
-  try {
-    const resendResult = await client.invoke(new Api.auth.ResendCode({
-      phoneNumber: phone,
-      phoneCodeHash: phoneCodeHash,
-    }));
-    phoneCodeHash = resendResult.phoneCodeHash;
-    const resendType = (resendResult.type as any)?.className ?? "unknown";
-    console.log(`Resend delivery type: ${resendType}`);
-
-    // If the first resend didn't produce a voice call, try once more
-    if (!resendType.toLowerCase().includes("call")) {
-      console.log("Not a voice call yet — requesting another resend...");
-      try {
-        const resend2 = await client.invoke(new Api.auth.ResendCode({
-          phoneNumber: phone,
-          phoneCodeHash: phoneCodeHash,
-        }));
-        phoneCodeHash = resend2.phoneCodeHash;
-        const type2 = (resend2.type as any)?.className ?? "unknown";
-        console.log(`Second resend delivery type: ${type2}`);
-      } catch (err2: any) {
-        console.warn(`Second resend failed: ${err2.message ?? err2} — proceeding with previous hash`);
-      }
+  if (codeType.toLowerCase().includes("app")) {
+    console.log(">>> Check your Telegram app for the code <<<");
+  } else {
+    // Try voice call resend for non-app delivery
+    try {
+      const r = await client.invoke(new Api.auth.ResendCode({ phoneNumber: phone, phoneCodeHash }));
+      phoneCodeHash = r.phoneCodeHash;
+      console.log(`After resend: ${(r.type as any)?.className}`);
+    } catch (e: any) {
+      console.log(`Resend skipped: ${e.message}`);
     }
-  } catch (err: any) {
-    console.warn(`Resend failed: ${err.message ?? err} — proceeding with original hash`);
   }
 
-  console.log("\n🔔 WAITING FOR VOICE CALL — Telegram will call your phone and read a code.\n");
+  // Wait for code (stays connected the whole time)
+  const code = await waitForCode();
+  console.log(`Got code: ${code} — signing in...`);
 
-  const code = await input.text("Verification code from Telegram: ");
-
-  // Step 3: Sign in
   try {
     await client.invoke(new Api.auth.SignIn({
       phoneNumber: phone,
-      phoneCodeHash: phoneCodeHash,
+      phoneCodeHash,
       phoneCode: code,
     }));
-  } catch (signInErr: any) {
-    const msg = signInErr?.message ?? String(signInErr);
-    if (msg.includes("SESSION_PASSWORD_NEEDED")) {
-      console.log("\n2FA is enabled — entering password...");
-      const password = await input.text("2FA password: ");
-      // Use client's built-in 2FA handling
-      await client.signInWithPassword(
-        { apiId, apiHash },
-        { password: async () => password, onError: (e: Error) => { throw e; } },
-      );
-    } else {
-      throw signInErr;
+  } catch (err: any) {
+    if ((err?.message ?? "").includes("SESSION_PASSWORD_NEEDED")) {
+      console.error("2FA is enabled on this number — cannot use for bot creation.");
+      process.exit(1);
     }
+    throw err;
   }
 
   const sessionString = client.session.save() as unknown as string;
 
+  // Save to sessions.json
+  const sessions: any[] = fs.existsSync(SESSIONS_FILE)
+    ? JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"))
+    : [];
+  const label = `sim-${phone.replace(/\D/g, "").slice(-10)}`;
+  const existing = sessions.findIndex((s: any) => s.accountLabel === label);
+  if (existing >= 0) sessions[existing].sessionString = sessionString;
+  else sessions.push({ accountLabel: label, sessionString });
+  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
+
+  console.log(`\nSession saved to sessions.json as "${label}"`);
   console.log("\n=== SESSION STRING ===");
   console.log(sessionString);
-  console.log("=== END SESSION STRING ===\n");
-  console.log("Add this to your sessions.json file:");
-  console.log(`  { "accountLabel": "sim-XXX", "sessionString": "${sessionString.slice(0, 20)}..." }`);
-  console.log("");
-  console.log("The full string is printed above. Copy the entire value between the === markers.");
+  console.log("=== END SESSION STRING ===");
 
   await client.disconnect();
   process.exit(0);
