@@ -42,6 +42,7 @@ test.describe('BYOK Onboarding Flow', () => {
                     status: 'live',
                     botUsername: 'test_claw_bot',
                     telegramLink: 'https://t.me/test_claw_bot',
+                    tenantSlug: 'test-slug-123',
                 }),
             });
         });

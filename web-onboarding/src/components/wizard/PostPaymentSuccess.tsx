@@ -16,6 +16,7 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
     const [status, setStatus] = useState<"deploying" | "live" | "timeout" | "error">("deploying");
     const [botUsername, setBotUsername] = useState<string | null>(null);
     const [telegramLink, setTelegramLink] = useState<string | null>(null);
+    const [dashboardUrl, setDashboardUrl] = useState<string | null>(null);
 
     // On mount, check for session_id from Stripe redirect and poll for bot status
     useEffect(() => {
@@ -38,6 +39,9 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
                     if (data.status === "live" && data.botUsername) {
                         setBotUsername(data.botUsername);
                         setTelegramLink(data.telegramLink ?? `https://t.me/${data.botUsername}`);
+                        if (data.tenantSlug) {
+                            setDashboardUrl(`/dashboard?slug=${encodeURIComponent(data.tenantSlug)}`);
+                        }
                         setStatus("live");
                         return; // Stop polling
                     }
@@ -140,14 +144,24 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
                             <p className="text-sm text-white/60 mb-4">
                                 Your agent is online and waiting for the first message. Click below to open Telegram.
                             </p>
-                            <a
-                                href={telegramLink ?? "#"}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white text-sm"
-                            >
-                                Open Telegram <ArrowRight className="h-4 w-4" />
-                            </a>
+                            <div className="flex flex-wrap gap-3">
+                                <a
+                                    href={telegramLink ?? "#"}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white text-sm"
+                                >
+                                    Open Telegram <ArrowRight className="h-4 w-4" />
+                                </a>
+                                {dashboardUrl && (
+                                    <a
+                                        href={dashboardUrl}
+                                        className="inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl bg-primary/20 hover:bg-primary/30 transition-colors text-white text-sm border border-primary/30"
+                                    >
+                                        View Dashboard <ArrowRight className="h-4 w-4" />
+                                    </a>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </motion.div>
@@ -155,7 +169,7 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
 
             {status === "live" && (
                 <button
-                    onClick={onClose}
+                    onClick={() => { if (dashboardUrl) { window.location.href = dashboardUrl; } else { onClose(); } }}
                     className="text-white/40 hover:text-white transition-colors text-sm font-semibold uppercase tracking-widest relative z-10"
                 >
                     Go to Dashboard

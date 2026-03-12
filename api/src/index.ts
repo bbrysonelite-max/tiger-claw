@@ -26,6 +26,7 @@
 
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
+import cors from "cors";
 import { initSchema, listTenants, updateTenantStatus, logAdminEvent } from "./services/db.js";
 import { runMigrations } from "./services/migrate.js";
 import { getPoolStatus } from "./services/pool.js";
@@ -49,6 +50,18 @@ const PORT = Number(process.env["PORT"] ?? 4000);
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
+
+// CORS — must be before raw body parsers so preflight OPTIONS requests are handled
+const ALLOWED_ORIGINS = (process.env["ALLOWED_ORIGINS"] ?? "http://localhost:3000")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: ALLOWED_ORIGINS,
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 
 // Stripe requires raw body for signature verification
 app.use("/webhooks/stripe", express.raw({ type: "application/json" }));
