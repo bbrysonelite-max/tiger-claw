@@ -66,7 +66,7 @@ export default function DashboardPage() {
         }
 
         fetch(`${API_BASE}/dashboard/${slug}`)
-            .then((r) => r.json())
+            .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
             .then((d) => {
                 if (d.error) {
                     setError(d.error);

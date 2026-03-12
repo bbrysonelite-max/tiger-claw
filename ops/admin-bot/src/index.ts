@@ -73,8 +73,8 @@ async function reply(text: string): Promise<void> {
     // Fallback: send as plain text if MarkdownV2 fails
     try {
       await bot.sendMessage(chatId, text.replace(/[\\*_`[\]()~>#+\-=|{}.!]/g, ""));
-    } catch {
-      // Swallow
+    } catch (fallbackErr) {
+      console.error("[admin-bot] Fallback plain-text send also failed:", fallbackErr);
     }
   }
 }

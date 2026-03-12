@@ -39,6 +39,15 @@ function request<T>(
       let data = "";
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
+        if ((res.statusCode ?? 200) >= 400) {
+          try {
+            const parsed = JSON.parse(data) as { error?: string };
+            reject(new Error(parsed.error ?? `HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
+          } catch {
+            reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
+          }
+          return;
+        }
         try {
           const parsed = JSON.parse(data) as T;
           resolve(parsed);
