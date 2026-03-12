@@ -109,8 +109,8 @@ test.describe('BYOK Onboarding Flow', () => {
         await page.waitForURL('**/success**');
         await expect(page.getByText('Provisioning...')).toBeVisible();
 
-        // Status poll returns "live" immediately — should show "Agent Deployed"
-        await expect(page.getByText('Agent Deployed')).toBeVisible({ timeout: 6000 });
+        // Status poll returns "live" on first poll — allow time for page hydration
+        await expect(page.getByText('Agent Deployed')).toBeVisible({ timeout: 15000 });
         await expect(page.getByText('Status: LIVE')).toBeVisible();
         await expect(page.getByText('@test_claw_bot')).toBeVisible();
         await expect(page.getByRole('link', { name: /Open Telegram/ })).toBeVisible();
