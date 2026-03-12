@@ -13,6 +13,7 @@ const router = Router();
 
 // GET /dashboard/:slug
 router.get("/:slug", async (req: Request, res: Response) => {
+  try {
     const slug = req.params["slug"]!;
     const tenant = await getTenantBySlug(slug);
 
@@ -77,6 +78,10 @@ router.get("/:slug", async (req: Request, res: Response) => {
     };
 
     return res.json(dashboard);
+  } catch (err) {
+    console.error("[dashboard] GET /:slug error:", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 export default router;

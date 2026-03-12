@@ -743,7 +743,7 @@ export async function getBYOKStatus(tenantId: string): Promise<{
     };
   } catch (err) {
     console.error("[db] getBYOKStatus error:", err instanceof Error ? err.message : err);
-    return { configured: false, provider: null, model: null, keyPreview: null, connectionType: null, updatedAt: null };
+    throw err;
   }
 }
 
