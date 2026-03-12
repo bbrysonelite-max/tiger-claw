@@ -73,7 +73,7 @@ const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
 });
 
 // ─── Chat history ────────────────────────────────────────────────────────────
-async function getChatHistory(tenantId: string, chatId: number): Promise<Content[]> {
+export async function getChatHistory(tenantId: string, chatId: number): Promise<Content[]> {
     try {
         const raw = await redis.get(`chat_history:${tenantId}:${chatId}`);
         if (!raw) return [];
@@ -94,7 +94,7 @@ async function getChatHistory(tenantId: string, chatId: number): Promise<Content
     }
 }
 
-async function saveChatHistory(tenantId: string, chatId: number, history: Content[]): Promise<void> {
+export async function saveChatHistory(tenantId: string, chatId: number, history: Content[]): Promise<void> {
     // BUG 5 FIX: trim before saving — last MAX_HISTORY_TURNS turns kept
     // Also ensure trim always starts at a 'user' role boundary to prevent the
     // "First content should be with role 'user'" error on next load.
@@ -121,7 +121,7 @@ async function saveChatHistory(tenantId: string, chatId: number, history: Conten
  * All failures are logged loudly with [ALERT] tag.
  * Wire [ALERT] logs to admin Telegram bot for production monitoring.
  */
-async function resolveGoogleKey(tenantId: string, workdir: string): Promise<string | undefined> {
+export async function resolveGoogleKey(tenantId: string, workdir: string): Promise<string | undefined> {
     // Step 1 — tiger_keys state file (4-layer system source of truth)
     const keyStatePath = path.join(workdir, 'key_state.json');
     try {
@@ -224,7 +224,7 @@ function buildToolContext(tenantId: string, tenant: any) {
  * BUG 4 FIX: Injects flavor config into the system prompt.
  * Previously: 2-sentence generic prompt. Now: flavor persona, keywords, compliance.
  */
-function buildSystemPrompt(tenant: any): string {
+export function buildSystemPrompt(tenant: any): string {
     const flavor = loadFlavorConfig(tenant.flavor);
     return [
         `You are Tiger Claw, an elite AI sales and recruiting agent operating for ${tenant.name}.`,
