@@ -58,8 +58,12 @@ router.post("/checkout", async (req: Request, res: Response) => {
         }
 
         if (!stripe) {
-            // Mock mode for local dev without a real Stripe Key
-            console.warn("[subscriptions] No STRIPE_SECRET_KEY provided. Returning mock checkout URL.");
+            if (process.env["NODE_ENV"] === "production") {
+                console.error("[subscriptions] CRITICAL: STRIPE_SECRET_KEY not set in production — payment unavailable");
+                return res.status(503).json({ error: "Payment system not configured. Contact support." });
+            }
+            // Dev-only mock: no real Stripe key set
+            console.warn("[subscriptions] No STRIPE_SECRET_KEY provided. Returning mock checkout URL (dev only).");
             return res.json({ url: "http://localhost:3000/success?session_id=mock_session" });
         }
 
@@ -67,7 +71,11 @@ router.post("/checkout", async (req: Request, res: Response) => {
         const priceId = process.env["STRIPE_PRICE_BYOK"];
 
         if (!priceId) {
-            console.warn("[subscriptions] Missing STRIPE_PRICE_BYOK env var. Returning mock success.");
+            if (process.env["NODE_ENV"] === "production") {
+                console.error("[subscriptions] CRITICAL: STRIPE_PRICE_BYOK not set in production — payment unavailable");
+                return res.status(503).json({ error: "Payment system not configured. Contact support." });
+            }
+            console.warn("[subscriptions] Missing STRIPE_PRICE_BYOK env var. Returning mock success (dev only).");
             return res.json({ url: "http://localhost:3000/success?session_id=mock_session" });
         }
 

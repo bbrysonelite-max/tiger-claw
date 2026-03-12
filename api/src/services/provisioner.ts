@@ -14,7 +14,7 @@ import {
   getBotState,
   type Tenant,
 } from "./db.js";
-import { getNextAvailable, assignToTenant, releaseBot, decryptToken } from "./pool.js";
+import { releaseBot, decryptToken } from "./pool.js";
 import { sendAdminAlert } from "../routes/admin.js";
 
 // ---------------------------------------------------------------------------

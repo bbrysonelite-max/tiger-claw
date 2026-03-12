@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Check, X, Shield, ExternalLink, ArrowRight, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { WizardState } from "../OnboardingModal";
@@ -17,8 +17,12 @@ export default function StepAIConnection({ state, updateState, onNext }: AIConne
     const [isValidating, setIsValidating] = useState(false);
     const [validationResult, setValidationResult] = useState<"success" | "error" | null>(null);
     const [errorMessage, setErrorMessage] = useState("");
+    // Track the key that is currently being validated so we can discard stale results
+    // if the user edits the key while a validation request is in flight.
+    const validatingKeyRef = useRef<string>("");
 
     const handleKeyChange = (key: string) => {
+        validatingKeyRef.current = key; // Always reflect latest typed value
         updateState({ apiKey: key });
         setValidationResult(null);
         setErrorMessage("");
@@ -33,6 +37,9 @@ export default function StepAIConnection({ state, updateState, onNext }: AIConne
             return;
         }
 
+        const keySnapshot = state.apiKey; // Capture the key we are about to validate
+        validatingKeyRef.current = keySnapshot;
+
         setIsValidating(true);
         setValidationResult(null);
         setErrorMessage("");
@@ -43,12 +50,15 @@ export default function StepAIConnection({ state, updateState, onNext }: AIConne
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     provider: "google",
-                    key: state.apiKey,
+                    key: keySnapshot,
                     botId: state.botId,
                 }),
             });
 
             const data = await res.json();
+
+            // Discard result if the user changed the key while we were waiting
+            if (validatingKeyRef.current !== keySnapshot) return;
 
             if (data.valid) {
                 setValidationResult("success");
@@ -57,8 +67,10 @@ export default function StepAIConnection({ state, updateState, onNext }: AIConne
                 setErrorMessage(data.error ?? "Key validation failed. Please try again.");
             }
         } catch (err: any) {
-            setValidationResult("error");
-            setErrorMessage("Network error — could not reach the server. Try again.");
+            if (validatingKeyRef.current === keySnapshot) {
+                setValidationResult("error");
+                setErrorMessage("Network error — could not reach the server. Try again.");
+            }
         } finally {
             setIsValidating(false);
         }
