@@ -315,21 +315,21 @@ export async function processTelegramMessage(
     const tenant = await getTenant(tenantId);
     if (!tenant) throw new Error(`Tenant not found: ${tenantId}`);
 
-    const toolContext = buildToolContext(tenantId, tenant);
-    const googleKey = await resolveGoogleKey(tenantId, toolContext.workdir);
-
-    if (!googleKey) {
-        console.warn(`[AI] No Google key resolved for tenant ${tenantId} — sending paused message.`);
-        await bot.sendMessage(
-            chatId,
-            '⚠️ Your bot is paused. Please contact support or add your API key to reactivate.',
-        );
-        return;
-    }
-
-    console.log(`[AI] Key resolved for tenant ${tenantId}. Entering Gemini pipeline for chat ${chatId}.`);
-
     try {
+        const toolContext = buildToolContext(tenantId, tenant);
+        const googleKey = await resolveGoogleKey(tenantId, toolContext.workdir);
+
+        if (!googleKey) {
+            console.warn(`[AI] No Google key resolved for tenant ${tenantId} — sending paused message.`);
+            await bot.sendMessage(
+                chatId,
+                '⚠️ Your bot is paused. Please contact support or add your API key to reactivate.',
+            );
+            return;
+        }
+
+        console.log(`[AI] Key resolved for tenant ${tenantId}. Entering Gemini pipeline for chat ${chatId}.`);
+
         await bot.sendChatAction(chatId, 'typing');
         console.log(`[AI] sendChatAction OK for chat ${chatId}`);
 
@@ -380,15 +380,15 @@ export async function processSystemRoutine(tenantId: string, routineType: string
     const tenant = await getTenant(tenantId);
     if (!tenant) throw new Error(`Tenant not found: ${tenantId}`);
 
-    const toolContext = buildToolContext(tenantId, tenant);
-    const googleKey = await resolveGoogleKey(tenantId, toolContext.workdir);
-
-    if (!googleKey) {
-        console.warn(`[AI Routine] [ALERT] No API key for tenant ${tenantId}. Aborting ${routineType}.`);
-        return;
-    }
-
     try {
+        const toolContext = buildToolContext(tenantId, tenant);
+        const googleKey = await resolveGoogleKey(tenantId, toolContext.workdir);
+
+        if (!googleKey) {
+            console.warn(`[AI Routine] [ALERT] No API key for tenant ${tenantId}. Aborting ${routineType}.`);
+            return;
+        }
+
         // System routines always start with a clean history. Persisting routine
         // chat history causes the next run to start with a 'function' role message
         // (from the previous run's tool responses), which Gemini rejects.

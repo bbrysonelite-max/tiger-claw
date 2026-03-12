@@ -703,7 +703,7 @@ async function handleRecordResponse(
     record.completedAt = now;
     store[params.nurtureId] = record;
     await saveNurture(context, store);
-    markLeadOptedOut(context, record.leadId, context.workdir);
+    await markLeadOptedOut(context, record.leadId, context.workdir);
 
     return {
       ok: true,
@@ -742,7 +742,7 @@ async function handleRecordResponse(
 
     // 5 or below → Immediate takeaway
     if (score <= 5) {
-      transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
+      await transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
       return {
         ok: true,
         output: [
@@ -784,7 +784,7 @@ async function handleRecordResponse(
 
         if (record.oneToTenRound > 2) {
           // Exceeded max 2 rounds → takeaway
-          transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
+          await transitionToSlowDrip(context, record, store, context.workdir, onboard, logger);
           return {
             ok: true,
             output: [
@@ -853,7 +853,7 @@ async function handleRecordResponse(
       record.completedAt = now;
       store[params.nurtureId] = record;
       await saveNurture(context, store);
-      applyScorePenalty(context, record.leadId, context.workdir);
+      await applyScorePenalty(context, record.leadId, context.workdir);
 
       return {
         ok: true,
@@ -895,7 +895,7 @@ async function advanceToNextTouch(
 
   if (nextTouchNumber > TOTAL_TOUCHES) {
     // Sequence complete — final takeaway + slow drip
-    transitionToSlowDrip(context, record, store, workdir, onboard, { info: () => { }, warn: () => { }, debug: () => { }, error: () => { } });
+    await transitionToSlowDrip(context, record, store, workdir, onboard, { info: () => { }, warn: () => { }, debug: () => { }, error: () => { } });
     return {
       ok: true,
       output: [
