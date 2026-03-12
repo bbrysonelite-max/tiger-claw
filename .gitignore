@@ -26,6 +26,9 @@ build/
 # Logs
 *.log
 
+# Test output
+test-results/
+
 # Bot pool sensitive data (phone numbers, session strings, API tokens)
 ops/botpool/sms_numbers.json
 ops/botpool/sessions.json
