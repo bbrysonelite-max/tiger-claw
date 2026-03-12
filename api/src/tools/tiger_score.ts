@@ -769,7 +769,9 @@ async function handleRecalculate(
   return {
     ok: true,
     output: input.leadId
-      ? `Recalculated score for lead. ${formatScoreOutput(leads[input.leadId], "recalculated")}`
+      ? leads[input.leadId]
+        ? `Recalculated score for lead. ${formatScoreOutput(leads[input.leadId], "recalculated")}`
+        : `Lead ${input.leadId} not found or was purged during recalculation.`
       : `Recalculated scores for ${count} leads. ${newlyQualified} newly qualified. ${purged} expired leads purged.`,
     data: {
       recalculated: count,
