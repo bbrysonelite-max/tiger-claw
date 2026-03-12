@@ -351,6 +351,7 @@ function notifyAdmin(tenantId: string, message: string): void {
     const lib = isHttps ? https : http;
     const body = JSON.stringify({ tenantId, message, severity: "high" });
 
+    const adminToken = process.env["ADMIN_TOKEN"] ?? "";
     const req = lib.request(
       {
         hostname: url.hostname,
@@ -360,6 +361,7 @@ function notifyAdmin(tenantId: string, message: string): void {
         headers: {
           "content-type": "application/json",
           "content-length": Buffer.byteLength(body),
+          ...(adminToken ? { "authorization": `Bearer ${adminToken}` } : {}),
         },
       },
       () => { /* fire and forget */ }

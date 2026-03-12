@@ -182,6 +182,7 @@ function httpRequest(
       const lib = isHttps ? https : http;
 
       const bodyStr = body ? JSON.stringify(body) : undefined;
+      const hiveToken = process.env["TIGER_CLAW_HIVE_TOKEN"];
       const options: http.RequestOptions = {
         hostname: parsed.hostname,
         port: parsed.port || (isHttps ? 443 : 80),
@@ -190,6 +191,7 @@ function httpRequest(
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
+          ...(hiveToken ? { "x-hive-token": hiveToken } : {}),
           ...(bodyStr ? { "Content-Length": Buffer.byteLength(bodyStr) } : {}),
         },
       };
