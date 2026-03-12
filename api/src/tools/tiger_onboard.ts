@@ -976,7 +976,7 @@ function updateTelegramBotIdentity(
             },
             () => resolve()
           );
-          req.on("error", () => resolve()); // Non-fatal
+          req.on("error", (err) => { console.error(`[onboard] updateTelegramBotIdentity ${method} failed:`, err.message); resolve(); });
           req.setTimeout(10000, () => { req.destroy(); resolve(); });
           req.write(bodyStr);
           req.end();
@@ -1014,8 +1014,8 @@ function setTenantActive(tenantId: string): Promise<void> {
       () => resolve()
     );
 
-    req.on("error", () => resolve()); // Non-fatal — resolve regardless
-    req.setTimeout(10000, () => { req.destroy(); resolve(); });
+    req.on("error", (err) => { console.error(`[onboard] setTenantActive failed for ${tenantId}:`, err.message); resolve(); });
+    req.setTimeout(10000, () => { console.error(`[onboard] setTenantActive timed out for ${tenantId}`); req.destroy(); resolve(); });
     req.write(body);
     req.end();
   });
@@ -1045,8 +1045,8 @@ function triggerFirstScout(tenantId: string): Promise<void> {
       () => resolve()
     );
 
-    req.on("error", () => resolve());
-    req.setTimeout(10000, () => { req.destroy(); resolve(); });
+    req.on("error", (err) => { console.error(`[onboard] triggerFirstScout failed for ${tenantId}:`, err.message); resolve(); });
+    req.setTimeout(10000, () => { console.error(`[onboard] triggerFirstScout timed out for ${tenantId}`); req.destroy(); resolve(); });
     req.write(body);
     req.end();
   });
