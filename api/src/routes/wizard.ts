@@ -46,7 +46,7 @@ router.get("/status", async (req: Request, res: Response) => {
     customerEmail = session.customer_details?.email ?? null;
   } catch (err) {
     console.error("[wizard] Failed to retrieve Stripe session:", err);
-    return res.status(400).json({ error: "Invalid session_id" });
+    return res.json({ status: "error", error: "Invalid session_id" });
   }
 
   if (!customerEmail) {

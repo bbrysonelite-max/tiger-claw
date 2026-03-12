@@ -48,7 +48,12 @@ function getEncKey(): Buffer | null {
 
 export function encryptToken(plaintext: string): string {
   const key = getEncKey();
-  if (!key) return plaintext; // No key set — store as plaintext (dev only)
+  if (!key) {
+    // ENCRYPTION_KEY not set — tokens stored as plaintext. Safe in dev only.
+    // In production this is a critical security failure.
+    console.error("[pool] SECURITY WARNING: ENCRYPTION_KEY not set. Bot tokens stored as PLAINTEXT. Set ENCRYPTION_KEY in production immediately.");
+    return plaintext;
+  }
 
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);

@@ -135,6 +135,9 @@ router.post("/stripe", async (req: Request, res: Response) => {
         language,
         preferredChannel,
         timezone,
+      }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
       });
 
       console.log(`[webhooks] Pushed provisioning job to BullMQ for ${slug}`);

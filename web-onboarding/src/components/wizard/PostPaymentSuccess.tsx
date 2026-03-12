@@ -13,7 +13,7 @@ interface PostPaymentSuccessProps {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export default function PostPaymentSuccess({ state, onClose }: PostPaymentSuccessProps) {
-    const [status, setStatus] = useState<"deploying" | "live">("deploying");
+    const [status, setStatus] = useState<"deploying" | "live" | "timeout" | "error">("deploying");
     const [botUsername, setBotUsername] = useState<string | null>(null);
     const [telegramLink, setTelegramLink] = useState<string | null>(null);
 
@@ -36,15 +36,19 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
                         setStatus("live");
                         return; // Stop polling
                     }
+                    if (data.status === "error") {
+                        setStatus("error");
+                        return; // Stop polling — invalid session
+                    }
                 } catch {
-                    // Keep polling
+                    // Keep polling on network errors
                 }
                 retries++;
                 if (retries < MAX_RETRIES) {
                     setTimeout(poll, 3000);
                 } else {
-                    // Provisioning took too long — show generic success
-                    setStatus("live");
+                    // Provisioning taking longer than expected — don't falsely show "live"
+                    setStatus("timeout");
                 }
             };
             poll();
@@ -86,13 +90,20 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
             </motion.div>
 
             <h2 className="text-3xl font-black mb-4 relative z-10 text-white">
-                {status === "deploying" ? "Provisioning..." : "Agent Deployed"}
+                {status === "deploying" ? "Provisioning..." :
+                 status === "live" ? "Agent Deployed" :
+                 status === "timeout" ? "Still Deploying..." :
+                 "Session Error"}
             </h2>
 
             <p className="text-white/60 text-lg mb-8 max-w-md mx-auto relative z-10 !leading-relaxed">
                 {status === "deploying"
                     ? `Setting up ${state.botName || "your agent"} on our infrastructure. This usually takes 10-30 seconds.`
-                    : `Your agent is live and connected via Google Gemini.`}
+                    : status === "live"
+                    ? `Your agent is live and connected via Google Gemini.`
+                    : status === "timeout"
+                    ? `Your payment was received. Your agent is still being set up — check your email for confirmation or refresh this page in a minute.`
+                    : `We couldn't verify your payment session. Please contact support if you were charged.`}
             </p>
 
             {status === "live" && (

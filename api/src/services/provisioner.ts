@@ -227,6 +227,18 @@ export async function terminateTenant(tenant: Tenant): Promise<void> {
   if (tenant.botToken) {
     await fetch(`https://api.telegram.org/bot${tenant.botToken}/deleteWebhook`);
   }
+
+  // Release the pool bot back so it can be reassigned to a future tenant
+  try {
+    const poolBots = await listBotPool("assigned");
+    const assignedBot = poolBots.find((b) => b.tenantId === tenant.id);
+    if (assignedBot) {
+      await releaseBot(assignedBot.id);
+    }
+  } catch (err) {
+    console.error(`[provisioner] terminateTenant: failed to release pool bot for ${tenant.id}:`, err);
+  }
+
   await updateTenantStatus(tenant.id, "terminated");
   await logAdminEvent("terminate", tenant.id, {});
 }
