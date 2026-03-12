@@ -76,7 +76,17 @@ const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
 async function getChatHistory(tenantId: string, chatId: number): Promise<Content[]> {
     try {
         const raw = await redis.get(`chat_history:${tenantId}:${chatId}`);
-        return raw ? JSON.parse(raw) : [];
+        if (!raw) return [];
+        const history: Content[] = JSON.parse(raw);
+        // Gemini requires history to start with role 'user'. If a trim previously cut mid-exchange,
+        // a 'function' or 'model' role entry could be at position 0. Strip leading non-user entries.
+        const firstUserIdx = history.findIndex(h => h.role === 'user');
+        if (firstUserIdx < 0) return []; // no user entry at all — discard
+        if (firstUserIdx > 0) {
+            console.warn(`[AI] History for tenant ${tenantId} started with role '${history[0].role}' — trimming ${firstUserIdx} leading entries.`);
+            return history.slice(firstUserIdx);
+        }
+        return history;
     } catch (err: any) {
         // BUG 3 FIX: loud failure — do not silently ignore
         console.error(`[AI] [ALERT] Failed to load chat history for tenant ${tenantId}:`, err.message);
@@ -86,7 +96,11 @@ async function getChatHistory(tenantId: string, chatId: number): Promise<Content
 
 async function saveChatHistory(tenantId: string, chatId: number, history: Content[]): Promise<void> {
     // BUG 5 FIX: trim before saving — last MAX_HISTORY_TURNS turns kept
-    const trimmed = history.slice(-(MAX_HISTORY_TURNS * 2));
+    // Also ensure trim always starts at a 'user' role boundary to prevent the
+    // "First content should be with role 'user'" error on next load.
+    let trimmed = history.slice(-(MAX_HISTORY_TURNS * 2));
+    const firstUserIdx = trimmed.findIndex(h => h.role === 'user');
+    if (firstUserIdx > 0) trimmed = trimmed.slice(firstUserIdx);
     await redis.set(
         `chat_history:${tenantId}:${chatId}`,
         JSON.stringify(trimmed),
@@ -218,6 +232,17 @@ function buildSystemPrompt(tenant: any): string {
         `Respond in: ${tenant.language ?? 'English'}.`,
         `Lead scoring threshold: 80 (LOCKED — never contact a prospect scoring below 80).`,
         `Key prospect keywords: ${flavor.defaultKeywords.slice(0, 8).join(', ')}.`,
+        ``,
+        `ONBOARDING RULE — HIGHEST PRIORITY:`,
+        `On EVERY incoming user message, your FIRST action must be to call tiger_onboard with action="status".`,
+        `If the result shows isComplete=false, you MUST run the onboarding interview before doing anything else.`,
+        `- If phase="identity" and no interview has started, call tiger_onboard with action="start".`,
+        `- For every subsequent user reply during onboarding, call tiger_onboard with action="respond" and response=<user message>.`,
+        `- Do NOT switch to prospecting, scouting, or any other mode until tiger_onboard returns isComplete=true.`,
+        `- Never skip, abbreviate, or summarize the onboarding interview. Every phase must complete fully.`,
+        `- CRITICAL: When tiger_onboard returns a confirmation summary (output contains bullet points like "• Who they are:"), you MUST relay the tool output WORD FOR WORD. Do NOT paraphrase, rewrite, or summarize it. Send the exact text from the tool output field directly to the user.`,
+        ``,
+        `NORMAL OPERATION (after onboarding complete):`,
         `Use your 19 registered tools to manage prospects, leads, nurture sequences, objections, and follow-ups.`,
         `After every outbound message or AI response, call tiger_keys with action="record_message" to track layer usage.`,
         `If you receive an API error, call tiger_keys with action="report_error" and the HTTP status immediately.`,
@@ -294,6 +319,7 @@ export async function processTelegramMessage(
     const googleKey = await resolveGoogleKey(tenantId, toolContext.workdir);
 
     if (!googleKey) {
+        console.warn(`[AI] No Google key resolved for tenant ${tenantId} — sending paused message.`);
         await bot.sendMessage(
             chatId,
             '⚠️ Your bot is paused. Please contact support or add your API key to reactivate.',
@@ -301,10 +327,15 @@ export async function processTelegramMessage(
         return;
     }
 
+    console.log(`[AI] Key resolved for tenant ${tenantId}. Entering Gemini pipeline for chat ${chatId}.`);
+
     try {
         await bot.sendChatAction(chatId, 'typing');
+        console.log(`[AI] sendChatAction OK for chat ${chatId}`);
 
         const history = await getChatHistory(tenantId, chatId);
+        console.log(`[AI] History loaded: ${history.length} entries`);
+
         const genAI = new GoogleGenerativeAI(googleKey);
         const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-flash',
@@ -313,15 +344,26 @@ export async function processTelegramMessage(
         });
 
         const chat = model.startChat({ history });
+        console.log(`[AI] Sending message to Gemini: "${text.slice(0, 50)}"`);
         const initial = await chat.sendMessage(text);
+        const initCandidates = (initial.response as any).candidates ?? [];
+        const finishReason = initCandidates[0]?.finishReason ?? 'unknown';
+        const promptBlocked = (initial.response as any).promptFeedback?.blockReason ?? null;
+        const rawParts = initCandidates[0]?.content?.parts ?? [];
+        console.log(`[AI] Gemini initial response: finishReason=${finishReason}, promptBlocked=${promptBlocked}, text=${!!initial.response.text?.()}, toolCalls=${(initial.response.functionCalls?.() ?? []).length}, rawParts=${JSON.stringify(rawParts).slice(0, 300)}`);
         const finalResponse = await runToolLoop(chat, initial.response, toolContext, 'AI');
 
         const updatedHistory = await chat.getHistory();
         await saveChatHistory(tenantId, chatId, updatedHistory);
+        console.log(`[AI] History saved: ${updatedHistory.length} entries`);
 
         const replyText = finalResponse.text?.() ?? '';
+        console.log(`[AI] Reply text length: ${replyText.trim().length}. Sending to Telegram.`);
         if (replyText.trim().length > 0) {
             await bot.sendMessage(chatId, replyText);
+            console.log(`[AI] Message sent to chat ${chatId}`);
+        } else {
+            console.warn(`[AI] [ALERT] Gemini returned empty reply for tenant ${tenantId} chat ${chatId}`);
         }
     } catch (err: any) {
         console.error(`[AI] [ALERT] processTelegramMessage failed for tenant ${tenantId}:`, err.message);
