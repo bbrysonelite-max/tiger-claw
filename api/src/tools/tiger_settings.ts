@@ -436,7 +436,8 @@ async function handleChannels(
   // BUG FIX: In multi-tenant single-process architecture, TENANT_SLUG env var is never set.
   // Slug comes from context.config (populated by buildToolContext in ai.ts).
   const slug = (context.config["TIGER_CLAW_TENANT_SLUG"] as string) ?? process.env["TENANT_SLUG"] ?? "";
-  const apiBase = (context.config["TIGER_CLAW_API_URL"] as string) ?? process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000";
+  // INTERNAL_API_URL for self-calls — TIGER_CLAW_API_URL is the external/public URL
+  const apiBase = process.env["INTERNAL_API_URL"] ?? "http://localhost:4000";
 
   if (!slug) {
     return { ok: false, error: "TENANT_SLUG env var is not set — cannot manage channels." };

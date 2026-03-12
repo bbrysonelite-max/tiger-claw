@@ -151,12 +151,9 @@ async function saveCache(context: ToolContext, cache: HiveCache): Promise<void> 
   await context.storage.set("cache.json", cache);
 }
 
-function getApiBase(config: Record<string, unknown>): string {
-  return (
-    (config["TIGER_CLAW_API_URL"] as string | undefined) ??
-    process.env["TIGER_CLAW_API_URL"] ??
-    "http://host.docker.internal:4000"
-  );
+function getApiBase(_config: Record<string, unknown>): string {
+  // INTERNAL_API_URL is used for self-calls — do not use TIGER_CLAW_API_URL (external)
+  return process.env["INTERNAL_API_URL"] ?? "http://localhost:4000";
 }
 
 function getTenantId(config: Record<string, unknown>): string {

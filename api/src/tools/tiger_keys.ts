@@ -342,7 +342,8 @@ function layerName(layer: LayerNumber): string {
 // ---------------------------------------------------------------------------
 
 function notifyAdmin(tenantId: string, message: string): void {
-  const apiUrl = process.env.TIGER_CLAW_API_URL ?? "http://localhost:4000";
+  // INTERNAL_API_URL for self-calls — TIGER_CLAW_API_URL is the external/public URL
+  const apiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:4000";
 
   try {
     const url = new URL(`/admin/alerts`, apiUrl);

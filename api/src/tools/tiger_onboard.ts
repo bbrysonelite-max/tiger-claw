@@ -625,8 +625,9 @@ function validateOpenAIKey(key: string): Promise<{ valid: boolean; error?: strin
 }
 
 // Notifies Tiger Claw API to deactivate the platform onboarding key (Layer 1)
+// Uses INTERNAL_API_URL — this is a self-call to the same process
 function notifyKeyActivation(tenantId: string): void {
-  const apiUrl = process.env.TIGER_CLAW_API_URL ?? "http://localhost:4000";
+  const apiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:4000";
   const url = new URL(`/tenants/${tenantId}/keys/activate`, apiUrl);
   const isHttps = url.protocol === "https:";
   const lib = isHttps ? https : http;
