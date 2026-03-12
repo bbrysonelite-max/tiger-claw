@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
-import { createBYOKUser, findOrCreateBYOKBot } from "../services/db.js";
+import { createBYOKUser, findOrCreateBYOKBot, getPool } from "../services/db.js";
 
 const router = Router();
 const stripe = process.env["STRIPE_SECRET_KEY"] ? new Stripe(process.env["STRIPE_SECRET_KEY"], { apiVersion: "2023-10-16" }) : null;
@@ -55,6 +55,15 @@ router.post("/checkout", async (req: Request, res: Response) => {
         }
         if (!botId) {
             return res.status(400).json({ error: "botId is required — complete Step 3 (AI Connection) first" });
+        }
+
+        // Verify botId belongs to the email provided — prevents cross-tenant botId injection
+        const ownerCheck = await getPool().query(
+            `SELECT b.id FROM bots b JOIN users u ON u.id = b.user_id WHERE b.id = $1 AND u.email = $2`,
+            [botId, email]
+        );
+        if (ownerCheck.rows.length === 0) {
+            return res.status(403).json({ error: "Bot ID does not belong to this account." });
         }
 
         if (!stripe) {
