@@ -26,9 +26,14 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
             // Poll the API for provisioning status — max 30 retries (90 seconds)
             let retries = 0;
             const MAX_RETRIES = 30;
+            let isMounted = true;
+            let pollTimer: ReturnType<typeof setTimeout>;
+
             const poll = async () => {
+                if (!isMounted) return;
                 try {
                     const res = await fetch(`${API_BASE}/wizard/status?session_id=${encodeURIComponent(sessionId)}`);
+                    if (!isMounted) return;
                     const data = await res.json();
                     if (data.status === "live" && data.botUsername) {
                         setBotUsername(data.botUsername);
@@ -43,15 +48,20 @@ export default function PostPaymentSuccess({ state, onClose }: PostPaymentSucces
                 } catch {
                     // Keep polling on network errors
                 }
+                if (!isMounted) return;
                 retries++;
                 if (retries < MAX_RETRIES) {
-                    setTimeout(poll, 3000);
+                    pollTimer = setTimeout(poll, 3000);
                 } else {
                     // Provisioning taking longer than expected — don't falsely show "live"
                     setStatus("timeout");
                 }
             };
             poll();
+            return () => {
+                isMounted = false;
+                clearTimeout(pollTimer);
+            };
         } else {
             // No session_id — simulate for dev/demo
             const timer = setTimeout(() => {

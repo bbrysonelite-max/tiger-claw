@@ -107,8 +107,9 @@ test.describe('BYOK Onboarding Flow', () => {
 
         // 8. PostPaymentSuccess page
         await page.waitForURL('**/success**');
-        await expect(page.getByText('Provisioning...')).toBeVisible();
-
+        // Note: "Provisioning..." is transient — mock resolves to "live" on first poll,
+        // so the deploying state may already be gone by the time the assertion runs.
+        // Assert the terminal success state instead:
         // Status poll returns "live" on first poll — allow time for page hydration
         await expect(page.getByText('Agent Deployed')).toBeVisible({ timeout: 15000 });
         await expect(page.getByText('Status: LIVE')).toBeVisible();

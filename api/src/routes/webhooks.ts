@@ -219,7 +219,14 @@ router.post("/line/:tenantId", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing x-line-signature" });
   }
 
-  const channelSecret = decryptToken(tenant.lineChannelSecret);
+  let channelSecret: string;
+  try {
+    channelSecret = decryptToken(tenant.lineChannelSecret);
+  } catch (err) {
+    console.error(`[webhooks] Failed to decrypt LINE channel secret for tenant ${tenantId}:`, err);
+    // Return 200 to prevent LINE from retrying — this is a config error, not a transient failure
+    return res.status(200).json({ received: true });
+  }
   const expectedSig = createHmac("sha256", channelSecret)
     .update(req.body as Buffer)
     .digest("base64");

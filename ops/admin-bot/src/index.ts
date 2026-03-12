@@ -291,7 +291,7 @@ bot.getMe().then((me) => {
   console.log(`[admin-bot] Started as @${me.username}`);
   bot.sendMessage(chatId, "🐯 Tiger Claw admin bot online\\. Send /help for commands\\.", {
     parse_mode: "MarkdownV2",
-  }).catch(() => {/* ignore */});
+  }).catch((err: Error) => { console.error("[admin-bot] Failed to send startup message:", err.message); });
 });
 
 bot.on("polling_error", (err) => {
