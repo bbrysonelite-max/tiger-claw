@@ -80,7 +80,7 @@ async function updateTenantContainer(
 
     // Resume flywheel
     await updateTenantStatus(tenant.id, "active");
-    updateTenantRecord(slug, {
+    await updateTenantRecord(slug, {
       imageTag,
       updatedAt: new Date().toISOString(),
       successCount: (readDeploymentState().tenants[slug]?.successCount ?? 0) + 1,
@@ -93,7 +93,7 @@ async function updateTenantContainer(
     const now = new Date().toISOString();
     let existing;
     try { existing = readDeploymentState().tenants[slug]; } catch { /* state unreadable — use defaults */ }
-    updateTenantRecord(slug, {
+    await updateTenantRecord(slug, {
       lastFailedAt: now,
       failureCount: (existing?.failureCount ?? 0) + 1,
       consecutiveFailures: (existing?.consecutiveFailures ?? 0) + 1,
@@ -205,7 +205,7 @@ async function rollbackSingleTenant(slug: string, imageTag: string): Promise<Upd
     await execFileAsync(UPDATE_SCRIPT, ["--slug", slug, "--image-tag", imageTag], {
       timeout: 120_000,
     });
-    updateTenantRecord(slug, {
+    await updateTenantRecord(slug, {
       imageTag,
       updatedAt: new Date().toISOString(),
     });
