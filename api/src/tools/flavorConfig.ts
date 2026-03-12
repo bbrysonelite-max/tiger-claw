@@ -74,7 +74,7 @@ export function loadFlavorConfig(flavor: string): FlavorConfig {
             return config;
         }
     } catch (e) {
-        console.warn(`[flavor] Failed to load ${safeFlavor}:`, e);
+        console.error(`[flavor] Failed to load ${safeFlavor}:`, e);
     }
 
     // Fallback to network-marketer

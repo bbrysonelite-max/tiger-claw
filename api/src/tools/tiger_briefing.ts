@@ -498,7 +498,6 @@ function assembleBriefing(data: BriefingData): string {
 
 async function handleGenerate(context: ToolContext, logger: ToolContext["logger"]): Promise<ToolResult> {
   const date = todayDate();
-  /* unused path */
   const log = await loadJson<BriefingLog>(context, "briefing.json") ?? {};
 
   // Find last briefing timestamp for "since yesterday" filtering
@@ -547,7 +546,6 @@ async function handleGenerate(context: ToolContext, logger: ToolContext["logger"
 
 async function handleMarkSent(context: ToolContext, date?: string, logger?: ToolContext["logger"]): Promise<ToolResult> {
   const targetDate = date ?? todayDate();
-  /* unused path */
   const log = await loadJson<BriefingLog>(context, "briefing.json") ?? {};
 
   if (!log[targetDate]) {
@@ -574,7 +572,6 @@ async function handleMarkSent(context: ToolContext, date?: string, logger?: Tool
 // ---------------------------------------------------------------------------
 
 async function handleHistory(context: ToolContext, limit: number): Promise<ToolResult> {
-  /* unused path */
   const log = await loadJson<BriefingLog>(context, "briefing.json") ?? {};
 
   const entries = Object.values(log)
