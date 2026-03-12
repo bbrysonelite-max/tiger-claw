@@ -210,7 +210,7 @@ function computeScheduledTime(): string {
   const scheduled = new Date(Date.now() + delayMs);
 
   const localHour = getLocalHour(scheduled);
-  const isReasonableHour = localHour >= 9 && localHour < 20; // 9 AM–8 PM local
+  const isReasonableHour = localHour >= 9 && localHour <= 20; // 9 AM–8 PM local (inclusive)
 
   if (!isReasonableHour) {
     // Calculate offset to push to 9 AM local tomorrow
@@ -748,7 +748,7 @@ async function handleRecordResponse(
       contacts[params.contactId] = contact;
       await saveContacts(context, contacts);
 
-      markLeadOptedOut(context, contact.leadId, context.workdir);
+      await markLeadOptedOut(context, contact.leadId, context.workdir);
 
       return {
         ok: true,
@@ -774,7 +774,7 @@ async function handleRecordResponse(
         contact.completedAt = now;
         contacts[params.contactId] = contact;
         await saveContacts(context, contacts);
-        applyScorePenalty(context, contact.leadId, context.workdir, logger);
+        await applyScorePenalty(context, contact.leadId, context.workdir, logger);
 
         return {
           ok: true,
@@ -818,7 +818,7 @@ async function handleRecordResponse(
         contact.completedAt = now;
         contacts[params.contactId] = contact;
         await saveContacts(context, contacts);
-        applyScorePenalty(context, contact.leadId, context.workdir, logger);
+        await applyScorePenalty(context, contact.leadId, context.workdir, logger);
 
         return {
           ok: true,
