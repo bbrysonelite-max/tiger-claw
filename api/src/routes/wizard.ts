@@ -200,69 +200,79 @@ router.post("/validate-key", async (req: Request, res: Response) => {
 // ── GET /wizard/:slug ────────────────────────────────────────────────────────
 
 router.get("/:slug", async (req: Request, res: Response) => {
-  const slug = req.params["slug"]!;
-  const tenant = await getTenantBySlug(slug);
-  if (!tenant) {
-    return res.status(404).send("Tenant not found.");
+  try {
+    const slug = req.params["slug"]!;
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) {
+      return res.status(404).send("Tenant not found.");
+    }
+
+    const botUsername = await getTenantBotUsername(tenant.id);
+
+    // Never send LINE credentials back to the browser — show configured/not status only
+    const html = renderWizardPage({
+      slug: tenant.slug,
+      name: tenant.name,
+      botUsername,
+      whatsappEnabled: tenant.whatsappEnabled,
+      lineConfigured: !!(tenant.lineChannelSecret && tenant.lineChannelAccessToken),
+    });
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(html);
+  } catch (err) {
+    console.error("[wizard] GET /:slug error:", err);
+    return res.status(500).send("Internal server error.");
   }
-
-  const botUsername = await getTenantBotUsername(tenant.id);
-
-  // Never send LINE credentials back to the browser — show configured/not status only
-  const html = renderWizardPage({
-    slug: tenant.slug,
-    name: tenant.name,
-    botUsername,
-    whatsappEnabled: tenant.whatsappEnabled,
-    lineConfigured: !!(tenant.lineChannelSecret && tenant.lineChannelAccessToken),
-  });
-
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  return res.send(html);
 });
 
 // ── POST /wizard/:slug/save ──────────────────────────────────────────────────
 
 router.post("/:slug/save", async (req: Request, res: Response) => {
-  const slug = req.params["slug"]!;
-  const tenant = await getTenantBySlug(slug);
-  if (!tenant) {
-    return res.status(404).json({ error: "Tenant not found." });
-  }
-
-  const { whatsappEnabled, lineChannelSecret, lineChannelAccessToken } = req.body as {
-    whatsappEnabled?: boolean;
-    lineChannelSecret?: string;
-    lineChannelAccessToken?: string;
-  };
-
-  if (lineChannelSecret !== undefined && lineChannelSecret !== "") {
-    if (typeof lineChannelSecret !== "string" || lineChannelSecret.length > 200) {
-      return res.status(400).json({ error: "LINE channel secret must be 200 characters or fewer." });
+  try {
+    const slug = req.params["slug"]!;
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) {
+      return res.status(404).json({ error: "Tenant not found." });
     }
-  }
-  if (lineChannelAccessToken !== undefined && lineChannelAccessToken !== "") {
-    if (typeof lineChannelAccessToken !== "string" || lineChannelAccessToken.length > 200) {
-      return res.status(400).json({ error: "LINE channel access token must be 200 characters or fewer." });
+
+    const { whatsappEnabled, lineChannelSecret, lineChannelAccessToken } = req.body as {
+      whatsappEnabled?: boolean;
+      lineChannelSecret?: string;
+      lineChannelAccessToken?: string;
+    };
+
+    if (lineChannelSecret !== undefined && lineChannelSecret !== "") {
+      if (typeof lineChannelSecret !== "string" || lineChannelSecret.length > 200) {
+        return res.status(400).json({ error: "LINE channel secret must be 200 characters or fewer." });
+      }
     }
+    if (lineChannelAccessToken !== undefined && lineChannelAccessToken !== "") {
+      if (typeof lineChannelAccessToken !== "string" || lineChannelAccessToken.length > 200) {
+        return res.status(400).json({ error: "LINE channel access token must be 200 characters or fewer." });
+      }
+    }
+
+    // Encrypt LINE credentials before storage (AES-256-GCM — same as BYOK keys)
+    // NEVER store plaintext LINE credentials in the database.
+    const encryptedSecret = lineChannelSecret
+      ? (lineChannelSecret === "" ? null : encryptToken(lineChannelSecret))
+      : undefined;
+    const encryptedToken = lineChannelAccessToken
+      ? (lineChannelAccessToken === "" ? null : encryptToken(lineChannelAccessToken))
+      : undefined;
+
+    await updateTenantChannelConfig(tenant.id, {
+      whatsappEnabled: whatsappEnabled ?? undefined,
+      lineChannelSecret: lineChannelSecret === "" ? null : encryptedSecret,
+      lineChannelAccessToken: lineChannelAccessToken === "" ? null : encryptedToken,
+    });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[wizard] POST /:slug/save error:", err);
+    return res.status(500).json({ error: "Failed to save channel configuration." });
   }
-
-  // Encrypt LINE credentials before storage (AES-256-GCM — same as BYOK keys)
-  // NEVER store plaintext LINE credentials in the database.
-  const encryptedSecret = lineChannelSecret
-    ? (lineChannelSecret === "" ? null : encryptToken(lineChannelSecret))
-    : undefined;
-  const encryptedToken = lineChannelAccessToken
-    ? (lineChannelAccessToken === "" ? null : encryptToken(lineChannelAccessToken))
-    : undefined;
-
-  await updateTenantChannelConfig(tenant.id, {
-    whatsappEnabled: whatsappEnabled ?? undefined,
-    lineChannelSecret: lineChannelSecret === "" ? null : encryptedSecret,
-    lineChannelAccessToken: lineChannelAccessToken === "" ? null : encryptedToken,
-  });
-
-  return res.json({ ok: true });
 });
 
 // ── HTML renderer ────────────────────────────────────────────────────────────
