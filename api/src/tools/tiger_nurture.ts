@@ -246,7 +246,7 @@ function touchTypeForNumber(touchNumber: number, record: NurtureRecord): TouchTy
     case 6:
       // Part 2 if they responded 6-7 to Part 1; otherwise scarcity or pattern interrupt
       if (record.lastOneToTenScore !== undefined && record.lastOneToTenScore >= 6 && record.lastOneToTenScore <= 7) {
-        return record.oneToTenRound <= 1 ? "one_to_ten_part2" : "pattern_interrupt";
+        return !record.touchHistory.some((t) => t.type === "one_to_ten_part2") ? "one_to_ten_part2" : "pattern_interrupt";
       }
       return "scarcity_takeaway";
     case 7: return "scarcity_takeaway";

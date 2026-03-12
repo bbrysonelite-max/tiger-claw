@@ -528,30 +528,39 @@ async function performRotation(
     };
   }
 
+  // Bug #4: skip layers with no key configured — cascade to next available layer
+  let effectiveLayer: LayerNumber = toLayer;
+  if (effectiveLayer === 2 && !state.layer2Key) {
+    effectiveLayer = (nextLayer(2) ?? 4) as LayerNumber;
+  }
+  if (effectiveLayer === 3 && !state.layer3Key) {
+    effectiveLayer = (nextLayer(3) ?? 4) as LayerNumber;
+  }
+
   // Normal rotation
-  state.activeLayer = toLayer;
+  state.activeLayer = effectiveLayer;
   state.currentRetry = undefined; // Clear retry tracker on rotation
 
-  if (toLayer === 4) {
+  if (effectiveLayer === 4) {
     state.layer4ActivatedAt = new Date().toISOString();
   }
 
   appendEvent(state, {
-    type: toLayer === 4 ? "layer4_activated" : "rotation",
+    type: effectiveLayer === 4 ? "layer4_activated" : "rotation",
     timestamp: new Date().toISOString(),
     fromLayer,
-    toLayer,
+    toLayer: effectiveLayer,
     message: reason,
   });
 
   saveKeyState(workdir, state);
 
-  const requiresAdminAlert = toLayer === 3 || toLayer === 4;
+  const requiresAdminAlert = effectiveLayer === 3 || effectiveLayer === 4;
   if (requiresAdminAlert) {
-    const severity = toLayer === 4 ? "🔴 CRITICAL" : "🟡 WARNING";
+    const severity = effectiveLayer === 4 ? "🔴 CRITICAL" : "🟡 WARNING";
     notifyAdmin(
       tenantId,
-      `${severity} Tenant ${tenantId} rotated to ${layerName(toLayer)}. Reason: ${reason}`
+      `${severity} Tenant ${tenantId} rotated to ${layerName(effectiveLayer)}. Reason: ${reason}`
     );
   }
 
@@ -575,8 +584,8 @@ async function performRotation(
   };
 
   return {
-    toLayer,
-    tenantMessage: tenantMessages[toLayer] ?? `Rotated to ${layerName(toLayer)}.`,
+    toLayer: effectiveLayer,
+    tenantMessage: tenantMessages[effectiveLayer] ?? `Rotated to ${layerName(effectiveLayer)}.`,
     adminAlert: requiresAdminAlert,
   };
 }
@@ -760,6 +769,11 @@ async function handleRestoreKey(
     if (state.tenantPaused) {
       state.tenantPaused = false;
       state.tenantPausedAt = undefined;
+    }
+    // Bug #8: clear Layer 4 state on restore to prevent stale timer/counter on re-entry
+    if (restoredLayer < 4) {
+      state.layer4ActivatedAt = undefined;
+      state.layer4TotalMessages = 0;
     }
   }
 
