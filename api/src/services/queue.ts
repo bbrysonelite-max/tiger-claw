@@ -58,6 +58,18 @@ export const provisionWorker = new Worker(
                 throw new Error(`K8s provisioning failed for ${job.data.slug}: ${result.error}`);
             }
 
+            // Waitlisted: pool was empty — bot is pending, NOT live. Do not mark as live.
+            if (result.waitlisted) {
+                console.warn(`[Worker] Tenant ${job.data.slug} provisioned but waitlisted (pool empty). Bot stays pending.`);
+                const pool = getPool();
+                await pool.query("UPDATE bots SET status = 'pending' WHERE id = $1", [job.data.botId]);
+                await sendAdminAlert(
+                    `⏳ Tenant provisioned but WAITLISTED (pool empty): ${job.data.name} (${job.data.slug})\n` +
+                    `Add bot tokens via ops/botpool to activate.`
+                );
+                return result;
+            }
+
             console.log(`[Worker] Succeeded provisioning job ${job.id}. Tenant live.`);
 
             // Update the Bot ID State successfully
@@ -276,6 +288,10 @@ export const cronWorker = new Worker(
     },
     { connection: connection as any, concurrency: 1 }
 );
+
+cronWorker.on('failed', (job, err) => {
+    console.error(`[Worker] Cron Job ${job?.id} failed. Global heartbeat may have missed a cycle. Error:`, err);
+});
 
 // Schedule the global cron to run every minute
 cronQueue.add('heartbeat', {}, {

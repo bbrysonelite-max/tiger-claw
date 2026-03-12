@@ -25,7 +25,7 @@
 //   Alert thresholds per Block 6.2.
 
 import "dotenv/config";
-import express, { type Request, type Response } from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import { initSchema, listTenants, updateTenantStatus, logAdminEvent } from "./services/db.js";
 import { runMigrations } from "./services/migrate.js";
 import { getPoolStatus } from "./services/pool.js";
@@ -82,6 +82,16 @@ app.get("/", (_req: Request, res: Response) => {
 // 404
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: "Not found" });
+});
+
+// Global async error handler — catches unhandled promise rejections from Express 4 routes
+// Express 4 does not forward async errors automatically; this catches them via next(err)
+// and also acts as a safety net for any route that forgets try-catch.
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("[tiger-claw-api] Unhandled route error:", err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: "internal_server_error" });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -208,6 +218,14 @@ async function main(): Promise<void> {
   setInterval(runHealthMonitor, 30_000);
   console.log("[monitor] Fleet health monitor started (30s interval)");
 }
+
+// Prevent async route errors from crashing the process.
+// Express 4 async handlers that throw without calling next(err) produce unhandled rejections.
+// Log loudly but keep the server alive — the individual request will hang unless
+// the route also has its own try-catch to send a response.
+process.on("unhandledRejection", (reason) => {
+  console.error("[tiger-claw-api] UNHANDLED PROMISE REJECTION:", reason);
+});
 
 main().catch((err) => {
   console.error("[tiger-claw-api] Fatal startup error:", err);
