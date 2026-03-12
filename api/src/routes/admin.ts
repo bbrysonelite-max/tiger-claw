@@ -333,7 +333,8 @@ router.post("/fleet/:tenantId/resume", async (req: Request, res: Response) => {
   }
 
   await resumeTenant(tenant);
-  return res.json({ ok: true, tenantId: tenant.id, status: "active" });
+  const resumedStatus = tenant.onboardingKeyUsed > 0 ? "active" : "onboarding";
+  return res.json({ ok: true, tenantId: tenant.id, status: resumedStatus });
 });
 
 // ---------------------------------------------------------------------------

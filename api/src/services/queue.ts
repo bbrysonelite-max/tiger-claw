@@ -58,7 +58,7 @@ export const provisionWorker = new Worker(
                 throw new Error(`K8s provisioning failed for ${job.data.slug}: ${result.error}`);
             }
 
-            console.log(`[Worker] Succeeded provisioning job ${job.id}. Container up.`);
+            console.log(`[Worker] Succeeded provisioning job ${job.id}. Tenant live.`);
 
             // Update the Bot ID State successfully
             const pool = getPool();
