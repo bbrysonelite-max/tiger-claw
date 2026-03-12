@@ -317,7 +317,7 @@ export function httpPost(url: string, body: Record<string, unknown>, authToken: 
     },
     () => {} // fire-and-forget
   );
-  req.on("error", () => {});
+  req.on("error", (err) => { console.error("[pool] httpPost failed:", err.message); });
   req.write(bodyStr);
   req.end();
 }

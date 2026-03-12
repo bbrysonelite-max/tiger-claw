@@ -366,7 +366,7 @@ function notifyAdmin(tenantId: string, message: string): void {
       },
       () => { /* fire and forget */ }
     );
-    req.on("error", () => { /* non-fatal */ });
+    req.on("error", (err) => { console.error(`[tiger_keys] notifyAdmin failed for tenant ${tenantId}:`, err.message); });
     req.setTimeout(10000, () => req.destroy());
     req.write(body);
     req.end();
