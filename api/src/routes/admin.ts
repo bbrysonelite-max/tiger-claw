@@ -82,8 +82,12 @@ router.post("/provision", async (req: Request, res: Response) => {
     return res.status(400).json({ error: `Missing fields: ${missing.join(", ")}` });
   }
 
-  const result = await provisionTenant(body as ProvisionInput);
-  return res.status(result.success ? 201 : 500).json(result);
+  try {
+    const result = await provisionTenant(body as ProvisionInput);
+    return res.status(result.success ? 201 : 500).json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -117,58 +121,63 @@ router.post("/demo", async (req: Request, res: Response) => {
 
   console.log(`[admin] Demo provisioning: ${name} (${slug}) — flavor: ${resolvedFlavor}`);
 
-  const result = await provisionTenant({
-    slug,
-    name,
-    email,
-    flavor: resolvedFlavor,
-    region: resolvedRegion,
-    language: resolvedLanguage,
-    preferredChannel: "telegram",
-  });
-
-  if (!result.success) {
-    console.error(`[admin] Demo provisioning failed for ${slug}:`, result.error);
-    return res.status(500).json({
-      error: result.error ?? "Provisioning failed",
-      steps: result.steps,
-    });
-  }
-
-  if (result.waitlisted) {
-    return res.status(202).json({
-      message: "Demo tenant created but waitlisted — bot pool is empty. Add tokens first.",
+  try {
+    const result = await provisionTenant({
       slug,
-      tenantId: result.tenant?.id,
+      name,
+      email,
+      flavor: resolvedFlavor,
+      region: resolvedRegion,
+      language: resolvedLanguage,
+      preferredChannel: "telegram",
     });
+
+    if (!result.success) {
+      console.error(`[admin] Demo provisioning failed for ${slug}:`, result.error);
+      return res.status(500).json({
+        error: result.error ?? "Provisioning failed",
+        steps: result.steps,
+      });
+    }
+
+    if (result.waitlisted) {
+      return res.status(202).json({
+        message: "Demo tenant created but waitlisted — bot pool is empty. Add tokens first.",
+        slug,
+        tenantId: result.tenant?.id,
+      });
+    }
+
+    // Look up the assigned bot's username
+    const tenantId = result.tenant!.id;
+    const botUsername = await getTenantBotUsername(tenantId);
+
+    await logAdminEvent("demo_provision", tenantId, {
+      name,
+      email,
+      flavor: resolvedFlavor,
+      type: "72h_trial",
+    });
+
+    console.log(`[admin] Demo bot live: @${botUsername} for ${name}`);
+
+    return res.status(201).json({
+      ok: true,
+      slug,
+      tenantId,
+      botUsername: botUsername ? `@${botUsername}` : null,
+      telegramLink: botUsername ? `https://t.me/${botUsername}` : null,
+      trial: {
+        duration: "72h",
+        messageLimit: 50,
+        layer: 1,
+        note: "Bot auto-suspends when Layer 1 key expires",
+      },
+    });
+  } catch (err) {
+    console.error(`[admin] Demo provisioning error for ${slug}:`, err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-
-  // Look up the assigned bot's username
-  const tenantId = result.tenant!.id;
-  const botUsername = await getTenantBotUsername(tenantId);
-
-  await logAdminEvent("demo_provision", tenantId, {
-    name,
-    email,
-    flavor: resolvedFlavor,
-    type: "72h_trial",
-  });
-
-  console.log(`[admin] Demo bot live: @${botUsername} for ${name}`);
-
-  return res.status(201).json({
-    ok: true,
-    slug,
-    tenantId,
-    botUsername: botUsername ? `@${botUsername}` : null,
-    telegramLink: botUsername ? `https://t.me/${botUsername}` : null,
-    trial: {
-      duration: "72h",
-      messageLimit: 50,
-      layer: 1,
-      note: "Bot auto-suspends when Layer 1 key expires",
-    },
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -266,11 +275,15 @@ router.get("/flavors", requireAdmin, async (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.get("/fleet", async (_req: Request, res: Response) => {
-  const tenants = await listTenants();
-  res.json({
-    count: tenants.length,
-    tenants: tenants.map(tenantSummary),
-  });
+  try {
+    const tenants = await listTenants();
+    res.json({
+      count: tenants.length,
+      tenants: tenants.map(tenantSummary),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -278,14 +291,17 @@ router.get("/fleet", async (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.get("/fleet/:tenantId", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
-  return res.json({
-    ...tenantSummary(tenant),
-    health: { httpReachable: tenant.status === 'active' || tenant.status === 'onboarding' },
-    containerStats: null,
-  });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    return res.json({
+      ...tenantSummary(tenant),
+      health: { httpReachable: tenant.status === 'active' || tenant.status === 'onboarding' },
+      containerStats: null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -293,18 +309,18 @@ router.get("/fleet/:tenantId", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.post("/fleet/:tenantId/report", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-  if (tenant.status !== "active") {
-    return res.status(400).json({ error: "Tenant is not active" });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    if (tenant.status !== "active") {
+      return res.status(400).json({ error: "Tenant is not active" });
+    }
+    const triggered = await triggerContainerWebhook(tenant, "tiger_briefing", { action: "generate" });
+    await logAdminEvent("manual_report", tenant.id, { triggered });
+    return res.json({ ok: true, triggered, tenantId: tenant.id });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-
-  // Signal the bot to generate a briefing via the AI tool loop
-  // (the tiger_briefing tool handles "generate" action)
-  const triggered = await triggerContainerWebhook(tenant, "tiger_briefing", { action: "generate" });
-  await logAdminEvent("manual_report", tenant.id, { triggered });
-
-  return res.json({ ok: true, triggered, tenantId: tenant.id });
 });
 
 // ---------------------------------------------------------------------------
@@ -312,13 +328,15 @@ router.post("/fleet/:tenantId/report", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.post("/fleet/:tenantId/suspend", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
-  const reason = (req.body as { reason?: string })["reason"] ?? "Admin suspension";
-  await suspendTenant(tenant, reason);
-
-  return res.json({ ok: true, tenantId: tenant.id, status: "suspended" });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const reason = (req.body as { reason?: string })["reason"] ?? "Admin suspension";
+    await suspendTenant(tenant, reason);
+    return res.json({ ok: true, tenantId: tenant.id, status: "suspended" });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -326,14 +344,17 @@ router.post("/fleet/:tenantId/suspend", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.post("/fleet/:tenantId/resume", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-  if (tenant.status !== "suspended") {
-    return res.status(400).json({ error: "Tenant is not suspended" });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    if (tenant.status !== "suspended") {
+      return res.status(400).json({ error: "Tenant is not suspended" });
+    }
+    const resumedStatus = await resumeTenant(tenant);
+    return res.json({ ok: true, tenantId: tenant.id, status: resumedStatus });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-
-  const resumedStatus = await resumeTenant(tenant);
-  return res.json({ ok: true, tenantId: tenant.id, status: resumedStatus });
 });
 
 // ---------------------------------------------------------------------------
@@ -341,11 +362,14 @@ router.post("/fleet/:tenantId/resume", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.delete("/fleet/:tenantId", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
-  await terminateTenant(tenant);
-  return res.json({ ok: true, tenantId: tenant.id, status: "terminated" });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    await terminateTenant(tenant);
+    return res.json({ ok: true, tenantId: tenant.id, status: "terminated" });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -354,11 +378,15 @@ router.delete("/fleet/:tenantId", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.get("/canary", async (_req: Request, res: Response) => {
-  const tenants = await listCanaryTenants();
-  res.json({
-    count: tenants.length,
-    tenants: tenants.map(tenantSummary),
-  });
+  try {
+    const tenants = await listCanaryTenants();
+    res.json({
+      count: tenants.length,
+      tenants: tenants.map(tenantSummary),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -366,12 +394,15 @@ router.get("/canary", async (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.post("/fleet/:tenantId/canary", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
-  await setCanaryGroup(tenant.id, true);
-  await logAdminEvent("canary_add", tenant.id);
-  return res.json({ ok: true, tenantId: tenant.id, slug: tenant.slug, canaryGroup: true });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    await setCanaryGroup(tenant.id, true);
+    await logAdminEvent("canary_add", tenant.id);
+    return res.json({ ok: true, tenantId: tenant.id, slug: tenant.slug, canaryGroup: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -379,12 +410,15 @@ router.post("/fleet/:tenantId/canary", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 router.delete("/fleet/:tenantId/canary", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
-  await setCanaryGroup(tenant.id, false);
-  await logAdminEvent("canary_remove", tenant.id);
-  return res.json({ ok: true, tenantId: tenant.id, slug: tenant.slug, canaryGroup: false });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    await setCanaryGroup(tenant.id, false);
+    await logAdminEvent("canary_remove", tenant.id);
+    return res.json({ ok: true, tenantId: tenant.id, slug: tenant.slug, canaryGroup: false });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -392,10 +426,9 @@ router.delete("/fleet/:tenantId/canary", async (req: Request, res: Response) => 
 // ---------------------------------------------------------------------------
 
 router.get("/fleet/:tenantId/logs", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
   try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
     const lines = ["Multi-tenant infrastructure: Native container logs are deprecated. View central API logs for details."];
     return res.json({ tenantId: tenant.id, slug: tenant.slug, lines });
   } catch (err) {
@@ -423,14 +456,16 @@ router.post("/alerts", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "message is required" });
   }
 
-  const prefixed = severity === "high" ? `🚨 ${message}` : message;
-  await sendAdminAlert(prefixed);
-
-  if (tenantId) {
-    await logAdminEvent("skill_alert", tenantId, { message, severity });
+  try {
+    const prefixed = severity === "high" ? `🚨 ${message}` : message;
+    await sendAdminAlert(prefixed);
+    if (tenantId) {
+      await logAdminEvent("skill_alert", tenantId, { message, severity });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-
-  return res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -551,40 +586,48 @@ async function triggerContainerWebhook(
 
 // GET /admin/pool/status — pool stats (total, assigned, unassigned)
 router.get("/pool/status", async (_req: Request, res: Response) => {
-  const stats = await getPoolStats();
-  return res.json(stats);
+  try {
+    const stats = await getPoolStats();
+    return res.json(stats);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // GET /admin/pool/health — GAP 6: pool health check with action recommendation
 router.get("/pool/health", async (_req: Request, res: Response) => {
-  const stats = await getPoolStats();
-  const available = stats.unassigned ?? 0;
-  const total = (stats.total ?? 0);
+  try {
+    const stats = await getPoolStats();
+    const available = stats.unassigned ?? 0;
+    const total = (stats.total ?? 0);
 
-  let status: string;
-  let action: string;
+    let status: string;
+    let action: string;
 
-  if (available === 0) {
-    status = "empty";
-    action = "URGENT: Run 'npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50' immediately. New signups will be waitlisted.";
-  } else if (available < 10) {
-    status = "critical";
-    action = "Create at least 20 bots. Run: npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 20";
-  } else if (available < 50) {
-    status = "low";
-    action = "Schedule a pool refill soon. Run: npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50";
-  } else {
-    status = "healthy";
-    action = "No action needed.";
+    if (available === 0) {
+      status = "empty";
+      action = "URGENT: Run 'npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50' immediately. New signups will be waitlisted.";
+    } else if (available < 10) {
+      status = "critical";
+      action = "Create at least 20 bots. Run: npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 20";
+    } else if (available < 50) {
+      status = "low";
+      action = "Schedule a pool refill soon. Run: npx tsx ops/botpool/create_bots.ts --mtproto --sessions ./sessions.json --count 50";
+    } else {
+      status = "healthy";
+      action = "No action needed.";
+    }
+
+    return res.json({
+      status,
+      available,
+      assigned: stats.assigned ?? 0,
+      total,
+      action,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-
-  return res.json({
-    status,
-    available,
-    assigned: stats.assigned ?? 0,
-    total,
-    action,
-  });
 });
 
 // POST /admin/pool/add — simple token insert (no Telegram validation)
@@ -608,96 +651,114 @@ router.post("/pool/add", async (req: Request, res: Response) => {
 
 // GET /admin/pool — full pool listing with details
 router.get("/pool", async (_req: Request, res: Response) => {
-  const counts = await getPoolStatus();
-  const all = await listBotPool();
-  return res.json({
-    counts,
-    bots: all.map((b) => ({
-      id: b.id,
-      username: b.botUsername,
-      telegramBotId: b.telegramBotId,
-      status: b.status,
-      phoneAccount: b.phoneAccount,
-      assignedAt: b.assignedAt?.toISOString(),
-      tenantId: b.tenantId,
-      createdAt: b.createdAt.toISOString(),
-    })),
-  });
+  try {
+    const counts = await getPoolStatus();
+    const all = await listBotPool();
+    return res.json({
+      counts,
+      bots: all.map((b) => ({
+        id: b.id,
+        username: b.botUsername,
+        telegramBotId: b.telegramBotId,
+        status: b.status,
+        phoneAccount: b.phoneAccount,
+        assignedAt: b.assignedAt?.toISOString(),
+        tenantId: b.tenantId,
+        createdAt: b.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // POST /admin/pool/import — import a single token
 router.post("/pool/import", async (req: Request, res: Response) => {
   const { token, phoneAccount } = req.body as { token?: string; phoneAccount?: string };
   if (!token) return res.status(400).json({ error: "token is required" });
-
-  const result = await importToken(token, phoneAccount);
-  if (!result.ok) return res.status(422).json(result);
-  return res.json(result);
+  try {
+    const result = await importToken(token, phoneAccount);
+    if (!result.ok) return res.status(422).json(result);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // POST /admin/pool/import-batch — import multiple tokens (newline or array)
 router.post("/pool/import-batch", async (req: Request, res: Response) => {
   const { tokens, phoneAccount } = req.body as { tokens?: string | string[]; phoneAccount?: string };
   if (!tokens) return res.status(400).json({ error: "tokens is required" });
-
-  const list = Array.isArray(tokens)
-    ? tokens
-    : String(tokens).split(/\r?\n/).filter(Boolean);
-
-  const result = await importBatch(list, phoneAccount);
-  return res.json(result);
+  try {
+    const list = Array.isArray(tokens)
+      ? tokens
+      : String(tokens).split(/\r?\n/).filter(Boolean);
+    const result = await importBatch(list, phoneAccount);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // POST /admin/pool/:botId/assign — manually assign to a tenant
 router.post("/pool/:botId/assign", async (req: Request, res: Response) => {
   const { tenantId } = req.body as { tenantId?: string };
   if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
-
-  const tenant = await getTenant(tenantId);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
-  await assignToTenant(req.params["botId"]!, tenantId);
-  return res.json({ ok: true, tenantId: tenant.id, slug: tenant.slug });
+  try {
+    const tenant = await getTenant(tenantId);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    await assignToTenant(req.params["botId"]!, tenantId);
+    return res.json({ ok: true, tenantId: tenant.id, slug: tenant.slug });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // POST /admin/pool/:botIdOrUsername/release — release back to available pool
 router.post("/pool/:ref/release", async (req: Request, res: Response) => {
   const ref = req.params["ref"]!;
-  let botId = ref;
-
-  // Accept username (@handle or handle)
-  if (ref.startsWith("@") || !/^[0-9a-f]{8}-/.test(ref)) {
-    const entry = await getBotPoolEntryByUsername(ref);
-    if (!entry) return res.status(404).json({ error: `Bot @${ref} not found in pool` });
-    botId = entry.id;
+  try {
+    let botId = ref;
+    // Accept username (@handle or handle)
+    if (ref.startsWith("@") || !/^[0-9a-f]{8}-/.test(ref)) {
+      const entry = await getBotPoolEntryByUsername(ref);
+      if (!entry) return res.status(404).json({ error: `Bot @${ref} not found in pool` });
+      botId = entry.id;
+    }
+    await releaseBot(botId);
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-
-  await releaseBot(botId);
-  return res.json({ ok: true });
 });
 
 // DELETE /admin/pool/:ref — retire a bot (token revoked/problematic)
 router.delete("/pool/:ref", async (req: Request, res: Response) => {
   const ref = req.params["ref"]!;
-  let botId = ref;
-
-  if (ref.startsWith("@") || !/^[0-9a-f]{8}-/.test(ref)) {
-    const entry = await getBotPoolEntryByUsername(ref);
-    if (!entry) return res.status(404).json({ error: `Bot @${ref} not found in pool` });
-    botId = entry.id;
+  try {
+    let botId = ref;
+    if (ref.startsWith("@") || !/^[0-9a-f]{8}-/.test(ref)) {
+      const entry = await getBotPoolEntryByUsername(ref);
+      if (!entry) return res.status(404).json({ error: `Bot @${ref} not found in pool` });
+      botId = entry.id;
+    }
+    await retireBot(botId);
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
-
-  await retireBot(botId);
-  return res.json({ ok: true });
 });
 
 // POST /admin/fleet/:tenantId/deprovision — full cleanup with bot recycling
 router.post("/fleet/:tenantId/deprovision", async (req: Request, res: Response) => {
-  const tenant = await resolveTenant(req.params["tenantId"]!);
-  if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-
-  const result = await deprovisionTenant(tenant);
-  return res.json({ ok: true, steps: result.steps });
+  try {
+    const tenant = await resolveTenant(req.params["tenantId"]!);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const result = await deprovisionTenant(tenant);
+    return res.json({ ok: true, steps: result.steps ?? [] });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 export default router;
