@@ -17,6 +17,7 @@ const mockDecryptToken = vi.hoisted(() => vi.fn((s: string) => `plaintext-${s}`)
 const mockReleaseBot = vi.hoisted(() => vi.fn());
 const mockSendAdminAlert = vi.hoisted(() => vi.fn());
 const mockFetch = vi.hoisted(() => vi.fn());
+const mockGetBotState = vi.hoisted(() => vi.fn());
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ vi.mock('../db.js', () => ({
   logAdminEvent: mockLogAdminEvent,
   listBotPool: mockListBotPool,
   assignBotToken: mockAssignBotToken,
+  getBotState: mockGetBotState,
   getPool: vi.fn(() => ({ query: mockGetPoolQuery })),
 }));
 
@@ -233,6 +235,7 @@ describe('resumeTenant', () => {
     mockFetch.mockResolvedValue({ json: () => Promise.resolve({ ok: true }) });
     mockUpdateTenantStatus.mockResolvedValue(undefined);
     mockLogAdminEvent.mockResolvedValue(undefined);
+    mockGetBotState.mockResolvedValue(null); // default: no onboarding state
   });
 
   it('re-registers Telegram webhook on resume', async () => {
@@ -241,18 +244,36 @@ describe('resumeTenant', () => {
     expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('setWebhook'));
   });
 
-  it('restores to onboarding when onboardingKeyUsed = 0', async () => {
-    const tenant = { ...MOCK_TENANT, onboardingKeyUsed: 0 };
-    await resumeTenant(tenant as any);
+  it('restores to onboarding when onboarding phase is not complete', async () => {
+    mockGetBotState.mockResolvedValue({ phase: 'icp_builder' });
+    const result = await resumeTenant(MOCK_TENANT as any);
 
-    expect(mockUpdateTenantStatus).toHaveBeenCalledWith(tenant.id, 'onboarding');
+    expect(result).toBe('onboarding');
+    expect(mockUpdateTenantStatus).toHaveBeenCalledWith(MOCK_TENANT.id, 'onboarding');
   });
 
-  it('restores to active when onboardingKeyUsed > 0', async () => {
-    const tenant = { ...MOCK_TENANT, onboardingKeyUsed: 5 };
-    await resumeTenant(tenant as any);
+  it('restores to onboarding when no onboarding state exists', async () => {
+    mockGetBotState.mockResolvedValue(null);
+    const result = await resumeTenant(MOCK_TENANT as any);
 
-    expect(mockUpdateTenantStatus).toHaveBeenCalledWith(tenant.id, 'active');
+    expect(result).toBe('onboarding');
+    expect(mockUpdateTenantStatus).toHaveBeenCalledWith(MOCK_TENANT.id, 'onboarding');
+  });
+
+  it('restores to active when onboarding phase is complete', async () => {
+    mockGetBotState.mockResolvedValue({ phase: 'complete' });
+    const result = await resumeTenant(MOCK_TENANT as any);
+
+    expect(result).toBe('active');
+    expect(mockUpdateTenantStatus).toHaveBeenCalledWith(MOCK_TENANT.id, 'active');
+  });
+
+  it('falls back to onboarding if getBotState throws', async () => {
+    mockGetBotState.mockRejectedValue(new Error('DB error'));
+    const result = await resumeTenant(MOCK_TENANT as any);
+
+    expect(result).toBe('onboarding');
+    expect(mockUpdateTenantStatus).toHaveBeenCalledWith(MOCK_TENANT.id, 'onboarding');
   });
 
   it('logs a resume admin event', async () => {

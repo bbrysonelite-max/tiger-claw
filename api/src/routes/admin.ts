@@ -332,8 +332,7 @@ router.post("/fleet/:tenantId/resume", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Tenant is not suspended" });
   }
 
-  await resumeTenant(tenant);
-  const resumedStatus = tenant.onboardingKeyUsed > 0 ? "active" : "onboarding";
+  const resumedStatus = await resumeTenant(tenant);
   return res.json({ ok: true, tenantId: tenant.id, status: resumedStatus });
 });
 

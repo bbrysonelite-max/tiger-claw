@@ -11,6 +11,7 @@ import {
   assignBotToken,
   getPoolStats,
   getPool,
+  getBotState,
   type Tenant,
 } from "./db.js";
 import { getNextAvailable, assignToTenant, releaseBot, decryptToken } from "./pool.js";
@@ -197,15 +198,25 @@ export async function suspendTenant(
 // Resume a suspended tenant
 // ---------------------------------------------------------------------------
 
-export async function resumeTenant(tenant: Tenant): Promise<void> {
+export async function resumeTenant(tenant: Tenant): Promise<"active" | "onboarding"> {
   if (tenant.botToken) {
     const webhookUrl = `${process.env["TIGER_CLAW_API_URL"] ?? 'https://api.tigerclaw.io'}/webhooks/telegram/${tenant.id}`;
     await fetch(`https://api.telegram.org/bot${tenant.botToken}/setWebhook?url=${webhookUrl}`);
   }
-  // Restore to last meaningful status before suspension
-  const status = tenant.onboardingKeyUsed > 0 ? "active" : "onboarding";
+  // Determine correct status: check actual onboarding completion in bot_states.
+  // onboardingKeyUsed is never incremented — use the onboarding phase state instead.
+  let status: "active" | "onboarding" = "onboarding";
+  try {
+    const onboardState = await getBotState<{ phase?: string }>(tenant.id, "onboard_state.json");
+    if (onboardState?.phase === "complete") {
+      status = "active";
+    }
+  } catch {
+    // Fall back to onboarding if state is unreadable
+  }
   await updateTenantStatus(tenant.id, status);
   await logAdminEvent("resume", tenant.id, {});
+  return status;
 }
 
 // ---------------------------------------------------------------------------
