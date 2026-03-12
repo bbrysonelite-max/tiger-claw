@@ -37,6 +37,7 @@ services:
       - DATABASE_URL=postgresql://botcraft:REDACTED_DB_PASSWORD@db:5432/tiger_bot
       - REDIS_URL=redis://redis:6379
       - TIGER_CLAW_API_URL=${TIGER_CLAW_API_URL:-https://api.tigerclaw.io}
+      - INTERNAL_API_URL=http://localhost:4000
     env_file:
       - ./api/.env
     volumes:

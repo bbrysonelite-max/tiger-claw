@@ -990,9 +990,10 @@ function updateTelegramBotIdentity(
 // ---------------------------------------------------------------------------
 
 // Calls Tiger Claw API to set tenant status to "active"
+// Uses INTERNAL_API_URL (not TIGER_CLAW_API_URL) — self-calls must not go through the external URL
 function setTenantActive(tenantId: string): Promise<void> {
   return new Promise((resolve) => {
-    const apiUrl = process.env.TIGER_CLAW_API_URL ?? "http://localhost:4000";
+    const apiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:4000";
     const url = new URL(`/tenants/${tenantId}/status`, apiUrl);
     const isHttps = url.protocol === "https:";
     const lib = isHttps ? https : http;
@@ -1020,9 +1021,10 @@ function setTenantActive(tenantId: string): Promise<void> {
 }
 
 // Calls Tiger Claw API to trigger the first scout hunt immediately
+// Uses INTERNAL_API_URL (not TIGER_CLAW_API_URL) — self-calls must not go through the external URL
 function triggerFirstScout(tenantId: string): Promise<void> {
   return new Promise((resolve) => {
-    const apiUrl = process.env.TIGER_CLAW_API_URL ?? "http://localhost:4000";
+    const apiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:4000";
     const url = new URL(`/tenants/${tenantId}/scout`, apiUrl);
     const isHttps = url.protocol === "https:";
     const lib = isHttps ? https : http;
