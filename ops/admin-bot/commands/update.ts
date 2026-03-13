@@ -13,7 +13,7 @@
 //   /update rollback                            — rollback current stage
 //   /update canary set slug1,slug2,...,slug5     — set canary group
 
-const API_BASE = process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000";
+const API_BASE = process.env["TIGER_CLAW_API_URL"] ?? (() => { throw new Error("[FATAL] TIGER_CLAW_API_URL environment variable is required"); })();
 const ADMIN_TOKEN = process.env["ADMIN_TOKEN"] ?? "";
 
 interface ApiResponse {

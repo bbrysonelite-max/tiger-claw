@@ -1,7 +1,6 @@
 variable "project_id" {
   description = "Google Cloud Project ID"
   type        = string
-  default     = "hybrid-matrix-472500-k5"
 }
 
 variable "project_hash" {

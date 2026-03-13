@@ -15,7 +15,7 @@ spec:
       containerConcurrency: 100
       timeoutSeconds: 300
       containers:
-        - image: gcr.io/hybrid-matrix-472500-k5/tiger-claw-api:latest
+        - image: gcr.io/${GCP_PROJECT_ID}/tiger-claw-api:latest
           ports:
             - containerPort: 4000
           resources:

@@ -18,8 +18,10 @@ let pool: Pool | null = null;
 
 export function getPool(): Pool {
   if (!pool) {
+    const dbUrl = process.env["DATABASE_URL"];
+    if (!dbUrl) throw new Error("[FATAL] DATABASE_URL environment variable is required");
     pool = new Pool({
-      connectionString: process.env["DATABASE_URL"] ?? "postgresql://botcraft:REDACTED_DB_PASSWORD@localhost:5432/tiger_bot",
+      connectionString: dbUrl,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,

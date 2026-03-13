@@ -30,7 +30,7 @@ if [ -f "$SCRIPT_DIR/../.env.deploy" ]; then
 fi
 
 BACKUP_DEST="${BACKUP_DEST:-s3://tiger-claw-backups}"
-DATABASE_URL="${DATABASE_URL:-postgresql://botcraft:REDACTED_DB_PASSWORD@localhost:5432/tiger_bot}"
+DATABASE_URL="${DATABASE_URL:?ERROR: DATABASE_URL must be set}"
 CUSTOMERS_DIR="${CUSTOMERS_DIR:-/home/ubuntu/customers}"
 BACKUP_LOCAL_TMP="${BACKUP_LOCAL_TMP:-/tmp/tiger-claw-backups}"
 POSTGRES_RETENTION_DAYS=30

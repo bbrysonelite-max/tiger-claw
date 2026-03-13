@@ -153,7 +153,9 @@ async function saveCache(context: ToolContext, cache: HiveCache): Promise<void> 
 
 function getApiBase(_config: Record<string, unknown>): string {
   // INTERNAL_API_URL is used for self-calls — do not use TIGER_CLAW_API_URL (external)
-  return process.env["INTERNAL_API_URL"] ?? "http://localhost:4000";
+  const url = process.env["INTERNAL_API_URL"];
+  if (!url) throw new Error("[FATAL] INTERNAL_API_URL environment variable is required");
+  return url;
 }
 
 function getTenantId(config: Record<string, unknown>): string {

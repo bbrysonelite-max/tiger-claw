@@ -6,7 +6,9 @@ import { sendAdminAlert } from '../routes/admin.js';
 import TelegramBot from 'node-telegram-bot-api';
 
 // Provide a stable connection to our newly provisioned Memorystore Redis
-const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
+const redisUrl = process.env.REDIS_URL;
+if (!redisUrl) throw new Error("[FATAL] REDIS_URL environment variable is required");
+const connection = new IORedis(redisUrl, {
     maxRetriesPerRequest: null,
 });
 

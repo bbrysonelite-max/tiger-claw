@@ -25,7 +25,8 @@ router.get("/", async (_req: Request, res: Response) => {
 
   // Redis
   try {
-    const redisUrl = process.env["REDIS_URL"] ?? "redis://localhost:6379";
+    const redisUrl = process.env["REDIS_URL"];
+    if (!redisUrl) { checks["redis"] = "error: REDIS_URL environment variable is not set"; break; }
     const client = createClient({ url: redisUrl });
     await client.connect();
     await client.ping();

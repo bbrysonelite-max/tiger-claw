@@ -113,8 +113,8 @@ router.post("/checkout", async (req: Request, res: Response) => {
                     quantity: 1,
                 },
             ],
-            success_url: (process.env["FRONTEND_URL"] ?? "http://localhost:3000") + "/success?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url: (process.env["FRONTEND_URL"] ?? "http://localhost:3000") + "/cancel",
+            success_url: (process.env["FRONTEND_URL"] ?? (() => { throw new Error("[FATAL] FRONTEND_URL environment variable is required"); })()) + "/success?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url: (process.env["FRONTEND_URL"] ?? (() => { throw new Error("[FATAL] FRONTEND_URL environment variable is required"); })()) + "/cancel",
         });
 
         return res.json({ url: session.url });

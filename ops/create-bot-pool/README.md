@@ -22,7 +22,7 @@ Get API credentials at https://my.telegram.org → "API Development Tools":
 | `TELEGRAM_API_HASH` | ✅ | From https://my.telegram.org |
 | `TELEGRAM_PHONE` | ✅ | Phone number(s), comma-separated for multi-account |
 | `ADMIN_TOKEN` | ✅ | Tiger Claw API bearer token |
-| `TIGER_CLAW_API_URL` | | API base URL (default: `http://localhost:4000`) |
+| `TIGER_CLAW_API_URL` | | API base URL (required — no default) |
 | `BOT_NAME_PREFIX` | | Display name prefix (default: `Tiger Claw Agent`) |
 | `BOT_USERNAME_PREFIX` | | Username prefix (default: `TC_Agent`) |
 | `SESSIONS_DIR` | | Session file directory (default: `./sessions`) |

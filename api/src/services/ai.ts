@@ -68,7 +68,9 @@ const geminiTools = [{
 }];
 
 // ─── Redis ───────────────────────────────────────────────────────────────────
-const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
+const redisUrl = process.env.REDIS_URL;
+if (!redisUrl) throw new Error("[FATAL] REDIS_URL environment variable is required");
+const redis = new IORedis(redisUrl, {
     maxRetriesPerRequest: null,
 });
 
@@ -208,7 +210,7 @@ function buildToolContext(tenantId: string, tenant: any) {
             BOT_FLAVOR: tenant.flavor,
             REGION: tenant.region,
             PREFERRED_LANGUAGE: tenant.language,
-            TIGER_CLAW_API_URL: process.env.TIGER_CLAW_API_URL ?? 'http://localhost:4000',
+            TIGER_CLAW_API_URL: process.env.TIGER_CLAW_API_URL ?? (() => { throw new Error("[FATAL] TIGER_CLAW_API_URL environment variable is required"); })(),
         },
         abortSignal: new AbortController().signal,
         logger: console,

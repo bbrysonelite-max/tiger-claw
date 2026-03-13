@@ -627,7 +627,7 @@ function validateOpenAIKey(key: string): Promise<{ valid: boolean; error?: strin
 // Notifies Tiger Claw API to deactivate the platform onboarding key (Layer 1)
 // Uses INTERNAL_API_URL — this is a self-call to the same process
 function notifyKeyActivation(tenantId: string): void {
-  const apiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:4000";
+  const apiUrl = process.env.INTERNAL_API_URL ?? (() => { throw new Error("[FATAL] INTERNAL_API_URL environment variable is required"); })();
   const url = new URL(`/tenants/${tenantId}/keys/activate`, apiUrl);
   const isHttps = url.protocol === "https:";
   const lib = isHttps ? https : http;
@@ -994,7 +994,7 @@ function updateTelegramBotIdentity(
 // Uses INTERNAL_API_URL (not TIGER_CLAW_API_URL) — self-calls must not go through the external URL
 function setTenantActive(tenantId: string): Promise<void> {
   return new Promise((resolve) => {
-    const apiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:4000";
+    const apiUrl = process.env.INTERNAL_API_URL ?? (() => { throw new Error("[FATAL] INTERNAL_API_URL environment variable is required"); })();
     const url = new URL(`/tenants/${tenantId}/status`, apiUrl);
     const isHttps = url.protocol === "https:";
     const lib = isHttps ? https : http;
@@ -1025,7 +1025,7 @@ function setTenantActive(tenantId: string): Promise<void> {
 // Uses INTERNAL_API_URL (not TIGER_CLAW_API_URL) — self-calls must not go through the external URL
 function triggerFirstScout(tenantId: string): Promise<void> {
   return new Promise((resolve) => {
-    const apiUrl = process.env.INTERNAL_API_URL ?? "http://localhost:4000";
+    const apiUrl = process.env.INTERNAL_API_URL ?? (() => { throw new Error("[FATAL] INTERNAL_API_URL environment variable is required"); })();
     const url = new URL(`/tenants/${tenantId}/scout`, apiUrl);
     const isHttps = url.protocol === "https:";
     const lib = isHttps ? https : http;

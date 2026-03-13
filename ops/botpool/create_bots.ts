@@ -49,7 +49,7 @@ interface AccountState {
 // Constants & config
 // ---------------------------------------------------------------------------
 
-const API_BASE = process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000";
+const API_BASE = process.env["TIGER_CLAW_API_URL"] ?? (() => { throw new Error("[FATAL] TIGER_CLAW_API_URL environment variable is required"); })();
 const ADMIN_TOKEN = process.env["ADMIN_TOKEN"] ?? "";
 const BOTFATHER_PEER = "BotFather";
 const TOKEN_REGEX = /(\d{8,12}:[A-Za-z0-9_-]{35,})/;
@@ -563,7 +563,7 @@ if (hasFlag("--mtproto")) {
   console.log("    --delay <seconds>   Seconds between reuses of same account (default: 480)");
   console.log("    --api-id <id>       Telegram API ID (or TELEGRAM_API_ID env var)");
   console.log("    --api-hash <hash>   Telegram API hash (or TELEGRAM_API_HASH env var)");
-  console.log("    --api-url <url>     Tiger Claw API base URL (default: http://localhost:4000)");
+  console.log("    --api-url <url>     Tiger Claw API base URL (or TIGER_CLAW_API_URL env var — required)");
   console.log("    --admin-token <tok> Admin auth token (or ADMIN_TOKEN env var)");
   process.exit(0);
 }

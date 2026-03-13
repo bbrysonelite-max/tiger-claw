@@ -31,21 +31,21 @@ if [ -f "$SCRIPT_DIR/../.env.deploy" ]; then
 fi
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-SERVER_IP="${SERVER_IP:-209.97.168.251}"
-SSH_KEY_PATH="${SSH_KEY_PATH:-/Users/brentbryson/Desktop/botcraft key pair.pem}"
+SERVER_IP="${SERVER_IP:?ERROR: SERVER_IP must be set}"
+SSH_KEY_PATH="${SSH_KEY_PATH:?ERROR: SSH_KEY_PATH must be set (path to .pem key file)}"
 
 # Four-layer key system
-PLATFORM_ONBOARDING_KEY="${PLATFORM_ONBOARDING_KEY:-}"
-PLATFORM_EMERGENCY_KEY="${PLATFORM_EMERGENCY_KEY:-}"
+PLATFORM_ONBOARDING_KEY="${PLATFORM_ONBOARDING_KEY:?ERROR: PLATFORM_ONBOARDING_KEY must be set}"
+PLATFORM_EMERGENCY_KEY="${PLATFORM_EMERGENCY_KEY:?ERROR: PLATFORM_EMERGENCY_KEY must be set}"
 
-ENCRYPTION_KEY="${ENCRYPTION_KEY:-REDACTED_ENCRYPTION_KEY}"
-SERPER_KEY_1="${SERPER_KEY_1:-REDACTED_SERPER_KEY_1}"
-SERPER_KEY_2="${SERPER_KEY_2:-REDACTED_SERPER_KEY_2}"
-SERPER_KEY_3="${SERPER_KEY_3:-REDACTED_SERPER_KEY_3}"
-TIGER_CLAW_API_URL="${TIGER_CLAW_API_URL:-http://host.docker.internal:4000}"
+ENCRYPTION_KEY="${ENCRYPTION_KEY:?ERROR: ENCRYPTION_KEY must be set}"
+SERPER_KEY_1="${SERPER_KEY_1:?ERROR: SERPER_KEY_1 must be set}"
+SERPER_KEY_2="${SERPER_KEY_2:?ERROR: SERPER_KEY_2 must be set}"
+SERPER_KEY_3="${SERPER_KEY_3:?ERROR: SERPER_KEY_3 must be set}"
+TIGER_CLAW_API_URL="${TIGER_CLAW_API_URL:?ERROR: TIGER_CLAW_API_URL must be set}"
 TIGER_CLAW_HIVE_TOKEN="${TIGER_CLAW_HIVE_TOKEN:-}"
-DATABASE_URL="postgresql://botcraft:REDACTED_DB_PASSWORD@host.docker.internal:5432/tiger_bot"
-REDIS_URL="redis://host.docker.internal:6379"
+DATABASE_URL="${DATABASE_URL:?ERROR: DATABASE_URL must be set}"
+REDIS_URL="${REDIS_URL:?ERROR: REDIS_URL must be set}"
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 SLUG="" NAME="" TOKEN="" PORT="" LANG="en" TENANT_ID="" FLAVOR="network-marketer"

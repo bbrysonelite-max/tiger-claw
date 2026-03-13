@@ -139,7 +139,7 @@ export async function provisionTenant(input: ProvisionInput): Promise<ProvisionR
   // We simply register an active Webhook with Telegram for the newly assigned token bridging directly to this API cluster.
 
   try {
-    const webhookUrl = `${process.env["TIGER_CLAW_API_URL"] ?? 'https://api.tigerclaw.io'}/webhooks/telegram/${tenant.id}`;
+    const webhookUrl = `${process.env["TIGER_CLAW_API_URL"] ?? (() => { throw new Error("[FATAL] TIGER_CLAW_API_URL environment variable is required"); })()}/webhooks/telegram/${tenant.id}`;
 
     // Call Telegram API to set the webhook
     const tgResponse = await fetch(`https://api.telegram.org/bot${resolvedBotToken}/setWebhook?url=${webhookUrl}`);
@@ -200,7 +200,7 @@ export async function suspendTenant(
 
 export async function resumeTenant(tenant: Tenant): Promise<"active" | "onboarding"> {
   if (tenant.botToken) {
-    const webhookUrl = `${process.env["TIGER_CLAW_API_URL"] ?? 'https://api.tigerclaw.io'}/webhooks/telegram/${tenant.id}`;
+    const webhookUrl = `${process.env["TIGER_CLAW_API_URL"] ?? (() => { throw new Error("[FATAL] TIGER_CLAW_API_URL environment variable is required"); })()}/webhooks/telegram/${tenant.id}`;
     await fetch(`https://api.telegram.org/bot${tenant.botToken}/setWebhook?url=${webhookUrl}`);
   }
   // Determine correct status: check actual onboarding completion in bot_states.

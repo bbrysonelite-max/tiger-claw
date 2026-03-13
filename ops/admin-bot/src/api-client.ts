@@ -5,7 +5,7 @@
 import * as https from "https";
 import * as http from "http";
 
-const API_BASE = process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000";
+const API_BASE = process.env["TIGER_CLAW_API_URL"] ?? (() => { throw new Error("[FATAL] TIGER_CLAW_API_URL environment variable is required"); })();
 const ADMIN_TOKEN = process.env["ADMIN_TOKEN"] ?? "";
 
 // ---------------------------------------------------------------------------

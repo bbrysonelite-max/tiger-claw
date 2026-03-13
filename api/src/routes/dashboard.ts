@@ -25,7 +25,8 @@ router.get("/:slug", async (req: Request, res: Response) => {
     const keyStatus = await getBYOKStatus(tenant.id);
 
     // Build LINE webhook URL for the 5-step wizard
-    const apiBase = process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000";
+    const apiBase = process.env["TIGER_CLAW_API_URL"];
+    if (!apiBase) return res.status(500).json({ error: "TIGER_CLAW_API_URL environment variable is not set" });
     const lineWebhookUrl = `${apiBase}/webhooks/line/${tenant.id}`;
 
     // Build dashboard data

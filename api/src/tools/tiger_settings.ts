@@ -437,7 +437,8 @@ async function handleChannels(
   // Slug comes from context.config (populated by buildToolContext in ai.ts).
   const slug = (context.config["TIGER_CLAW_TENANT_SLUG"] as string) ?? process.env["TENANT_SLUG"] ?? "";
   // INTERNAL_API_URL for self-calls — TIGER_CLAW_API_URL is the external/public URL
-  const apiBase = process.env["INTERNAL_API_URL"] ?? "http://localhost:4000";
+  const apiBase = process.env["INTERNAL_API_URL"];
+  if (!apiBase) return { ok: false, output: "[FATAL] INTERNAL_API_URL environment variable is required" };
 
   if (!slug) {
     return { ok: false, error: "TENANT_SLUG env var is not set — cannot manage channels." };

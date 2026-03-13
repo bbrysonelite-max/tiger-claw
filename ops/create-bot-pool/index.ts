@@ -18,7 +18,7 @@
  *   TELEGRAM_API_ID      — from https://my.telegram.org (required)
  *   TELEGRAM_API_HASH    — from https://my.telegram.org (required)
  *   TELEGRAM_PHONE       — phone number(s), comma-separated (required)
- *   TIGER_CLAW_API_URL   — Tiger Claw API base URL (default: http://localhost:4000)
+ *   TIGER_CLAW_API_URL   — Tiger Claw API base URL (required — set TIGER_CLAW_API_URL env var)
  *   ADMIN_TOKEN          — Bearer token for Tiger Claw API (required)
  *   BOT_NAME_PREFIX      — prefix for display name (default: "Tiger Claw Agent")
  *   BOT_USERNAME_PREFIX  — prefix for @username (default: "TC_Agent")
@@ -82,7 +82,7 @@ function loadConfig(): Config {
     apiId,
     apiHash,
     phones: phonesRaw.split(",").map((p) => p.trim()).filter(Boolean),
-    apiUrl: process.env["TIGER_CLAW_API_URL"] ?? "http://localhost:4000",
+    apiUrl: process.env["TIGER_CLAW_API_URL"] ?? (() => { throw new Error("[FATAL] TIGER_CLAW_API_URL environment variable is required"); })(),
     adminToken,
     count: parseInt(flag("--count", "10")),
     startN: parseInt(flag("--start", "0")),  // 0 = auto-detect from pool

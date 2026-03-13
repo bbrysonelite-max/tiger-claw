@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-PROJECT_ID="hybrid-matrix-472500-k5"
+PROJECT_ID="${GCP_PROJECT_ID:?ERROR: GCP_PROJECT_ID must be set}"
 REGION="us-central1"
 SERVICE_NAME="tiger-claw-api"
 IMAGE="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"

@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-PROJECT_ID="hybrid-matrix-472500-k5"
+PROJECT_ID="${GCP_PROJECT_ID:?ERROR: GCP_PROJECT_ID must be set}"
 ENV_FILE="./api/.env"
 
 if [[ ! -f "$ENV_FILE" ]]; then
