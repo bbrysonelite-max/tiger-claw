@@ -48,6 +48,7 @@ REDIS_URL=tiger-claw-redis-url:latest,\
 GOOGLE_API_KEY=tiger-claw-google-api-key:latest,\
 STRIPE_SECRET_KEY=tiger-claw-stripe-secret-key:latest,\
 STRIPE_WEBHOOK_SECRET=tiger-claw-stripe-webhook-secret:latest,\
+STRIPE_PRICE_BYOK=tiger-claw-stripe-price-byok:latest,\
 ADMIN_TOKEN=tiger-claw-admin-token:latest,\
 ADMIN_TELEGRAM_BOT_TOKEN=tiger-claw-admin-telegram-bot-token:latest,\
 TIGER_CLAW_HIVE_TOKEN=tiger-claw-hive-token:latest,\

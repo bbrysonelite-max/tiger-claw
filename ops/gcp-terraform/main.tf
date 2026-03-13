@@ -165,8 +165,8 @@ resource "google_cloud_run_v2_service" "api" {
         value = "production"
       }
       env {
-        name  = "PORT"
-        value = "4000"
+        name  = "FRONTEND_URL"
+        value = "https://tigerclaw.io"
       }
       env {
         name  = "TIGER_CLAW_API_URL"
@@ -187,6 +187,10 @@ resource "google_cloud_run_v2_service" "api" {
           PLATFORM_ONBOARDING_KEY   = "tiger-claw-platform-onboarding-key"
           PLATFORM_EMERGENCY_KEY    = "tiger-claw-platform-emergency-key"
           ENCRYPTION_KEY            = "tiger-claw-encryption-key"
+          STRIPE_PRICE_BYOK         = "tiger-claw-stripe-price-byok"
+          SERPER_KEY_1              = "tiger-claw-serper-key-1"
+          SERPER_KEY_2              = "tiger-claw-serper-key-2"
+          SERPER_KEY_3              = "tiger-claw-serper-key-3"
         }
         content {
           name = env.key

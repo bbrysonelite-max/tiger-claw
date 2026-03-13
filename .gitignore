@@ -35,3 +35,7 @@ ops/botpool/sessions.json
 ops/botpool/sessions/
 ops/create-bot-pool/sessions/
 ops/create-bot-pool/run.sh
+ops/gcp-terraform/.terraform/
+ops/gcp-terraform/terraform.tfstate*
+ops/gcp-terraform/.terraform.lock.hcl
+web-onboarding/playwright-report/

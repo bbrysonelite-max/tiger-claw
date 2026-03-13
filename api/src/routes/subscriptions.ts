@@ -71,9 +71,9 @@ router.post("/checkout", async (req: Request, res: Response) => {
                 console.error("[subscriptions] CRITICAL: STRIPE_SECRET_KEY not set in production — payment unavailable");
                 return res.status(503).json({ error: "Payment system not configured. Contact support." });
             }
-            // Dev-only mock: no real Stripe key set
             console.warn("[subscriptions] No STRIPE_SECRET_KEY provided. Returning mock checkout URL (dev only).");
-            return res.json({ url: "http://localhost:3000/success?session_id=mock_session" });
+            const frontendUrl = process.env["FRONTEND_URL"] ?? "http://localhost:3000";
+            return res.json({ url: `${frontendUrl}/success?session_id=mock_session` });
         }
 
         // BYOK only — connectionType is ALWAYS "byok" (Locked Decision: no Tiger Credits)
@@ -85,7 +85,8 @@ router.post("/checkout", async (req: Request, res: Response) => {
                 return res.status(503).json({ error: "Payment system not configured. Contact support." });
             }
             console.warn("[subscriptions] Missing STRIPE_PRICE_BYOK env var. Returning mock success (dev only).");
-            return res.json({ url: "http://localhost:3000/success?session_id=mock_session" });
+            const frontendUrl = process.env["FRONTEND_URL"] ?? "http://localhost:3000";
+            return res.json({ url: `${frontendUrl}/success?session_id=mock_session` });
         }
 
         const session = await stripe.checkout.sessions.create({

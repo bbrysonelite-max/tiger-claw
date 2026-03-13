@@ -443,10 +443,9 @@ function buildKeySetupIntro(): string {
 }
 
 // Detects the provider from the key prefix
-function detectProvider(key: string): "google" | "anthropic" | "openai" | "unknown" {
+function detectProvider(key: string): "google" | "openai" | "unknown" {
   if (key.startsWith("AIza")) return "google";
-  if (key.startsWith("sk-ant-")) return "anthropic";
-  if (key.startsWith("sk-")) return "openai";
+  if (key.startsWith("sk-")) return "openai"; // retained for mock fallback
   return "unknown";
 }
 
@@ -466,13 +465,8 @@ async function validateApiKey(
   }
 
   try {
-    if (provider === "google") {
-      return await validateGoogleKey(key);
-    } else if (provider === "anthropic") {
-      return await validateAnthropicKey(key);
-    } else {
-      return await validateOpenAIKey(key);
-    }
+    // Only Google keys are supported for now
+    return await validateGoogleKey(key);
   } catch (err) {
     return {
       valid: false,
@@ -520,109 +514,7 @@ function validateGoogleKey(key: string): Promise<{ valid: boolean; error?: strin
   });
 }
 
-function validateAnthropicKey(key: string): Promise<{ valid: boolean; error?: string }> {
-  return new Promise((resolve) => {
-    const body = JSON.stringify({
-      model: process.env["PLATFORM_CHEAP_MODEL"] ?? "claude-haiku-4-5-20251001",
-      max_tokens: 1,
-      messages: [{ role: "user", content: "hi" }],
-    });
-
-    const req = https.request(
-      {
-        hostname: "api.anthropic.com",
-        path: "/v1/messages",
-        method: "POST",
-        headers: {
-          "x-api-key": key,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          if (res.statusCode === 200 || res.statusCode === 201) {
-            resolve({ valid: true });
-          } else if (res.statusCode === 401) {
-            resolve({ valid: false, error: "That key is invalid or has been revoked. Please check it and try again." });
-          } else if (res.statusCode === 402) {
-            resolve({ valid: false, error: "That key has a billing issue. Please add credits to your Anthropic account and try again." });
-          } else if (res.statusCode === 403) {
-            resolve({ valid: false, error: "That key doesn't have permission for this model. Please check your API key permissions." });
-          } else {
-            resolve({ valid: false, error: `Validation returned status ${res.statusCode}. Please try again.` });
-          }
-        });
-      }
-    );
-
-    req.on("error", (err) => {
-      resolve({ valid: false, error: `Network error during validation: ${err.message}` });
-    });
-
-    req.setTimeout(15000, () => {
-      req.destroy();
-      resolve({ valid: false, error: "Validation timed out. Please check your internet connection and try again." });
-    });
-
-    req.write(body);
-    req.end();
-  });
-}
-
-function validateOpenAIKey(key: string): Promise<{ valid: boolean; error?: string }> {
-  return new Promise((resolve) => {
-    const body = JSON.stringify({
-      model: "gpt-4o-mini",
-      max_tokens: 1,
-      messages: [{ role: "user", content: "hi" }],
-    });
-
-    const req = https.request(
-      {
-        hostname: "api.openai.com",
-        path: "/v1/chat/completions",
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          if (res.statusCode === 200 || res.statusCode === 201) {
-            resolve({ valid: true });
-          } else if (res.statusCode === 401) {
-            resolve({ valid: false, error: "That key is invalid or has been revoked. Please check it and try again." });
-          } else if (res.statusCode === 429) {
-            // Rate limited but key is valid
-            resolve({ valid: true });
-          } else {
-            resolve({ valid: false, error: `Validation returned status ${res.statusCode}. Please try again.` });
-          }
-        });
-      }
-    );
-
-    req.on("error", (err) => {
-      resolve({ valid: false, error: `Network error during validation: ${err.message}` });
-    });
-
-    req.setTimeout(15000, () => {
-      req.destroy();
-      resolve({ valid: false, error: "Validation timed out. Please check your internet connection and try again." });
-    });
-
-    req.write(body);
-    req.end();
-  });
-}
+// Legacy validation endpoints excised
 
 // Notifies Tiger Claw API to deactivate the platform onboarding key (Layer 1)
 // Uses INTERNAL_API_URL — this is a self-call to the same process

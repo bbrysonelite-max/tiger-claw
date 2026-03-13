@@ -46,6 +46,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     GOOGLE_API_KEY)    create_or_update_secret "tiger-claw-google-api-key" "$value" ;;
     STRIPE_SECRET_KEY) create_or_update_secret "tiger-claw-stripe-secret-key" "$value" ;;
     STRIPE_WEBHOOK_SECRET) create_or_update_secret "tiger-claw-stripe-webhook-secret" "$value" ;;
+    STRIPE_PRICE_BYOK) create_or_update_secret "tiger-claw-stripe-price-byok" "$value" ;;
     ADMIN_TOKEN)       create_or_update_secret "tiger-claw-admin-token" "$value" ;;
     ADMIN_TELEGRAM_BOT_TOKEN) create_or_update_secret "tiger-claw-admin-telegram-bot-token" "$value" ;;
     TIGER_CLAW_HIVE_TOKEN) create_or_update_secret "tiger-claw-hive-token" "$value" ;;

@@ -8,8 +8,8 @@
     "postbuild": "mkdir -p dist/config/flavors && cp src/config/flavors/*.json dist/config/flavors/",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "TIGER_CLAW_API_URL=http://localhost:4000 REDIS_URL=redis://localhost:6379 DATABASE_URL=postgres://localhost:5432/db vitest run",
+    "test:watch": "TIGER_CLAW_API_URL=http://localhost:4000 REDIS_URL=redis://localhost:6379 DATABASE_URL=postgres://localhost:5432/db vitest"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
