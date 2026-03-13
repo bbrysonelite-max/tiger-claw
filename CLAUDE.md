@@ -320,8 +320,8 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
 | `SERPER_KEY_1` | ⚠️ Rotate at serper.dev first, then add |
 | `SERPER_KEY_2` | ⚠️ Rotate at serper.dev first, then add |
 | `SERPER_KEY_3` | ⚠️ Rotate at serper.dev first, then add |
-| `TIGER_CLAW_API_URL` | ⬜ Known after first Cloud Run deploy |
-| `FRONTEND_URL` | `https://app.tigerclaw.io` |
+| `TIGER_CLAW_API_URL` | ✅ Stored (`https://api.tigerclaw.io`) |
+| `FRONTEND_URL` | ✅ Stored (`https://app.tigerclaw.io`) |
 
 ---
 
@@ -436,3 +436,13 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
   ```
   OLD_ENCRYPTION_KEY=<old> NEW_ENCRYPTION_KEY=<from Secret Manager> DATABASE_URL=<prod> npx tsx ops/rotate-encryption-key.ts
   ```
+
+### Webhook URLs — Action Required (2026-03-12)
+- The Tiger Claw API code is clean: it uses `TIGER_CLAW_API_URL` and `FRONTEND_URL` env vars everywhere.
+- `TIGER_CLAW_API_URL` and `FRONTEND_URL` are both stored in Secret Manager.
+- The **external services** (Stripe Dashboard, Stan Store) still have old `thegoods.ai` webhook URLs configured.
+- The correct Stripe webhook endpoint is: `https://api.tigerclaw.io/webhooks/stripe`
+- **Stripe Dashboard action**: Go to Developers → Webhooks → update endpoint URL to `https://api.tigerclaw.io/webhooks/stripe`. Listen for `checkout.session.completed`.
+- **Stan Store action**: Update webhook URL to `https://api.tigerclaw.io/webhooks/stripe` (Stan Store uses Stripe-compatible webhooks — same endpoint).
+- After updating, copy the new `STRIPE_WEBHOOK_SECRET` (whsec_...) from Stripe Dashboard and store it in Secret Manager.
+- Note: `api.tigerclaw.io` custom domain must be mapped to the Cloud Run service after deploy.
