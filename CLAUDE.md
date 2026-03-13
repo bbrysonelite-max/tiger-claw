@@ -2,6 +2,26 @@
 
 **Read this file first. Every time. No exceptions.**
 
+---
+
+## ARCHITECTURAL GUARDRAIL — READ BEFORE WRITING ANY CODE
+
+**Before writing any code, read `specs/tiger-claw/TIGERCLAW-MASTER-SPEC-v2.md`.**
+
+Any architectural change not explicitly present in that spec requires **explicit human approval**.
+
+- Do NOT refactor the architecture
+- Do NOT pivot to a different AI provider, infrastructure model, or storage pattern
+- Do NOT "improve" the design because it seems cleaner or more modern
+- Do NOT restore OpenClaw, per-tenant containers, or Anthropic SDK
+- If you see something that looks wrong but isn't in your task — flag it, don't fix it
+
+**State the rule:** `DECISION REQUIRED: [description]` and wait.
+
+The current architecture (v4) is Google Gemini + stateless multi-tenancy + Cloud Run. It is locked. See the v4 Architecture section below.
+
+---
+
 This is the master briefing for any AI agent (Claude Code, Cursor, or any other) working on Tiger Claw. It tells you what this project is, where everything lives, what phase we are in, and what the rules are.
 
 ---
