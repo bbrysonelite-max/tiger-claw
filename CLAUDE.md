@@ -288,13 +288,50 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
 
 ---
 
-## Live Sites (Confirmed 2026-03-07)
+## GCP Project
+
+| Field | Value |
+|-------|-------|
+| Project ID | `hybrid-matrix-472500-k5` |
+| Project Name | Tiger Claw |
+| Region | `us-central1` |
+| Secret Manager | Enabled — see secrets table below |
+| Gemini CLI | `~/.local/bin/gemini` (configured to this project) |
+| gws CLI | `~/.local/bin/gws` (authenticated as `bbrysonelite@gmail.com`) |
+
+### Secret Manager Secrets
+
+| Secret | Status |
+|--------|--------|
+| `GOOGLE_API_KEY` | ✅ Stored |
+| `GEMINI_API_KEY` | ✅ Stored |
+| `ENCRYPTION_KEY` | ✅ Stored (rotated 2026-03-12) |
+| `DATABASE_URL` | ⬜ Add after `terraform apply` |
+| `REDIS_URL` | ⬜ Add after `terraform apply` |
+| `PLATFORM_ONBOARDING_KEY` | ⬜ Add before first deploy |
+| `PLATFORM_EMERGENCY_KEY` | ⬜ Add before first deploy |
+| `STRIPE_SECRET_KEY` | ⬜ Add before first deploy |
+| `STRIPE_WEBHOOK_SECRET` | ⬜ Add before first deploy |
+| `STRIPE_PRICE_BYOK` | ⬜ Add before first deploy |
+| `ADMIN_TOKEN` | ⬜ Add before first deploy |
+| `ADMIN_TELEGRAM_BOT_TOKEN` | ⬜ Add before first deploy |
+| `ADMIN_TELEGRAM_CHAT_ID` | ⬜ Add before first deploy |
+| `TIGER_CLAW_HIVE_TOKEN` | ⬜ Add before first deploy |
+| `SERPER_KEY_1` | ⚠️ Rotate at serper.dev first, then add |
+| `SERPER_KEY_2` | ⚠️ Rotate at serper.dev first, then add |
+| `SERPER_KEY_3` | ⚠️ Rotate at serper.dev first, then add |
+| `TIGER_CLAW_API_URL` | ⬜ Known after first Cloud Run deploy |
+| `FRONTEND_URL` | `https://app.tigerclaw.io` |
+
+---
+
+## Live Sites (Confirmed 2026-03-12)
 
 | URL | What it is | Repo |
 |-----|-----------|------|
 | `thegoods.ai` | Public marketing site (needs Tiger Claw copy update) | `tiger-bot-website` |
 | `botcraftwrks.ai` | Operator admin dashboard (fleet, Hive, Ops Center) | `tiger-claw-ops` |
-| `app.tigerclaw.io` | Customer dashboard — **not yet built** (GAP 9) | `tiger-claw` (this repo) |
+| `app.tigerclaw.io` | Customer dashboard (GAP 9 ✅ complete) | `tiger-claw` (this repo) |
 
 ---
 
@@ -364,3 +401,38 @@ When the operator asks you to work on this project in an IDE or deploy it, you u
 
 ### IDE Rule
 - All development in Anti-Gravity (Project IDX). No Desktop path. Ever.
+
+---
+
+## Session Decisions — 2026-03-12 (LOCKED)
+
+### GCP Project Consolidation
+- Single GCP project for all Tiger Claw infrastructure: `hybrid-matrix-472500-k5`
+- Previous AI Studio auto-created projects (`gen-lang-client-*`) are unused — ignore them.
+- `gcloud config set project hybrid-matrix-472500-k5` is the canonical project.
+- Gemini CLI (`~/.local/bin/gemini`) and gws CLI (`~/.local/bin/gws`) both point to this project.
+
+### Secret Manager
+- All production secrets go in Secret Manager for project `hybrid-matrix-472500-k5`.
+- Pattern: `gcloud secrets versions add <SECRET_NAME> --data-file=- --project=hybrid-matrix-472500-k5`
+- `GOOGLE_API_KEY` and `GEMINI_API_KEY` are stored and confirmed working.
+- `ENCRYPTION_KEY` rotated and stored 2026-03-12 (old key was in git history, now purged).
+
+### Pre-Launch Cleanup (2026-03-12)
+- 18 leftover refactor scripts deleted from `api/`.
+- All hardcoded credentials removed from source — env vars now fail loudly if not set.
+- `GCP_PROJECT_ID` env var replaces all hardcoded `hybrid-matrix-472500-k5` references in ops scripts.
+- `web-onboarding/.env.example` created. `api/.env.example` updated with all required vars.
+- Git history rewritten (187 commits) — all exposed secrets purged via `git-filter-repo`.
+
+### Serper Keys — Action Required
+- The 3 Serper keys that were in git history need to be rotated at `https://serper.dev/api-key`.
+- After rotation, store each in Secret Manager: `SERPER_KEY_1`, `SERPER_KEY_2`, `SERPER_KEY_3`.
+- Until rotated, the old keys still work but are considered compromised.
+
+### Encryption Key Rotation
+- New `ENCRYPTION_KEY` stored in Secret Manager.
+- Before deploying to production, run the re-encryption migration:
+  ```
+  OLD_ENCRYPTION_KEY=<old> NEW_ENCRYPTION_KEY=<from Secret Manager> DATABASE_URL=<prod> npx tsx ops/rotate-encryption-key.ts
+  ```
